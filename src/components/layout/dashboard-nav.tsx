@@ -168,16 +168,27 @@ export function DashboardNav({ user }: DashboardNavProps) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex w-full items-center gap-3 rounded-lg px-3 py-3 hover:bg-warmgray-50 transition-colors">
-                  <Avatar className="h-10 w-10">
+                  <Avatar className="h-10 w-10 flex-shrink-0">
                     <AvatarFallback>{initials}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 text-left">
+                  <div className="flex-1 min-w-0 text-left">
                     <p className="text-sm font-medium text-warmgray-900 truncate">
                       {user.full_name || 'Benutzer'}
                     </p>
-                    <p className="text-xs text-warmgray-500 truncate">{user.email}</p>
+                    <p 
+                      className="text-xs text-warmgray-500 truncate cursor-pointer hover:text-warmgray-700"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigator.clipboard.writeText(user.email)
+                      }}
+                      title={`${user.email} - Klicken zum Kopieren`}
+                    >
+                      {user.email.length > 20 
+                        ? user.email.slice(0, 17) + '...' 
+                        : user.email}
+                    </p>
                   </div>
-                  <ChevronDown className="w-4 h-4 text-warmgray-400" />
+                  <ChevronDown className="w-4 h-4 text-warmgray-400 flex-shrink-0" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">

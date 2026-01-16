@@ -190,13 +190,20 @@ export default function OnboardingPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
 
-      await supabase.from('profiles').update({
+      const { error } = await supabase.from('profiles').update({
         onboarding_completed: true,
       }).eq('id', user.id)
 
+      if (error) {
+        console.error('Onboarding update error:', error)
+        throw error
+      }
+
       router.push('/dashboard')
+      router.refresh()
     } catch (err) {
       console.error('Complete error:', err)
+      alert('Fehler beim Speichern. Bitte versuchen Sie es erneut.')
     } finally {
       setIsSaving(false)
     }

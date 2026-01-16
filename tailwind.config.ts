@@ -24,19 +24,19 @@ const config: Config = {
           900: '#2f352f',
           950: '#181c18',
         },
-        // Warm Gray - Secondary, professional
+        // Warm Gray - Secondary, professional (adjusted for readability)
         warmgray: {
           50: '#f9f8f7',
           100: '#f3f1ef',
           200: '#e8e4e0',
           300: '#d9d3cc',
-          400: '#c4bbb1',
-          500: '#aea298',
-          600: '#968a7f',
-          700: '#7d7269',
-          800: '#685f58',
-          900: '#574f4a',
-          950: '#2e2926',
+          400: '#a8a099',  // darker than before
+          500: '#8a827a',  // darker than before
+          600: '#6b635c',  // darker than before
+          700: '#524b46',  // darker than before
+          800: '#3d3835',  // darker than before
+          900: '#1f1c1a',  // much darker - almost black
+          950: '#0f0e0d',  // near black
         },
         // Cream White - Background, clean
         cream: {

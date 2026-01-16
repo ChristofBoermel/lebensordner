@@ -19,6 +19,12 @@ interface SubscriptionInfo {
   price_id: string | null
 }
 
+interface StripePriceIds {
+  basic: { monthly: string; yearly: string }
+  premium: { monthly: string; yearly: string }
+  family: { monthly: string; yearly: string }
+}
+
 export default function AboPage() {
   const searchParams = useSearchParams()
   const success = searchParams.get('success')
@@ -29,8 +35,23 @@ export default function AboPage() {
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly')
+  const [priceIds, setPriceIds] = useState<StripePriceIds | null>(null)
   
   const supabase = createClient()
+
+  // Fetch Stripe price IDs from API
+  useEffect(() => {
+    async function fetchPriceIds() {
+      try {
+        const response = await fetch('/api/stripe/prices')
+        const data = await response.json()
+        setPriceIds(data)
+      } catch (err) {
+        console.error('Failed to fetch price IDs:', err)
+      }
+    }
+    fetchPriceIds()
+  }, [])
 
   const fetchSubscription = useCallback(async () => {
     setIsLoading(true)
@@ -56,6 +77,21 @@ export default function AboPage() {
 
   useEffect(() => { fetchSubscription() }, [fetchSubscription])
 
+  const getPriceId = (tierId: SubscriptionTier, period: 'monthly' | 'yearly'): string => {
+    if (!priceIds) return ''
+    
+    switch (tierId) {
+      case 'basic':
+        return period === 'monthly' ? priceIds.basic.monthly : priceIds.basic.yearly
+      case 'premium':
+        return period === 'monthly' ? priceIds.premium.monthly : priceIds.premium.yearly
+      case 'family':
+        return period === 'monthly' ? priceIds.family.monthly : priceIds.family.yearly
+      default:
+        return ''
+    }
+  }
+
   const handleSubscribe = async (tier: TierConfig) => {
     if (tier.id === 'free') return
     
@@ -63,9 +99,7 @@ export default function AboPage() {
     setError(null)
     
     try {
-      const priceId = billingPeriod === 'monthly' 
-        ? tier.stripePriceIdMonthly 
-        : tier.stripePriceIdYearly
+      const priceId = getPriceId(tier.id, billingPeriod)
 
       if (!priceId) {
         throw new Error('Preis nicht konfiguriert')
@@ -269,7 +303,7 @@ export default function AboPage() {
                     isCurrent || 
                     tier.id === 'free' || 
                     isProcessing === tier.id ||
-                    !tier.stripePriceIdMonthly
+                    (!['free'].includes(tier.id) && !getPriceId(tier.id as Exclude<SubscriptionTier, 'free'>, billingPeriod))
                   }
                   onClick={() => handleSubscribe(tier)}
                 >

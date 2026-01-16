@@ -7,8 +7,6 @@ export interface TierConfig {
   description: string
   priceMonthly: number
   priceYearly: number
-  stripePriceIdMonthly: string | null
-  stripePriceIdYearly: string | null
   features: string[]
   limits: {
     maxDocuments: number
@@ -24,6 +22,24 @@ export interface TierConfig {
   badge?: string
 }
 
+// Helper to get price IDs at runtime (for server-side use)
+export function getStripePriceIds() {
+  return {
+    basic: {
+      monthly: process.env.STRIPE_PRICE_BASIC_MONTHLY || '',
+      yearly: process.env.STRIPE_PRICE_BASIC_YEARLY || '',
+    },
+    premium: {
+      monthly: process.env.STRIPE_PRICE_PREMIUM_MONTHLY || process.env.STRIPE_PRICE_ID || '',
+      yearly: process.env.STRIPE_PRICE_PREMIUM_YEARLY || '',
+    },
+    family: {
+      monthly: process.env.STRIPE_PRICE_FAMILY_MONTHLY || '',
+      yearly: process.env.STRIPE_PRICE_FAMILY_YEARLY || '',
+    },
+  }
+}
+
 export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
   free: {
     id: 'free',
@@ -31,8 +47,6 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     description: 'Für den Einstieg',
     priceMonthly: 0,
     priceYearly: 0,
-    stripePriceIdMonthly: null,
-    stripePriceIdYearly: null,
     features: [
       'Bis zu 10 Dokumente',
       '100 MB Speicherplatz',
@@ -56,8 +70,6 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     description: 'Für Einzelpersonen',
     priceMonthly: 4.90,
     priceYearly: 49,
-    stripePriceIdMonthly: process.env.STRIPE_PRICE_BASIC_MONTHLY || '',
-    stripePriceIdYearly: process.env.STRIPE_PRICE_BASIC_YEARLY || '',
     features: [
       'Bis zu 50 Dokumente',
       '500 MB Speicherplatz',
@@ -82,8 +94,6 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     description: 'Voller Schutz',
     priceMonthly: 9.90,
     priceYearly: 99,
-    stripePriceIdMonthly: process.env.STRIPE_PRICE_PREMIUM_MONTHLY || process.env.STRIPE_PRICE_ID || '',
-    stripePriceIdYearly: process.env.STRIPE_PRICE_PREMIUM_YEARLY || '',
     features: [
       'Unbegrenzte Dokumente',
       '2 GB Speicherplatz',
@@ -112,8 +122,6 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     description: 'Für die ganze Familie',
     priceMonthly: 14.90,
     priceYearly: 149,
-    stripePriceIdMonthly: process.env.STRIPE_PRICE_FAMILY_MONTHLY || '',
-    stripePriceIdYearly: process.env.STRIPE_PRICE_FAMILY_YEARLY || '',
     features: [
       'Alles aus Premium',
       '5 GB Speicherplatz',
@@ -143,14 +151,20 @@ export function getTierFromSubscription(
     return SUBSCRIPTION_TIERS.free
   }
 
-  // Find tier by price ID
-  for (const tier of Object.values(SUBSCRIPTION_TIERS)) {
-    if (tier.stripePriceIdMonthly === priceId || tier.stripePriceIdYearly === priceId) {
-      return tier
-    }
+  // Check price ID against known price IDs
+  const priceIds = getStripePriceIds()
+  
+  if (priceId === priceIds.basic.monthly || priceId === priceIds.basic.yearly) {
+    return SUBSCRIPTION_TIERS.basic
+  }
+  if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) {
+    return SUBSCRIPTION_TIERS.premium
+  }
+  if (priceId === priceIds.family.monthly || priceId === priceIds.family.yearly) {
+    return SUBSCRIPTION_TIERS.family
   }
 
-  // Default to premium for legacy subscriptions
+  // Default to premium for legacy subscriptions with active status
   if (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') {
     return SUBSCRIPTION_TIERS.premium
   }
@@ -177,4 +191,23 @@ export function canPerformAction(
     default:
       return false
   }
+}
+
+// Check storage limit
+export function canUploadFile(
+  tier: TierConfig,
+  currentStorageMB: number,
+  fileSizeMB: number
+): { allowed: boolean; reason?: string } {
+  const maxStorage = tier.limits.maxStorageMB
+  const newTotal = currentStorageMB + fileSizeMB
+  
+  if (newTotal > maxStorage) {
+    return {
+      allowed: false,
+      reason: `Speicherlimit erreicht. Sie haben ${currentStorageMB.toFixed(1)} MB von ${maxStorage} MB verwendet. Upgrade für mehr Speicherplatz.`
+    }
+  }
+  
+  return { allowed: true }
 }

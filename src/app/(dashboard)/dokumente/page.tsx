@@ -35,11 +35,14 @@ import {
   Download,
   Loader2,
   Search,
-  Eye
+  Eye,
+  AlertCircle
 } from 'lucide-react'
 import { DOCUMENT_CATEGORIES, type DocumentCategory, type Document } from '@/types/database'
 import { formatFileSize, formatDate } from '@/lib/utils'
 import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
+import { SUBSCRIPTION_TIERS, getTierFromSubscription, canUploadFile, type TierConfig } from '@/lib/subscription-tiers'
+import Link from 'next/link'
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   user: User,
@@ -52,7 +55,6 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 }
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
-const MAX_STORAGE = 2 * 1024 * 1024 * 1024 // 2GB
 
 export default function DocumentsPage() {
   const searchParams = useSearchParams()
@@ -67,6 +69,7 @@ export default function DocumentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [storageUsed, setStorageUsed] = useState(0)
   const [previewDocument, setPreviewDocument] = useState<Document | null>(null)
+  const [userTier, setUserTier] = useState<TierConfig>(SUBSCRIPTION_TIERS.free)
   
   // Upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -78,6 +81,26 @@ export default function DocumentsPage() {
 
   const supabase = createClient()
   const { capture } = usePostHog()
+
+  // Fetch user tier
+  useEffect(() => {
+    async function fetchTier() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_status, stripe_price_id')
+        .eq('id', user.id)
+        .single()
+      
+      if (profile) {
+        const tier = getTierFromSubscription(profile.subscription_status, profile.stripe_price_id)
+        setUserTier(tier)
+      }
+    }
+    fetchTier()
+  }, [supabase])
 
   const fetchDocuments = useCallback(async () => {
     setIsLoading(true)
@@ -112,8 +135,19 @@ export default function DocumentsPage() {
       return
     }
 
-    if (storageUsed + file.size > MAX_STORAGE) {
-      setUploadError('Nicht genug Speicherplatz. Sie haben Ihr Limit von 2 GB erreicht.')
+    // Check storage limit based on user's tier
+    const storageUsedMB = storageUsed / (1024 * 1024)
+    const fileSizeMB = file.size / (1024 * 1024)
+    const storageCheck = canUploadFile(userTier, storageUsedMB, fileSizeMB)
+    
+    if (!storageCheck.allowed) {
+      setUploadError(storageCheck.reason || 'Speicherlimit erreicht.')
+      return
+    }
+
+    // Check document count limit
+    if (userTier.limits.maxDocuments !== -1 && documents.length >= userTier.limits.maxDocuments) {
+      setUploadError(`Dokumentenlimit erreicht. Ihr Plan erlaubt maximal ${userTier.limits.maxDocuments} Dokumente. Upgraden Sie für mehr Dokumente.`)
       return
     }
 
@@ -264,10 +298,25 @@ export default function DocumentsPage() {
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-warmgray-600">Speicherplatz verwendet</span>
             <span className="text-sm font-medium text-warmgray-900">
-              {formatFileSize(storageUsed)} von 2 GB
+              {formatFileSize(storageUsed)} von {userTier.limits.maxStorageMB >= 1024 
+                ? `${(userTier.limits.maxStorageMB / 1024).toFixed(0)} GB` 
+                : `${userTier.limits.maxStorageMB} MB`}
             </span>
           </div>
-          <Progress value={(storageUsed / MAX_STORAGE) * 100} className="h-2" />
+          <Progress value={(storageUsed / (userTier.limits.maxStorageMB * 1024 * 1024)) * 100} className="h-2" />
+          {storageUsed / (1024 * 1024) > userTier.limits.maxStorageMB * 0.8 && (
+            <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-amber-800">Speicherplatz fast voll</p>
+                  <p className="text-amber-700">
+                    <Link href="/abo" className="underline hover:no-underline">Upgraden Sie</Link> für mehr Speicherplatz.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -473,8 +522,8 @@ export default function DocumentsPage() {
                     onClick={() => setUploadCategory(key as DocumentCategory)}
                     className={`p-3 text-left rounded-lg border-2 transition-colors ${
                       uploadCategory === key
-                        ? 'border-sage-500 bg-sage-50'
-                        : 'border-warmgray-200 hover:border-warmgray-300'
+                        ? 'border-sage-500 bg-sage-50 text-sage-800'
+                        : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
                     }`}
                   >
                     <span className="text-sm font-medium">{category.name}</span>
