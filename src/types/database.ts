@@ -81,6 +81,14 @@ export interface Database {
           address: string | null
           onboarding_completed: boolean
           storage_used: number
+          email_reminders_enabled: boolean
+          email_reminder_days_before: number
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_status: string | null
+          subscription_current_period_end: string | null
+          two_factor_enabled: boolean
+          two_factor_secret: string | null
         }
         Insert: {
           id: string
@@ -93,6 +101,14 @@ export interface Database {
           address?: string | null
           onboarding_completed?: boolean
           storage_used?: number
+          email_reminders_enabled?: boolean
+          email_reminder_days_before?: number
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
+          subscription_current_period_end?: string | null
+          two_factor_enabled?: boolean
+          two_factor_secret?: string | null
         }
         Update: {
           id?: string
@@ -105,6 +121,14 @@ export interface Database {
           address?: string | null
           onboarding_completed?: boolean
           storage_used?: number
+          email_reminders_enabled?: boolean
+          email_reminder_days_before?: number
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
+          subscription_current_period_end?: string | null
+          two_factor_enabled?: boolean
+          two_factor_secret?: string | null
         }
       }
       documents: {

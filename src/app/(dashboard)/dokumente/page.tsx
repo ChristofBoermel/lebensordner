@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
+import { DatePicker } from '@/components/ui/date-picker'
+import { FileUpload } from '@/components/ui/file-upload'
 import {
   Dialog,
   DialogContent,
@@ -17,6 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DocumentPreview } from '@/components/ui/document-preview'
 import {
   User,
   Wallet,
@@ -36,6 +39,7 @@ import {
 } from 'lucide-react'
 import { DOCUMENT_CATEGORIES, type DocumentCategory, type Document } from '@/types/database'
 import { formatFileSize, formatDate } from '@/lib/utils'
+import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   user: User,
@@ -62,15 +66,18 @@ export default function DocumentsPage() {
   const [uploadCategory, setUploadCategory] = useState<DocumentCategory | null>(initialCategory)
   const [searchQuery, setSearchQuery] = useState('')
   const [storageUsed, setStorageUsed] = useState(0)
+  const [previewDocument, setPreviewDocument] = useState<Document | null>(null)
   
   // Upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadTitle, setUploadTitle] = useState('')
   const [uploadNotes, setUploadNotes] = useState('')
+  const [uploadExpiryDate, setUploadExpiryDate] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
 
   const supabase = createClient()
+  const { capture } = usePostHog()
 
   const fetchDocuments = useCallback(async () => {
     setIsLoading(true)
@@ -157,6 +164,13 @@ export default function DocumentsPage() {
         .update({ storage_used: storageUsed + uploadFile.size })
         .eq('id', user.id)
 
+      // Track successful upload
+      capture(ANALYTICS_EVENTS.DOCUMENT_UPLOADED, {
+        category: uploadCategory,
+        file_type: uploadFile.type,
+        file_size_kb: Math.round(uploadFile.size / 1024),
+      })
+
       // Reset and refresh
       setUploadFile(null)
       setUploadTitle('')
@@ -164,6 +178,10 @@ export default function DocumentsPage() {
       setIsUploadOpen(false)
       fetchDocuments()
     } catch (error) {
+      capture(ANALYTICS_EVENTS.ERROR_OCCURRED, {
+        error_type: 'document_upload_failed',
+        category: uploadCategory,
+      })
       setUploadError('Fehler beim Hochladen. Bitte versuchen Sie es erneut.')
       console.error('Upload error:', error)
     } finally {
@@ -331,6 +349,14 @@ export default function DocumentsPage() {
                       <Button 
                         variant="ghost" 
                         size="icon"
+                        onClick={() => setPreviewDocument(doc)}
+                        title="Vorschau"
+                      >
+                        <Eye className="w-5 h-5" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
                         onClick={() => handleDownload(doc)}
                         title="Herunterladen"
                       >
@@ -421,7 +447,7 @@ export default function DocumentsPage() {
 
       {/* Upload Dialog */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Dokument hochladen</DialogTitle>
             <DialogDescription>
@@ -457,48 +483,14 @@ export default function DocumentsPage() {
               </div>
             </div>
 
-            {/* File Selection */}
+            {/* File Selection - Drag & Drop */}
             <div className="space-y-2">
               <Label>Datei</Label>
-              {uploadFile ? (
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-sage-50 border border-sage-200">
-                  <File className="w-8 h-8 text-sage-600" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-warmgray-900 truncate">
-                      {uploadFile.name}
-                    </p>
-                    <p className="text-xs text-warmgray-500">
-                      {formatFileSize(uploadFile.size)}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setUploadFile(null)}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="border-2 border-dashed border-warmgray-300 rounded-lg p-6 text-center hover:border-sage-400 transition-colors">
-                  <input
-                    type="file"
-                    id="file-upload"
-                    className="sr-only"
-                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                    onChange={handleFileSelect}
-                  />
-                  <label htmlFor="file-upload" className="cursor-pointer">
-                    <Upload className="w-8 h-8 text-warmgray-400 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-warmgray-700">
-                      Datei auswählen
-                    </p>
-                    <p className="text-xs text-warmgray-500 mt-1">
-                      PDF, JPG, PNG oder Word (max. 25 MB)
-                    </p>
-                  </label>
-                </div>
-              )}
+              <FileUpload
+                selectedFile={uploadFile}
+                onFileSelect={(file) => setUploadFile(file)}
+                onClear={() => setUploadFile(null)}
+              />
             </div>
 
             {/* Title */}
@@ -522,6 +514,20 @@ export default function DocumentsPage() {
                 onChange={(e) => setUploadNotes(e.target.value)}
               />
             </div>
+
+            {/* Expiry Date */}
+            <div className="space-y-2">
+              <Label>Ablaufdatum (optional)</Label>
+              <DatePicker
+                value={uploadExpiryDate}
+                onChange={setUploadExpiryDate}
+                minDate={new Date().toISOString().split('T')[0]}
+                placeholder="Ablaufdatum wählen"
+              />
+              <p className="text-xs text-warmgray-500">
+                Sie werden automatisch erinnert, wenn das Dokument bald abläuft
+              </p>
+            </div>
           </div>
 
           <DialogFooter>
@@ -544,6 +550,13 @@ export default function DocumentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Document Preview */}
+      <DocumentPreview
+        isOpen={!!previewDocument}
+        onClose={() => setPreviewDocument(null)}
+        document={previewDocument}
+      />
     </div>
   )
 }

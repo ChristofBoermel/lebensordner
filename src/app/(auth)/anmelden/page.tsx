@@ -8,15 +8,23 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Shield, ArrowLeft } from 'lucide-react'
+import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
+
+type LoginStep = 'credentials' | '2fa'
 
 export default function LoginPage() {
+  const [step, setStep] = useState<LoginStep>('credentials')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [twoFactorCode, setTwoFactorCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null)
+  
   const router = useRouter()
   const supabase = createClient()
+  const { capture, identify } = usePostHog()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,12 +32,16 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) {
+        capture(ANALYTICS_EVENTS.ERROR_OCCURRED, {
+          error_type: 'login_failed',
+          error_message: error.message,
+        })
         if (error.message === 'Invalid login credentials') {
           setError('E-Mail-Adresse oder Passwort ist falsch.')
         } else {
@@ -38,8 +50,29 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      if (data.user) {
+        // Check if user has 2FA enabled
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('two_factor_enabled')
+          .eq('id', data.user.id)
+          .single()
+
+        if (profile?.two_factor_enabled) {
+          // User has 2FA - sign them out and request code
+          await supabase.auth.signOut()
+          setPendingUserId(data.user.id)
+          setStep('2fa')
+          setIsLoading(false)
+          return
+        }
+
+        // No 2FA - proceed with login
+        identify(data.user.id, { email: data.user.email })
+        capture(ANALYTICS_EVENTS.USER_SIGNED_IN, { method: 'email' })
+        router.push('/dashboard')
+        router.refresh()
+      }
     } catch (err) {
       setError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.')
     } finally {
@@ -47,6 +80,134 @@ export default function LoginPage() {
     }
   }
 
+  const handleVerify2FA = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (twoFactorCode.length !== 6) {
+      setError('Bitte geben Sie einen 6-stelligen Code ein.')
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // Verify the 2FA code
+      const verifyResponse = await fetch('/api/auth/2fa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: pendingUserId, 
+          token: twoFactorCode 
+        }),
+      })
+
+      const verifyData = await verifyResponse.json()
+
+      if (!verifyResponse.ok) {
+        setError(verifyData.error || 'Ungültiger Code')
+        setIsLoading(false)
+        return
+      }
+
+      // Code is valid - sign in again
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        setError('Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.')
+        setStep('credentials')
+        return
+      }
+
+      if (data.user) {
+        identify(data.user.id, { email: data.user.email })
+        capture(ANALYTICS_EVENTS.USER_SIGNED_IN, { method: 'email_2fa' })
+        router.push('/dashboard')
+        router.refresh()
+      }
+    } catch (err) {
+      setError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const goBack = () => {
+    setStep('credentials')
+    setTwoFactorCode('')
+    setError(null)
+    setPendingUserId(null)
+  }
+
+  // 2FA Code Input Screen
+  if (step === '2fa') {
+    return (
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-4">
+            <Shield className="w-8 h-8 text-sage-600" />
+          </div>
+          <CardTitle className="text-2xl">Zwei-Faktor-Authentifizierung</CardTitle>
+          <CardDescription>
+            Geben Sie den 6-stelligen Code aus Ihrer Authenticator-App ein
+          </CardDescription>
+        </CardHeader>
+        <form onSubmit={handleVerify2FA}>
+          <CardContent className="space-y-4">
+            {error && (
+              <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {error}
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="2fa-code">Bestätigungscode</Label>
+              <Input
+                id="2fa-code"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                placeholder="000000"
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
+                className="text-center text-2xl tracking-[0.5em] font-mono"
+                autoFocus
+                disabled={isLoading}
+              />
+            </div>
+
+            <p className="text-xs text-warmgray-500 text-center">
+              Öffnen Sie Ihre Authenticator-App (z.B. Google Authenticator) und geben Sie den angezeigten Code ein.
+            </p>
+          </CardContent>
+          
+          <CardFooter className="flex flex-col gap-4">
+            <Button type="submit" className="w-full" disabled={isLoading || twoFactorCode.length !== 6}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Überprüfen...
+                </>
+              ) : (
+                'Anmelden'
+              )}
+            </Button>
+            
+            <Button type="button" variant="ghost" onClick={goBack} className="w-full">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Zurück zur Anmeldung
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
+    )
+  }
+
+  // Normal Login Screen
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">

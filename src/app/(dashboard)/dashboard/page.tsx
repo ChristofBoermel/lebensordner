@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -45,12 +46,17 @@ export default async function DashboardPage() {
     return null
   }
 
-  // Get user profile
+  // Get user profile and check onboarding
   const { data: profile } = await supabase
     .from('profiles')
     .select('full_name, onboarding_completed, storage_used')
     .eq('id', user.id)
     .single() as { data: ProfileRow | null }
+
+  // Redirect to onboarding if not completed
+  if (profile && !profile.onboarding_completed) {
+    redirect('/onboarding')
+  }
 
   // Get document counts by category
   const { data: documents } = await supabase

@@ -15,10 +15,10 @@ export default async function DashboardLayout({
     redirect('/anmelden')
   }
 
-  // Get user profile
+  // Get user profile including role
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name')
+    .select('full_name, role')
     .eq('id', user.id)
     .single()
 
@@ -27,7 +27,8 @@ export default async function DashboardLayout({
       <DashboardNav 
         user={{ 
           email: user.email || '', 
-          full_name: profile?.full_name 
+          full_name: profile?.full_name,
+          role: profile?.role
         }} 
       />
       

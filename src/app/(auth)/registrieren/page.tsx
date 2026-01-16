@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, CheckCircle2 } from 'lucide-react'
+import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState('')
@@ -20,6 +21,7 @@ export default function RegisterPage() {
   const [isSuccess, setIsSuccess] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const { capture } = usePostHog()
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,7 +42,7 @@ export default function RegisterPage() {
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -51,6 +53,10 @@ export default function RegisterPage() {
       })
 
       if (error) {
+        capture(ANALYTICS_EVENTS.ERROR_OCCURRED, {
+          error_type: 'registration_failed',
+          error_message: error.message,
+        })
         if (error.message.includes('already registered')) {
           setError('Diese E-Mail-Adresse ist bereits registriert.')
         } else {
@@ -58,6 +64,12 @@ export default function RegisterPage() {
         }
         return
       }
+
+      // Track successful registration
+      capture(ANALYTICS_EVENTS.USER_SIGNED_UP, {
+        method: 'email',
+        has_name: !!fullName,
+      })
 
       setIsSuccess(true)
     } catch (err) {

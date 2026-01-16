@@ -1,4 +1,9 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
+import { PostHogProvider } from '@/components/analytics/posthog-provider'
+import { ThemeProvider } from '@/components/theme/theme-provider'
+import { CookieConsent } from '@/components/consent/cookie-consent'
+import { ErrorBoundary } from '@/components/error/error-boundary'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -20,9 +25,18 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="de">
+    <html lang="de" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        {children}
+        <ThemeProvider>
+          <ErrorBoundary>
+            <Suspense fallback={null}>
+              <PostHogProvider>
+                {children}
+              </PostHogProvider>
+            </Suspense>
+            <CookieConsent />
+          </ErrorBoundary>
+        </ThemeProvider>
       </body>
     </html>
   )

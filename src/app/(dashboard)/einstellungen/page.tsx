@@ -9,6 +9,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   User,
   Mail,
   Phone,
@@ -19,8 +27,15 @@ import {
   CheckCircle2,
   AlertTriangle,
   LogOut,
-  Trash2
+  Trash2,
+  Bell,
+  Key,
+  Lock,
+  Shield,
+  Smartphone
 } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme/theme-toggle'
+import { TwoFactorSetup } from '@/components/auth/two-factor-setup'
 import type { Profile } from '@/types/database'
 
 export default function EinstellungenPage() {
@@ -30,8 +45,60 @@ export default function EinstellungenPage() {
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
+  // 2FA state
+  const [is2FADialogOpen, setIs2FADialogOpen] = useState(false)
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false)
+  
+  // Password change state
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [passwordSuccess, setPasswordSuccess] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  
   const router = useRouter()
   const supabase = createClient()
+
+  const handlePasswordChange = async () => {
+    setPasswordError(null)
+    setPasswordSuccess(false)
+
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError('Die neuen Passwörter stimmen nicht überein.')
+      return
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError('Das neue Passwort muss mindestens 8 Zeichen lang sein.')
+      return
+    }
+
+    setIsChangingPassword(true)
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      })
+
+      if (error) throw error
+
+      setPasswordSuccess(true)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmNewPassword('')
+      
+      setTimeout(() => {
+        setIsPasswordDialogOpen(false)
+        setPasswordSuccess(false)
+      }, 2000)
+    } catch (err: any) {
+      setPasswordError(err.message || 'Fehler beim Ändern des Passworts.')
+    } finally {
+      setIsChangingPassword(false)
+    }
+  }
 
   const fetchProfile = useCallback(async () => {
     setIsLoading(true)
@@ -50,6 +117,7 @@ export default function EinstellungenPage() {
 
     if (!error && data) {
       setProfile(data)
+      setIs2FAEnabled(data.two_factor_enabled || false)
     }
     setIsLoading(false)
   }, [supabase, router])
@@ -75,6 +143,8 @@ export default function EinstellungenPage() {
           date_of_birth: profile.date_of_birth,
           address: profile.address,
           onboarding_completed: true,
+          email_reminders_enabled: profile.email_reminders_enabled ?? true,
+          email_reminder_days_before: profile.email_reminder_days_before ?? 7,
         })
         .eq('id', user.id)
 
@@ -262,6 +332,132 @@ export default function EinstellungenPage() {
         </CardContent>
       </Card>
 
+      {/* Email Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="w-5 h-5 text-sage-600" />
+            E-Mail-Benachrichtigungen
+          </CardTitle>
+          <CardDescription>
+            Lassen Sie sich per E-Mail an wichtige Fristen erinnern
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Erinnerungs-E-Mails</p>
+              <p className="text-sm text-warmgray-500">
+                Erhalten Sie E-Mails vor Fälligkeitsdaten
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={profile.email_reminders_enabled ?? true}
+                onChange={(e) => setProfile({ ...profile, email_reminders_enabled: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sage-600"></div>
+            </label>
+          </div>
+
+          {profile.email_reminders_enabled && (
+            <div className="space-y-2 pt-2">
+              <Label htmlFor="reminder_days">Erinnerung senden vor Fälligkeit</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="reminder_days"
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={profile.email_reminder_days_before ?? 7}
+                  onChange={(e) => setProfile({ ...profile, email_reminder_days_before: parseInt(e.target.value) || 7 })}
+                  className="w-24"
+                />
+                <span className="text-warmgray-600">Tage</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Security */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lock className="w-5 h-5 text-sage-600" />
+            Sicherheit
+          </CardTitle>
+          <CardDescription>
+            Passwort und Sicherheitseinstellungen
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Passwort ändern</p>
+              <p className="text-sm text-warmgray-500">
+                Ändern Sie Ihr Anmeldepasswort
+              </p>
+            </div>
+            <Button variant="outline" onClick={() => setIsPasswordDialogOpen(true)}>
+              <Key className="mr-2 h-4 w-4" />
+              Ändern
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-warmgray-900">Zwei-Faktor-Authentifizierung</p>
+                {is2FAEnabled && (
+                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                    Aktiv
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-warmgray-500">
+                {is2FAEnabled 
+                  ? 'Ihr Konto ist durch 2FA geschützt'
+                  : 'Zusätzliche Sicherheit mit Authenticator-App'
+                }
+              </p>
+            </div>
+            <Button 
+              variant={is2FAEnabled ? "outline" : "default"}
+              onClick={() => setIs2FADialogOpen(true)}
+            >
+              <Smartphone className="mr-2 h-4 w-4" />
+              {is2FAEnabled ? 'Verwalten' : 'Aktivieren'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Appearance */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Erscheinungsbild</CardTitle>
+          <CardDescription>
+            Passen Sie das Design der Anwendung an
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Design</p>
+              <p className="text-sm text-warmgray-500">
+                Wählen Sie zwischen Hell, Dunkel oder System
+              </p>
+            </div>
+            <ThemeToggle />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Account Actions */}
       <Card>
         <CardHeader>
@@ -334,6 +530,82 @@ export default function EinstellungenPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Password Change Dialog */}
+      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Passwort ändern</DialogTitle>
+            <DialogDescription>
+              Geben Sie Ihr neues Passwort ein. Es muss mindestens 8 Zeichen lang sein.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {passwordError && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {passwordError}
+              </div>
+            )}
+
+            {passwordSuccess && (
+              <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                Passwort erfolgreich geändert!
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="new_password">Neues Passwort</Label>
+              <Input
+                id="new_password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Mindestens 8 Zeichen"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirm_new_password">Neues Passwort bestätigen</Label>
+              <Input
+                id="confirm_new_password"
+                type="password"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                placeholder="Passwort wiederholen"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPasswordDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button 
+              onClick={handlePasswordChange}
+              disabled={isChangingPassword || !newPassword || !confirmNewPassword}
+            >
+              {isChangingPassword ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Speichern...
+                </>
+              ) : (
+                'Passwort ändern'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2FA Setup Dialog */}
+      <TwoFactorSetup
+        isOpen={is2FADialogOpen}
+        onClose={() => setIs2FADialogOpen(false)}
+        isEnabled={is2FAEnabled}
+        onStatusChange={setIs2FAEnabled}
+      />
     </div>
   )
 }
