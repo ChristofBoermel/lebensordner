@@ -66,11 +66,29 @@ export default function OnboardingPage() {
         return
       }
 
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('onboarding_completed, full_name, phone, date_of_birth, address')
         .eq('id', user.id)
         .single()
+
+      // If no profile exists, create one
+      if (error || !profile) {
+        console.log('Creating profile for user:', user.id)
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email || '',
+            full_name: user.user_metadata?.full_name || '',
+            onboarding_completed: false,
+          })
+        
+        if (insertError) {
+          console.error('Failed to create profile:', insertError)
+        }
+        return // Stay on onboarding
+      }
 
       if (profile?.onboarding_completed) {
         router.push('/dashboard')
@@ -271,7 +289,7 @@ export default function OnboardingPage() {
               <div className="space-y-2">
                 <Label htmlFor="full_name">Vollständiger Name</Label>
                 <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-400" />
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-500" />
                   <Input
                     id="full_name"
                     value={profileForm.full_name}
@@ -285,7 +303,7 @@ export default function OnboardingPage() {
               <div className="space-y-2">
                 <Label htmlFor="phone">Telefonnummer</Label>
                 <div className="relative">
-                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-400" />
+                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-500" />
                   <Input
                     id="phone"
                     type="tel"
@@ -300,7 +318,7 @@ export default function OnboardingPage() {
               <div className="space-y-2">
                 <Label htmlFor="date_of_birth">Geburtsdatum</Label>
                 <div className="relative">
-                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-400" />
+                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-500" />
                   <Input
                     id="date_of_birth"
                     type="date"
@@ -314,13 +332,13 @@ export default function OnboardingPage() {
               <div className="space-y-2">
                 <Label htmlFor="address">Adresse</Label>
                 <div className="relative">
-                  <MapPin className="absolute left-4 top-4 w-5 h-5 text-warmgray-400" />
+                  <MapPin className="absolute left-4 top-4 w-5 h-5 text-warmgray-500" />
                   <textarea
                     id="address"
                     value={profileForm.address}
                     onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
                     placeholder="Musterstraße 1&#10;12345 Musterstadt"
-                    className="w-full min-h-[80px] rounded-md border-2 border-warmgray-200 bg-white pl-12 pr-4 py-3 text-base transition-colors placeholder:text-warmgray-400 focus-visible:outline-none focus-visible:border-sage-400"
+                    className="w-full min-h-[80px] rounded-md border-2 border-warmgray-200 bg-white pl-12 pr-4 py-3 text-base text-gray-900 transition-colors placeholder:text-warmgray-500 focus-visible:outline-none focus-visible:border-sage-400"
                   />
                 </div>
               </div>
@@ -542,7 +560,7 @@ export default function OnboardingPage() {
               <div className="border-2 border-dashed border-warmgray-300 rounded-lg p-8 text-center hover:border-sage-400 transition-colors cursor-pointer"
                 onClick={() => router.push('/dokumente?upload=true')}
               >
-                <Upload className="w-12 h-12 text-warmgray-400 mx-auto mb-4" />
+                <Upload className="w-12 h-12 text-warmgray-500 mx-auto mb-4" />
                 <p className="font-medium text-warmgray-900 mb-1">Dokument hochladen</p>
                 <p className="text-sm text-warmgray-500">Klicken Sie hier, um zur Dokumenten-Seite zu gelangen</p>
               </div>

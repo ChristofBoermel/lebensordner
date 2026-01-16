@@ -245,7 +245,7 @@ export default function EinstellungenPage() {
           <div className="space-y-2">
             <Label htmlFor="full_name">Vollständiger Name</Label>
             <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-400" />
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-500" />
               <Input
                 id="full_name"
                 value={profile.full_name || ''}
@@ -259,7 +259,7 @@ export default function EinstellungenPage() {
           <div className="space-y-2">
             <Label htmlFor="email">E-Mail-Adresse</Label>
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-400" />
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-500" />
               <Input
                 id="email"
                 type="email"
@@ -276,7 +276,7 @@ export default function EinstellungenPage() {
           <div className="space-y-2">
             <Label htmlFor="phone">Telefonnummer</Label>
             <div className="relative">
-              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-400" />
+              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-500" />
               <Input
                 id="phone"
                 type="tel"
@@ -291,7 +291,7 @@ export default function EinstellungenPage() {
           <div className="space-y-2">
             <Label htmlFor="date_of_birth">Geburtsdatum</Label>
             <div className="relative">
-              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-400" />
+              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-500" />
               <Input
                 id="date_of_birth"
                 type="date"
@@ -305,13 +305,13 @@ export default function EinstellungenPage() {
           <div className="space-y-2">
             <Label htmlFor="address">Adresse</Label>
             <div className="relative">
-              <MapPin className="absolute left-4 top-4 w-5 h-5 text-warmgray-400" />
+              <MapPin className="absolute left-4 top-4 w-5 h-5 text-warmgray-500" />
               <textarea
                 id="address"
                 value={profile.address || ''}
                 onChange={(e) => setProfile({ ...profile, address: e.target.value })}
                 placeholder="Musterstraße 1&#10;12345 Musterstadt"
-                className="w-full min-h-[100px] rounded-md border-2 border-warmgray-200 bg-white pl-12 pr-4 py-3 text-base transition-colors placeholder:text-warmgray-400 focus-visible:outline-none focus-visible:border-sage-400 focus-visible:ring-2 focus-visible:ring-sage-100"
+                className="w-full min-h-[100px] rounded-md border-2 border-warmgray-200 bg-white pl-12 pr-4 py-3 text-base text-gray-900 transition-colors placeholder:text-warmgray-500 focus-visible:outline-none focus-visible:border-sage-400 focus-visible:ring-2 focus-visible:ring-sage-100"
               />
             </div>
           </div>

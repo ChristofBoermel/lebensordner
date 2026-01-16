@@ -192,7 +192,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-14 text-base placeholder:text-warmgray-400"
+            className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-14 text-base placeholder:text-warmgray-500"
           />
           {isSearching && <Loader2 className="w-5 h-5 text-warmgray-400 animate-spin" />}
         </div>
