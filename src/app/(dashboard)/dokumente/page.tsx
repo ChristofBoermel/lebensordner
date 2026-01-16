@@ -90,12 +90,12 @@ export default function DocumentsPage() {
       
       const { data: profile } = await supabase
         .from('profiles')
-        .select('subscription_status, stripe_price_id')
+        .select('subscription_status')
         .eq('id', user.id)
         .single()
       
       if (profile) {
-        const tier = getTierFromSubscription(profile.subscription_status, profile.stripe_price_id)
+        const tier = getTierFromSubscription(profile.subscription_status, null)
         setUserTier(tier)
       }
     }

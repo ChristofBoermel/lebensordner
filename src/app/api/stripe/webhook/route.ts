@@ -42,11 +42,13 @@ export async function POST(request: Request) {
 
         if (userId && session.subscription) {
           const subscription = await stripe.subscriptions.retrieve(session.subscription as string) as Stripe.Subscription
+          const priceId = subscription.items.data[0]?.price?.id || null
           
           await getSupabaseAdmin()
             .from('profiles')
             .update({
               stripe_subscription_id: subscription.id,
+              stripe_price_id: priceId,
               subscription_status: subscription.status,
               subscription_current_period_end: new Date((subscription as any).current_period_end * 1000).toISOString(),
             })
@@ -58,11 +60,13 @@ export async function POST(request: Request) {
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
         const userId = (subscription as any).metadata?.supabase_user_id
+        const priceId = subscription.items.data[0]?.price?.id || null
 
         if (userId) {
           await getSupabaseAdmin()
             .from('profiles')
             .update({
+              stripe_price_id: priceId,
               subscription_status: subscription.status,
               subscription_current_period_end: new Date((subscription as any).current_period_end * 1000).toISOString(),
             })
@@ -80,6 +84,7 @@ export async function POST(request: Request) {
               .from('profiles')
               .update({
                 stripe_subscription_id: subscription.id,
+                stripe_price_id: priceId,
                 subscription_status: subscription.status,
                 subscription_current_period_end: new Date((subscription as any).current_period_end * 1000).toISOString(),
               })
@@ -105,6 +110,7 @@ export async function POST(request: Request) {
             .update({
               subscription_status: 'canceled',
               stripe_subscription_id: null,
+              stripe_price_id: null,
             })
             .eq('id', profile.id)
         }
