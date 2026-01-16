@@ -27,7 +27,7 @@ const STEPS: { id: Step; title: string; description: string }[] = [
 
 export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState<Step>('welcome')
-  const [isLoading, setIsLoading] = useState(false)
+  const [isInitializing, setIsInitializing] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
@@ -60,49 +60,46 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     const checkOnboarding = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/anmelden')
-        return
-      }
-
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('onboarding_completed, full_name, phone, date_of_birth, address')
-        .eq('id', user.id)
-        .single()
-
-      // If no profile exists, create one
-      if (error || !profile) {
-        console.log('Creating profile for user:', user.id)
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.email || '',
-            full_name: user.user_metadata?.full_name || '',
-            onboarding_completed: false,
-          })
-        
-        if (insertError) {
-          console.error('Failed to create profile:', insertError)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          router.push('/anmelden')
+          return
         }
-        return // Stay on onboarding
-      }
 
-      if (profile?.onboarding_completed) {
-        router.push('/dashboard')
-        return
-      }
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('onboarding_completed, full_name, phone, date_of_birth, address')
+          .eq('id', user.id)
+          .single()
 
-      // Pre-fill profile form if data exists
-      if (profile) {
-        setProfileForm({
-          full_name: profile.full_name || '',
-          phone: profile.phone || '',
-          date_of_birth: profile.date_of_birth || '',
-          address: profile.address || '',
-        })
+        // If profile exists and onboarding is completed, go to dashboard
+        if (profile?.onboarding_completed) {
+          router.replace('/dashboard')
+          return
+        }
+
+        // If no profile exists, try to create one via API
+        if (error || !profile) {
+          console.log('No profile found, creating via API...')
+          try {
+            await fetch('/api/profile/ensure', { method: 'POST' })
+          } catch (e) {
+            console.error('Failed to ensure profile:', e)
+          }
+        }
+
+        // Pre-fill profile form if data exists
+        if (profile) {
+          setProfileForm({
+            full_name: profile.full_name || '',
+            phone: profile.phone || '',
+            date_of_birth: profile.date_of_birth || '',
+            address: profile.address || '',
+          })
+        }
+      } finally {
+        setIsInitializing(false)
       }
     }
 
@@ -623,6 +620,18 @@ export default function OnboardingPage() {
           </div>
         )
     }
+  }
+
+  // Show loading while checking onboarding status
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-cream-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-sage-600 mx-auto mb-4" />
+          <p className="text-warmgray-600">Wird geladen...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

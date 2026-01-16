@@ -43,7 +43,7 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) {
-    return null
+    redirect('/anmelden')
   }
 
   // Get user profile and check onboarding
@@ -53,8 +53,8 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single() as { data: ProfileRow | null }
 
-  // Redirect to onboarding if not completed
-  if (profile && !profile.onboarding_completed) {
+  // Redirect to onboarding if no profile or not completed
+  if (!profile || !profile.onboarding_completed) {
     redirect('/onboarding')
   }
 
