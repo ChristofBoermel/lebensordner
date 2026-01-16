@@ -205,23 +205,22 @@ export default function OnboardingPage() {
   const completeOnboarding = async () => {
     setIsSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Nicht angemeldet')
-
-      const { error } = await supabase.from('profiles').update({
-        onboarding_completed: true,
-      }).eq('id', user.id)
-
-      if (error) {
-        console.error('Onboarding update error:', error)
-        throw error
+      // Use API route to bypass RLS issues
+      const response = await fetch('/api/onboarding/complete', {
+        method: 'POST',
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok || data.error) {
+        throw new Error(data.error || 'Fehler beim Abschließen')
       }
 
       router.push('/dashboard')
       router.refresh()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Complete error:', err)
-      alert('Fehler beim Speichern. Bitte versuchen Sie es erneut.')
+      alert('Fehler beim Speichern: ' + (err.message || 'Bitte versuchen Sie es erneut.'))
     } finally {
       setIsSaving(false)
     }

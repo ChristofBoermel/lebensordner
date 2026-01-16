@@ -60,7 +60,7 @@ export default function AboPage() {
     
     const { data } = await supabase
       .from('profiles')
-      .select('subscription_status, subscription_current_period_end, stripe_customer_id, stripe_subscription_id')
+      .select('subscription_status, subscription_current_period_end, stripe_customer_id, stripe_price_id')
       .eq('id', user.id)
       .single()
     
@@ -69,13 +69,24 @@ export default function AboPage() {
         status: data.subscription_status, 
         current_period_end: data.subscription_current_period_end, 
         stripe_customer_id: data.stripe_customer_id,
-        price_id: data.stripe_subscription_id
+        price_id: data.stripe_price_id
       })
     }
     setIsLoading(false)
   }, [supabase])
 
   useEffect(() => { fetchSubscription() }, [fetchSubscription])
+  
+  // Refetch after successful checkout
+  useEffect(() => {
+    if (success) {
+      // Wait a bit for webhook to process
+      const timer = setTimeout(() => {
+        fetchSubscription()
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [success, fetchSubscription])
 
   const getPriceId = (tierId: SubscriptionTier, period: 'monthly' | 'yearly'): string => {
     if (!priceIds) return ''
@@ -136,7 +147,21 @@ export default function AboPage() {
   }
 
   const isSubscribed = subscription?.status === 'active' || subscription?.status === 'trialing'
-  const currentTier = isSubscribed ? 'premium' : 'free'
+  
+  // Determine current tier based on price ID
+  const getCurrentTier = (): SubscriptionTier => {
+    if (!isSubscribed || !priceIds || !subscription?.price_id) return 'free'
+    
+    const priceId = subscription.price_id
+    if (priceId === priceIds.basic.monthly || priceId === priceIds.basic.yearly) return 'basic'
+    if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) return 'premium'
+    if (priceId === priceIds.family.monthly || priceId === priceIds.family.yearly) return 'family'
+    
+    // Default to premium for legacy/unknown subscriptions
+    return 'premium'
+  }
+  
+  const currentTier = getCurrentTier()
 
   const getPrice = (tier: TierConfig) => {
     if (tier.priceMonthly === 0) return 'Kostenlos'
