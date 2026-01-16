@@ -313,16 +313,13 @@ export default function OnboardingPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="date_of_birth">Geburtsdatum</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-500" />
-                  <Input
-                    id="date_of_birth"
-                    type="date"
-                    value={profileForm.date_of_birth}
-                    onChange={(e) => setProfileForm({ ...profileForm, date_of_birth: e.target.value })}
-                    className="pl-12"
-                  />
-                </div>
+                <Input
+                  id="date_of_birth"
+                  type="date"
+                  value={profileForm.date_of_birth}
+                  onChange={(e) => setProfileForm({ ...profileForm, date_of_birth: e.target.value })}
+                  className="cursor-pointer"
+                />
               </div>
 
               <div className="space-y-2">
@@ -334,7 +331,7 @@ export default function OnboardingPage() {
                     value={profileForm.address}
                     onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
                     placeholder="Musterstraße 1&#10;12345 Musterstadt"
-                    className="w-full min-h-[80px] rounded-md border-2 border-warmgray-200 bg-white pl-12 pr-4 py-3 text-base text-gray-900 transition-colors placeholder:text-warmgray-500 focus-visible:outline-none focus-visible:border-sage-400"
+                    className="w-full min-h-[80px] rounded-md border-2 border-warmgray-400 bg-white pl-12 pr-4 py-3 text-base text-gray-900 transition-colors placeholder:text-warmgray-500 focus-visible:outline-none focus-visible:border-sage-400"
                   />
                 </div>
               </div>

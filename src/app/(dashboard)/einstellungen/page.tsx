@@ -311,7 +311,7 @@ export default function EinstellungenPage() {
                 value={profile.address || ''}
                 onChange={(e) => setProfile({ ...profile, address: e.target.value })}
                 placeholder="Musterstraße 1&#10;12345 Musterstadt"
-                className="w-full min-h-[100px] rounded-md border-2 border-warmgray-200 bg-white pl-12 pr-4 py-3 text-base text-gray-900 transition-colors placeholder:text-warmgray-500 focus-visible:outline-none focus-visible:border-sage-400 focus-visible:ring-2 focus-visible:ring-sage-100"
+                className="w-full min-h-[100px] rounded-md border-2 border-warmgray-400 bg-white pl-12 pr-4 py-3 text-base text-gray-900 transition-colors placeholder:text-warmgray-500 focus-visible:outline-none focus-visible:border-sage-400 focus-visible:ring-2 focus-visible:ring-sage-100"
               />
             </div>
           </div>
