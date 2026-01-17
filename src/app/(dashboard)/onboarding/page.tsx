@@ -554,26 +554,26 @@ export default function OnboardingPage() {
                 Ihr erstes Dokument
               </h2>
               <p className="text-warmgray-600">
-                Laden Sie ein wichtiges Dokument hoch – z.B. Ihren Personalausweis.
+                Sie können jetzt Ihr erstes Dokument hochladen oder diesen Schritt überspringen.
               </p>
             </div>
 
             <div className="max-w-md mx-auto">
-              <div className="border-2 border-dashed border-warmgray-300 rounded-lg p-8 text-center hover:border-sage-400 transition-colors cursor-pointer"
-                onClick={() => router.push('/dokumente?upload=true')}
-              >
-                <Upload className="w-12 h-12 text-warmgray-500 mx-auto mb-4" />
-                <p className="font-medium text-warmgray-900 mb-1">Dokument hochladen</p>
-                <p className="text-sm text-warmgray-500">Klicken Sie hier, um zur Dokumenten-Seite zu gelangen</p>
+              <div className="border-2 border-dashed border-warmgray-400 rounded-lg p-8 text-center bg-cream-50">
+                <FileText className="w-12 h-12 text-sage-500 mx-auto mb-4" />
+                <p className="font-medium text-warmgray-900 mb-2">Dokumente hochladen</p>
+                <p className="text-sm text-warmgray-600 mb-4">
+                  Nach Abschluss der Einrichtung können Sie unter "Dokumente" alle wichtigen Unterlagen hochladen.
+                </p>
+                <div className="flex items-center justify-center gap-2 text-sm text-warmgray-500">
+                  <Check className="w-4 h-4 text-sage-500" />
+                  <span>Personalausweis</span>
+                  <Check className="w-4 h-4 text-sage-500" />
+                  <span>Versicherungen</span>
+                  <Check className="w-4 h-4 text-sage-500" />
+                  <span>Verträge</span>
+                </div>
               </div>
-
-              <button
-                type="button"
-                onClick={goToNextStep}
-                className="mt-4 text-sm text-warmgray-500 hover:text-warmgray-700 underline block mx-auto"
-              >
-                Später hochladen
-              </button>
             </div>
 
             <div className="flex justify-between max-w-md mx-auto pt-4">

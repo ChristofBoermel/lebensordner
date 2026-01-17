@@ -81,14 +81,18 @@ export default function NotfallPage() {
       .order('is_primary', { ascending: false }) as { data: EmergencyContact[] | null }
     if (contacts) setEmergencyContacts(contacts)
 
-    const { data: medical } = await supabase
+    // Use maybeSingle() to handle case where no medical info exists yet
+    const { data: medical, error: medicalError } = await supabase
       .from('medical_info')
       .select('*')
       .eq('user_id', user.id)
-      .single() as { data: MedicalInfo | null }
-    if (medical) {
-      setMedicalInfo(medical)
-      setMedicalForm(medical)
+      .maybeSingle()
+    
+    if (medicalError) {
+      console.error('Error fetching medical info:', medicalError)
+    } else if (medical) {
+      setMedicalInfo(medical as MedicalInfo)
+      setMedicalForm(medical as MedicalInfo)
     }
     setIsLoading(false)
   }, [supabase])
