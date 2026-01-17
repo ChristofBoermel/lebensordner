@@ -1,89 +1,152 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
 
 export async function POST() {
+  console.log('=== ONBOARDING COMPLETE API CALLED ===')
+  
   try {
-    // Get current user
-    const supabase = await createServerSupabaseClient()
+    // Check environment variables first
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    console.log('Supabase URL:', supabaseUrl ? 'SET' : 'MISSING')
+    console.log('Anon Key:', supabaseAnonKey ? 'SET' : 'MISSING')
+    console.log('Service Key:', supabaseServiceKey ? 'SET' : 'MISSING')
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({ 
+        error: 'Missing Supabase configuration',
+        details: { url: !!supabaseUrl, anonKey: !!supabaseAnonKey }
+      }, { status: 500 })
+    }
+
+    if (!supabaseServiceKey) {
+      return NextResponse.json({ 
+        error: 'SUPABASE_SERVICE_ROLE_KEY is not configured in Vercel',
+      }, { status: 500 })
+    }
+
+    // Get user from cookies
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value
+          },
+          set() {},
+          remove() {},
+        },
+      }
+    )
+
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
+    console.log('Auth result:', { userId: user?.id, error: authError?.message })
+
     if (authError) {
-      console.error('Auth error:', authError)
-      return NextResponse.json({ error: 'Auth error: ' + authError.message }, { status: 401 })
+      return NextResponse.json({ 
+        error: 'Authentication error',
+        details: authError.message 
+      }, { status: 401 })
     }
 
     if (!user) {
-      console.error('No user found')
-      return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    console.log('Completing onboarding for user:', user.id)
+    console.log('User ID:', user.id)
+    console.log('User Email:', user.email)
 
-    // Check for service role key
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('SUPABASE_SERVICE_ROLE_KEY is not set!')
-      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
-    }
+    // Use admin client to bypass RLS
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Use admin client to update profile (bypasses RLS)
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-    
-    // First check if profile exists
-    const { data: existingProfile, error: checkError } = await supabaseAdmin
+    // Check current profile state
+    const { data: currentProfile, error: selectError } = await supabaseAdmin
       .from('profiles')
-      .select('id, onboarding_completed')
+      .select('*')
       .eq('id', user.id)
       .single()
 
-    if (checkError) {
-      console.error('Error checking profile:', checkError)
-      
-      // Profile doesn't exist, create it
-      if (checkError.code === 'PGRST116') {
-        console.log('Profile not found, creating...')
-        const { error: insertError } = await supabaseAdmin
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.email || '',
-            full_name: user.user_metadata?.full_name || '',
-            onboarding_completed: true,
-          })
-        
-        if (insertError) {
-          console.error('Failed to create profile:', insertError)
-          return NextResponse.json({ error: 'Failed to create profile: ' + insertError.message }, { status: 500 })
-        }
-        
-        console.log('Profile created with onboarding_completed = true')
-        return NextResponse.json({ success: true, created: true })
-      }
-      
-      return NextResponse.json({ error: 'Check error: ' + checkError.message }, { status: 500 })
+    console.log('Current profile:', currentProfile)
+    console.log('Select error:', selectError)
+
+    if (selectError && selectError.code !== 'PGRST116') {
+      return NextResponse.json({ 
+        error: 'Failed to fetch profile',
+        details: selectError.message,
+        code: selectError.code
+      }, { status: 500 })
     }
 
-    console.log('Existing profile:', existingProfile)
+    // If no profile exists, create one
+    if (!currentProfile) {
+      console.log('No profile found, creating new one...')
+      
+      const { data: newProfile, error: insertError } = await supabaseAdmin
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email || '',
+          full_name: user.user_metadata?.full_name || '',
+          onboarding_completed: true,
+        })
+        .select()
+        .single()
 
-    // Update existing profile
-    const { data: updateData, error: updateError } = await supabaseAdmin
+      if (insertError) {
+        console.error('Insert error:', insertError)
+        return NextResponse.json({ 
+          error: 'Failed to create profile',
+          details: insertError.message,
+          code: insertError.code
+        }, { status: 500 })
+      }
+
+      console.log('Created new profile:', newProfile)
+      return NextResponse.json({ 
+        success: true, 
+        action: 'created',
+        profile: newProfile 
+      })
+    }
+
+    // Profile exists, update it
+    console.log('Profile exists, updating onboarding_completed to true...')
+    
+    const { data: updatedProfile, error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({ onboarding_completed: true })
       .eq('id', user.id)
       .select()
+      .single()
 
     if (updateError) {
-      console.error('Failed to update onboarding:', updateError)
-      return NextResponse.json({ error: 'Update error: ' + updateError.message }, { status: 500 })
+      console.error('Update error:', updateError)
+      return NextResponse.json({ 
+        error: 'Failed to update profile',
+        details: updateError.message,
+        code: updateError.code
+      }, { status: 500 })
     }
 
-    console.log('Profile updated:', updateData)
-    return NextResponse.json({ success: true, updated: true })
+    console.log('Updated profile:', updatedProfile)
+    return NextResponse.json({ 
+      success: true, 
+      action: 'updated',
+      profile: updatedProfile 
+    })
+
   } catch (error: any) {
-    console.error('Onboarding completion error:', error)
-    return NextResponse.json({ error: 'Server error: ' + error.message }, { status: 500 })
+    console.error('Unexpected error:', error)
+    return NextResponse.json({ 
+      error: 'Unexpected server error',
+      details: error.message 
+    }, { status: 500 })
   }
 }

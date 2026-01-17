@@ -200,19 +200,28 @@ export default function OnboardingPage() {
   }
 
   const completeOnboarding = async () => {
+    console.log('=== COMPLETE ONBOARDING CALLED ===')
     setIsSaving(true)
     try {
       // Use API route to bypass RLS issues
+      console.log('Calling /api/onboarding/complete...')
       const response = await fetch('/api/onboarding/complete', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       })
       
+      console.log('Response status:', response.status)
       const data = await response.json()
+      console.log('Response data:', data)
       
       if (!response.ok || data.error) {
+        console.error('API returned error:', data.error)
         throw new Error(data.error || 'Fehler beim Abschließen')
       }
 
+      console.log('Success! Redirecting to dashboard...')
       router.push('/dashboard')
       router.refresh()
     } catch (err: any) {
