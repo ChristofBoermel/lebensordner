@@ -32,13 +32,17 @@ export function TwoFactorSetup({ isOpen, onClose, isEnabled, onStatusChange }: T
   const [isLoading, setIsLoading] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // Only reset step when dialog OPENS, not when isEnabled changes
   useEffect(() => {
     if (isOpen) {
-      setStep(isEnabled ? 'disable' : 'intro')
+      // Don't change step if we're in the middle of a flow (success step)
+      if (step !== 'success') {
+        setStep(isEnabled ? 'disable' : 'intro')
+      }
       setVerifyCode('')
       setError(null)
     }
-  }, [isOpen, isEnabled])
+  }, [isOpen]) // Removed isEnabled from dependencies
 
   const generateSecret = async () => {
     setIsLoading(true)
