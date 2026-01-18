@@ -13,6 +13,9 @@ const nextConfig = {
       },
     ],
   },
+  // Prevent trailing slash redirects that break webhooks
+  trailingSlash: false,
+  skipTrailingSlashRedirect: true,
 }
 
 module.exports = nextConfig

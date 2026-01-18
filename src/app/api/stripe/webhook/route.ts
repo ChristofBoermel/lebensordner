@@ -4,6 +4,10 @@ import { stripe } from '@/lib/stripe'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 
+// Force dynamic to prevent any caching/redirect issues
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
 
 // Create Supabase admin client on demand
