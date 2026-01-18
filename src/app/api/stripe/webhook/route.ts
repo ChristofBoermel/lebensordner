@@ -21,6 +21,18 @@ const getSupabaseAdmin = () => {
   )
 }
 
+// Safe date conversion helper
+function safeTimestampToISO(timestamp: number | null | undefined): string | null {
+  if (!timestamp || typeof timestamp !== 'number') {
+    return null
+  }
+  try {
+    return new Date(timestamp * 1000).toISOString()
+  } catch {
+    return null
+  }
+}
+
 // Helper to find user by various identifiers
 async function findUserProfile(
   customerId?: string | null,
@@ -85,11 +97,21 @@ export async function POST(request: Request) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
         console.log('Checkout session completed:', session.id)
+        console.log('Customer:', session.customer)
+        console.log('Subscription:', session.subscription)
         
         // Get subscription details
         if (session.subscription) {
           const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
           const priceId = subscription.items.data[0]?.price?.id || null
+          const periodEnd = safeTimestampToISO((subscription as any).current_period_end)
+          
+          console.log('Subscription details:', {
+            id: subscription.id,
+            status: subscription.status,
+            priceId,
+            periodEnd
+          })
           
           // Find user
           const userId = await findUserProfile(
@@ -98,17 +120,22 @@ export async function POST(request: Request) {
             subscription.metadata as Record<string, string>
           )
           
+          console.log('Found user ID:', userId)
+          
           if (userId) {
-            console.log('Updating user:', userId, 'with subscription:', subscription.id)
+            const updateData: Record<string, any> = {
+              stripe_subscription_id: subscription.id,
+              stripe_price_id: priceId,
+              subscription_status: subscription.status,
+            }
+            
+            if (periodEnd) {
+              updateData.subscription_current_period_end = periodEnd
+            }
             
             const { error } = await supabase
               .from('profiles')
-              .update({
-                stripe_subscription_id: subscription.id,
-                stripe_price_id: priceId,
-                subscription_status: subscription.status,
-                subscription_current_period_end: new Date((subscription as any).current_period_end * 1000).toISOString(),
-              })
+              .update(updateData)
               .eq('id', userId)
             
             if (error) {
@@ -127,28 +154,39 @@ export async function POST(request: Request) {
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
         const priceId = subscription.items.data[0]?.price?.id || null
+        const periodEnd = safeTimestampToISO((subscription as any).current_period_end)
         
-        console.log('Subscription updated:', subscription.id, 'status:', subscription.status)
+        console.log('Subscription event:', event.type)
+        console.log('Subscription:', subscription.id, 'status:', subscription.status)
 
         const userId = await findUserProfile(
           subscription.customer as string,
           subscription.id,
           subscription.metadata as Record<string, string>
         )
+        
+        console.log('Found user ID:', userId)
 
         if (userId) {
+          const updateData: Record<string, any> = {
+            stripe_subscription_id: subscription.id,
+            stripe_price_id: priceId,
+            subscription_status: subscription.status,
+          }
+          
+          if (periodEnd) {
+            updateData.subscription_current_period_end = periodEnd
+          }
+          
           const { error } = await supabase
             .from('profiles')
-            .update({
-              stripe_subscription_id: subscription.id,
-              stripe_price_id: priceId,
-              subscription_status: subscription.status,
-              subscription_current_period_end: new Date((subscription as any).current_period_end * 1000).toISOString(),
-            })
+            .update(updateData)
             .eq('id', userId)
           
           if (error) {
             console.error('Failed to update subscription:', error)
+          } else {
+            console.log('Subscription updated successfully')
           }
         } else {
           console.error('Could not find user for subscription:', subscription.id)
@@ -174,6 +212,8 @@ export async function POST(request: Request) {
               stripe_price_id: null,
             })
             .eq('id', userId)
+          
+          console.log('Subscription canceled for user:', userId)
         }
         break
       }
@@ -194,6 +234,8 @@ export async function POST(request: Request) {
               .from('profiles')
               .update({ subscription_status: 'active' })
               .eq('id', userId)
+            
+            console.log('User status updated to active:', userId)
           }
         }
         break
@@ -214,6 +256,8 @@ export async function POST(request: Request) {
               .from('profiles')
               .update({ subscription_status: 'past_due' })
               .eq('id', userId)
+            
+            console.log('User status updated to past_due:', userId)
           }
         }
         break
@@ -222,7 +266,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ received: true })
   } catch (error: any) {
-    console.error('Webhook handler error:', error)
+    console.error('Webhook handler error:', error.message || error)
     return NextResponse.json(
       { error: 'Webhook handler failed' },
       { status: 500 }
