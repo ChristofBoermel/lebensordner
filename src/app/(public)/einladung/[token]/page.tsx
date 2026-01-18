@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Loader2, CheckCircle2, XCircle, Users, Shield, Leaf } from 'lucide-react'
 import Link from 'next/link'
@@ -29,43 +28,24 @@ export default function InvitationPage() {
   const [accepted, setAccepted] = useState(false)
   const [declined, setDeclined] = useState(false)
 
-  const supabase = createClient()
-
   useEffect(() => {
     const fetchInvitation = async () => {
       try {
-        const { data, error } = await supabase
-          .from('trusted_persons')
-          .select(`
-            id,
-            name,
-            relationship,
-            access_level,
-            invitation_status,
-            profiles!trusted_persons_user_id_fkey (
-              full_name
-            )
-          `)
-          .eq('invitation_token', token)
-          .single()
+        const response = await fetch(`/api/invitation?token=${token}`)
+        const data = await response.json()
 
-        if (error || !data) {
-          setError('Diese Einladung ist ungültig oder abgelaufen.')
+        if (!response.ok) {
+          setError(data.error || 'Diese Einladung ist ungültig oder abgelaufen.')
           return
         }
 
         if (data.invitation_status === 'accepted') {
           setAccepted(true)
+        } else if (data.invitation_status === 'declined') {
+          setDeclined(true)
         }
 
-        setInvitation({
-          id: data.id,
-          name: data.name,
-          relationship: data.relationship,
-          access_level: data.access_level,
-          owner_name: (data.profiles as any)?.full_name || 'Unbekannt',
-          invitation_status: data.invitation_status,
-        })
+        setInvitation(data)
       } catch (err) {
         setError('Ein Fehler ist aufgetreten.')
       } finally {
@@ -74,20 +54,21 @@ export default function InvitationPage() {
     }
 
     fetchInvitation()
-  }, [token, supabase])
+  }, [token])
 
   const handleAccept = async () => {
     setIsProcessing(true)
     try {
-      const { error } = await supabase
-        .from('trusted_persons')
-        .update({
-          invitation_status: 'accepted',
-          invitation_accepted_at: new Date().toISOString(),
-        })
-        .eq('invitation_token', token)
+      const response = await fetch('/api/invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, action: 'accept' }),
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error('Fehler beim Akzeptieren')
+      }
+
       setAccepted(true)
     } catch (err) {
       setError('Fehler beim Akzeptieren der Einladung.')
@@ -99,14 +80,16 @@ export default function InvitationPage() {
   const handleDecline = async () => {
     setIsProcessing(true)
     try {
-      const { error } = await supabase
-        .from('trusted_persons')
-        .update({
-          invitation_status: 'declined',
-        })
-        .eq('invitation_token', token)
+      const response = await fetch('/api/invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, action: 'decline' }),
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error('Fehler beim Ablehnen')
+      }
+
       setDeclined(true)
     } catch (err) {
       setError('Fehler beim Ablehnen der Einladung.')
@@ -154,6 +137,7 @@ export default function InvitationPage() {
               </h2>
               <p className="text-warmgray-600 mb-6">
                 Sie sind jetzt als Vertrauensperson für {invitation?.owner_name} eingetragen.
+                Erstellen Sie ein Konto, um im Notfall auf die freigegebenen Dokumente zugreifen zu können.
               </p>
               <Button asChild>
                 <Link href="/registrieren">Konto erstellen</Link>

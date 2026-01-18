@@ -29,7 +29,8 @@ import {
   Loader2,
   Info,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Send
 } from 'lucide-react'
 import type { TrustedPerson } from '@/types/database'
 
@@ -204,6 +205,28 @@ export default function ZugriffPage() {
     }
   }
 
+  const handleSendInvite = async (personId: string) => {
+    try {
+      const response = await fetch('/api/trusted-person/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trustedPersonId: personId }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Fehler beim Senden')
+      }
+
+      alert('Einladung wurde erfolgreich gesendet!')
+      fetchTrustedPersons()
+    } catch (err: any) {
+      alert('Fehler: ' + err.message)
+      console.error('Invite error:', err)
+    }
+  }
+
   const handleToggleActive = async (person: TrustedPerson) => {
     try {
       const { error } = await supabase
@@ -333,6 +356,28 @@ export default function ZugriffPage() {
                           </div>
                           
                           <div className="flex items-center gap-2">
+                            {(!person.invitation_status || person.invitation_status === 'pending') && (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleSendInvite(person.id)}
+                                title="Einladung senden"
+                                className="text-sage-600 hover:text-sage-700"
+                              >
+                                <Send className="w-4 h-4 mr-1" />
+                                Einladen
+                              </Button>
+                            )}
+                            {person.invitation_status === 'sent' && (
+                              <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                                Einladung gesendet
+                              </span>
+                            )}
+                            {person.invitation_status === 'accepted' && (
+                              <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                                ✓ Akzeptiert
+                              </span>
+                            )}
                             <Button 
                               variant="ghost" 
                               size="icon"

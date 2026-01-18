@@ -192,6 +192,11 @@ export interface Database {
           access_delay_hours: number
           notes: string | null
           is_active: boolean
+          invitation_token: string | null
+          invitation_status: 'pending' | 'sent' | 'accepted' | 'declined' | null
+          invitation_sent_at: string | null
+          invitation_accepted_at: string | null
+          linked_user_id: string | null
         }
         Insert: {
           id?: string
@@ -206,6 +211,11 @@ export interface Database {
           access_delay_hours?: number
           notes?: string | null
           is_active?: boolean
+          invitation_token?: string | null
+          invitation_status?: 'pending' | 'sent' | 'accepted' | 'declined' | null
+          invitation_sent_at?: string | null
+          invitation_accepted_at?: string | null
+          linked_user_id?: string | null
         }
         Update: {
           id?: string
@@ -220,6 +230,11 @@ export interface Database {
           access_delay_hours?: number
           notes?: string | null
           is_active?: boolean
+          invitation_token?: string | null
+          invitation_status?: 'pending' | 'sent' | 'accepted' | 'declined' | null
+          invitation_sent_at?: string | null
+          invitation_accepted_at?: string | null
+          linked_user_id?: string | null
         }
       }
       reminders: {
