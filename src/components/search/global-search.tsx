@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { 
-  Dialog, 
+import {
+  Dialog,
   DialogContent,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { 
@@ -182,6 +184,10 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-xl p-0 gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Suche</DialogTitle>
+        <DialogDescription className="sr-only">
+          Durchsuchen Sie Ihre Dokumente, Vertrauenspersonen und Erinnerungen
+        </DialogDescription>
         {/* Search Input */}
         <div className="flex items-center border-b border-warmgray-200 px-4">
           <Search className="w-5 h-5 text-warmgray-400 mr-3" />
