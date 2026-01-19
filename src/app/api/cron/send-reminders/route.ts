@@ -22,8 +22,11 @@ interface ReminderWithUser {
   profiles: {
     email: string
     full_name: string | null
+    phone: string | null
     email_reminders_enabled: boolean
     email_reminder_days_before: number
+    sms_reminders_enabled: boolean
+    sms_reminder_days_before: number
   }
 }
 
@@ -36,8 +39,11 @@ interface ExpiringDocument {
   profiles: {
     email: string
     full_name: string | null
+    phone: string | null
     email_reminders_enabled: boolean
     email_reminder_days_before: number
+    sms_reminders_enabled: boolean
+    sms_reminder_days_before: number
   }
 }
 
@@ -51,8 +57,8 @@ export async function GET(request: Request) {
   }
 
   const results = {
-    reminders_sent: 0,
-    document_expiry_sent: 0,
+    emails_sent: 0,
+    sms_sent: 0,
     errors: [] as string[],
   }
 
@@ -75,8 +81,11 @@ export async function GET(request: Request) {
         profiles!reminders_user_id_fkey (
           email,
           full_name,
+          phone,
           email_reminders_enabled,
-          email_reminder_days_before
+          email_reminder_days_before,
+          sms_reminders_enabled,
+          sms_reminder_days_before
         )
       `)
       .eq('is_completed', false)
@@ -90,44 +99,53 @@ export async function GET(request: Request) {
     if (reminders) {
       for (const reminder of reminders as unknown as ReminderWithUser[]) {
         const profile = reminder.profiles
-        
-        // Skip if user has disabled email reminders
-        if (!profile?.email_reminders_enabled) continue
+        if (!profile) continue
 
         const dueDate = new Date(reminder.due_date)
         const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-        
-        // Check if we should send reminder based on user preference
-        if (daysUntilDue > profile.email_reminder_days_before) continue
 
-        try {
-          await resend.emails.send({
-            from: 'Lebensordner <erinnerung@lebensordner.org>',
-            to: profile.email,
-            subject: `Erinnerung: ${reminder.title}`,
-            html: generateReminderEmail({
-              userName: profile.full_name || 'Nutzer',
-              title: reminder.title,
-              description: reminder.description,
-              dueDate: dueDate.toLocaleDateString('de-DE', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
+        // Send email reminder
+        if (profile.email_reminders_enabled && daysUntilDue <= profile.email_reminder_days_before) {
+          try {
+            await resend.emails.send({
+              from: 'Lebensordner <erinnerung@lebensordner.org>',
+              to: profile.email,
+              subject: `Erinnerung: ${reminder.title}`,
+              html: generateReminderEmail({
+                userName: profile.full_name || 'Nutzer',
+                title: reminder.title,
+                description: reminder.description,
+                dueDate: dueDate.toLocaleDateString('de-DE', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                }),
+                daysUntilDue,
               }),
-              daysUntilDue,
-            }),
-          })
+            })
 
-          // Mark reminder as sent
-          await supabaseAdmin
-            .from('reminders')
-            .update({ email_sent: true })
-            .eq('id', reminder.id)
+            // Mark reminder as sent
+            await supabaseAdmin
+              .from('reminders')
+              .update({ email_sent: true })
+              .eq('id', reminder.id)
 
-          results.reminders_sent++
-        } catch (emailError: any) {
-          results.errors.push(`Email send error for reminder ${reminder.id}: ${emailError.message}`)
+            results.emails_sent++
+          } catch (emailError: any) {
+            results.errors.push(`Email error for reminder ${reminder.id}: ${emailError.message}`)
+          }
+        }
+
+        // Send SMS reminder
+        if (profile.sms_reminders_enabled && profile.phone && daysUntilDue <= profile.sms_reminder_days_before) {
+          try {
+            const smsMessage = `Lebensordner: "${reminder.title}" ist in ${daysUntilDue} Tag${daysUntilDue > 1 ? 'en' : ''} fällig.`
+            await sendSMS(profile.phone, smsMessage)
+            results.sms_sent++
+          } catch (smsError: any) {
+            results.errors.push(`SMS error for reminder ${reminder.id}: ${smsError.message}`)
+          }
         }
       }
     }
@@ -147,8 +165,11 @@ export async function GET(request: Request) {
         profiles!documents_user_id_fkey (
           email,
           full_name,
+          phone,
           email_reminders_enabled,
-          email_reminder_days_before
+          email_reminder_days_before,
+          sms_reminders_enabled,
+          sms_reminder_days_before
         )
       `)
       .eq('expiry_reminder_sent', false)
@@ -162,44 +183,59 @@ export async function GET(request: Request) {
     if (expiringDocs) {
       for (const doc of expiringDocs as unknown as ExpiringDocument[]) {
         const profile = doc.profiles
-        
-        if (!profile?.email_reminders_enabled) continue
+        if (!profile) continue
 
         const expiryDate = new Date(doc.expiry_date)
         const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-        
-        // Send reminder 30 days before expiry (or based on user preference)
-        const reminderDays = Math.max(profile.email_reminder_days_before, 30)
-        if (daysUntilExpiry > reminderDays) continue
 
-        try {
-          await resend.emails.send({
-            from: 'Lebensordner <erinnerung@lebensordner.org>',
-            to: profile.email,
-            subject: `Dokument läuft ab: ${doc.title}`,
-            html: generateDocumentExpiryEmail({
-              userName: profile.full_name || 'Nutzer',
-              documentTitle: doc.title,
-              category: doc.category,
-              expiryDate: expiryDate.toLocaleDateString('de-DE', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
+        let emailSent = false
+        let smsSent = false
+
+        // Send email reminder
+        if (profile.email_reminders_enabled && daysUntilExpiry <= profile.email_reminder_days_before) {
+          try {
+            await resend.emails.send({
+              from: 'Lebensordner <erinnerung@lebensordner.org>',
+              to: profile.email,
+              subject: `Dokument läuft ab: ${doc.title}`,
+              html: generateDocumentExpiryEmail({
+                userName: profile.full_name || 'Nutzer',
+                documentTitle: doc.title,
+                category: doc.category,
+                expiryDate: expiryDate.toLocaleDateString('de-DE', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                }),
+                daysUntilExpiry,
               }),
-              daysUntilExpiry,
-            }),
-          })
+            })
+            emailSent = true
+            results.emails_sent++
+          } catch (emailError: any) {
+            results.errors.push(`Email error for document ${doc.id}: ${emailError.message}`)
+          }
+        }
 
-          // Mark as sent
+        // Send SMS reminder
+        if (profile.sms_reminders_enabled && profile.phone && daysUntilExpiry <= profile.sms_reminder_days_before) {
+          try {
+            const smsMessage = `Lebensordner: "${doc.title}" läuft in ${daysUntilExpiry} Tag${daysUntilExpiry > 1 ? 'en' : ''} ab.`
+            await sendSMS(profile.phone, smsMessage)
+            smsSent = true
+            results.sms_sent++
+          } catch (smsError: any) {
+            results.errors.push(`SMS error for document ${doc.id}: ${smsError.message}`)
+          }
+        }
+
+        // Mark as sent if either email or SMS was sent
+        if (emailSent || smsSent) {
           await supabaseAdmin
             .from('documents')
             .update({ expiry_reminder_sent: true })
             .eq('id', doc.id)
-
-          results.document_expiry_sent++
-        } catch (emailError: any) {
-          results.errors.push(`Email send error for document ${doc.id}: ${emailError.message}`)
         }
       }
     }
@@ -356,7 +392,7 @@ function generateDocumentExpiryEmail(data: DocumentExpiryEmailData): string {
         💡 <strong>Tipp:</strong> Kümmern Sie sich rechtzeitig um die Erneuerung, um Verzögerungen zu vermeiden.
       </p>
 
-      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://lebensordner.org'}/dokumente" 
+      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://lebensordner.org'}/dokumente"
          style="display: inline-block; background-color: #5d6b5d; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 500;">
         Dokumente ansehen →
       </a>
@@ -377,4 +413,33 @@ function generateDocumentExpiryEmail(data: DocumentExpiryEmailData): string {
 </body>
 </html>
   `
+}
+
+// ========================================
+// SMS Helper Function
+// ========================================
+
+async function sendSMS(phone: string, message: string): Promise<void> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID
+  const authToken = process.env.TWILIO_AUTH_TOKEN
+  const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER
+
+  if (!accountSid || !authToken || !twilioPhoneNumber) {
+    throw new Error('Twilio not configured')
+  }
+
+  // Format phone number for Germany
+  let formattedPhone = phone.replace(/\s+/g, '').replace(/^0/, '+49')
+  if (!formattedPhone.startsWith('+')) {
+    formattedPhone = '+49' + formattedPhone
+  }
+
+  const twilio = await import('twilio')
+  const client = twilio.default(accountSid, authToken)
+
+  await client.messages.create({
+    body: message,
+    from: twilioPhoneNumber,
+    to: formattedPhone
+  })
 }
