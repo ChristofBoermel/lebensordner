@@ -510,137 +510,65 @@ export default function DocumentsPage() {
 
     return (
       <div className="space-y-6">
-        {/* Folder Grid */}
-        {categorySubcategories.length > 0 && (
-          <div>
-            <h3 className="text-sm font-medium text-warmgray-600 mb-3">Unterordner</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {categorySubcategories.map(subcategory => {
-                const docCount = getDocumentsForSubcategory(subcategory.id).length
-                return (
-                  <button
-                    key={subcategory.id}
-                    onClick={() => setCurrentFolder(subcategory)}
-                    className="p-4 rounded-lg border-2 border-warmgray-200 hover:border-sage-400 hover:bg-sage-50 transition-all text-left group"
-                  >
-                    <div className="flex items-center justify-center mb-3">
-                      <Folder className="w-12 h-12 text-sage-500 group-hover:text-sage-600 transition-colors" />
-                    </div>
-                    <p className="font-medium text-warmgray-800 text-center truncate">{subcategory.name}</p>
-                    <p className="text-xs text-warmgray-500 text-center mt-1">
-                      {docCount} Dokument{docCount !== 1 ? 'e' : ''}
-                    </p>
-                  </button>
-                )
-              })}
-              {/* Add new folder - inline input or button */}
-              {isCreatingFolderInGrid && newFolderCategory === category ? (
-                <div className="p-4 rounded-lg border-2 border-sage-400 bg-sage-50">
-                  <div className="flex items-center justify-center mb-3">
-                    <FolderPlus className="w-10 h-10 text-sage-500" />
-                  </div>
-                  <Input
-                    placeholder="Ordnername"
-                    value={newSubcategoryName}
-                    onChange={(e) => setNewSubcategoryName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        handleCreateFolderInGrid()
-                      } else if (e.key === 'Escape') {
-                        setIsCreatingFolderInGrid(false)
-                        setNewFolderCategory(null)
-                        setNewSubcategoryName('')
-                      }
-                    }}
-                    autoFocus
-                    className="text-center mb-2"
-                  />
-                  <div className="flex gap-1">
-                    <Button size="sm" className="flex-1" onClick={handleCreateFolderInGrid} disabled={!newSubcategoryName.trim()}>
-                      Erstellen
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setIsCreatingFolderInGrid(false)
-                        setNewFolderCategory(null)
-                        setNewSubcategoryName('')
-                      }}
-                    >
-                      <ChevronRight className="w-4 h-4 rotate-45" />
-                    </Button>
-                  </div>
-                </div>
-              ) : (
+        {/* Action bar */}
+        <div className="flex justify-end">
+          <Button onClick={() => openUploadDialog(category)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Dokument hochladen
+          </Button>
+        </div>
+
+        {/* Folder Grid - Always show to allow creating folders */}
+        <div>
+          <h3 className="text-sm font-medium text-warmgray-600 mb-3">Unterordner</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {categorySubcategories.map(subcategory => {
+              const docCount = getDocumentsForSubcategory(subcategory.id).length
+              return (
                 <button
-                  onClick={() => {
-                    setIsCreatingFolderInGrid(true)
-                    setNewFolderCategory(category)
-                    setNewSubcategoryName('')
-                  }}
-                  className="p-4 rounded-lg border-2 border-dashed border-warmgray-300 hover:border-sage-400 hover:bg-sage-50 transition-all text-center group"
+                  key={subcategory.id}
+                  onClick={() => setCurrentFolder(subcategory)}
+                  className="p-4 rounded-lg border-2 border-warmgray-200 hover:border-sage-400 hover:bg-sage-50 transition-all text-left group"
                 >
                   <div className="flex items-center justify-center mb-3">
-                    <FolderPlus className="w-12 h-12 text-warmgray-400 group-hover:text-sage-500 transition-colors" />
+                    <Folder className="w-12 h-12 text-sage-500 group-hover:text-sage-600 transition-colors" />
                   </div>
-                  <p className="font-medium text-warmgray-500 group-hover:text-sage-600">Neuer Ordner</p>
+                  <p className="font-medium text-warmgray-800 text-center truncate">{subcategory.name}</p>
+                  <p className="text-xs text-warmgray-500 text-center mt-1">
+                    {docCount} Dokument{docCount !== 1 ? 'e' : ''}
+                  </p>
                 </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Documents without folder */}
-        {uncategorizedDocs.length > 0 && (
-          <div>
-            <h3 className="text-sm font-medium text-warmgray-600 mb-3">
-              {categorySubcategories.length > 0 ? 'Dokumente ohne Ordner' : 'Dokumente'}
-            </h3>
-            <div className="space-y-2">
-              {uncategorizedDocs.map(renderDocumentItem)}
-            </div>
-          </div>
-        )}
-
-        {/* Empty state with option to create folder */}
-        {categorySubcategories.length === 0 && uncategorizedDocs.length === 0 && (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 rounded-full bg-warmgray-100 flex items-center justify-center mx-auto mb-4">
-              <Icon className="w-8 h-8 text-warmgray-400" />
-            </div>
-            <h3 className="text-lg font-medium text-warmgray-900 mb-2">
-              Noch keine Dokumente in {categoryInfo.name}
-            </h3>
-            <p className="text-warmgray-500 mb-4">
-              Erstellen Sie einen Ordner oder laden Sie direkt ein Dokument hoch
-            </p>
-
-            {/* Inline folder creation in empty state */}
+              )
+            })}
+            {/* Add new folder - inline input or button */}
             {isCreatingFolderInGrid && newFolderCategory === category ? (
-              <div className="max-w-xs mx-auto mb-4">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Ordnername eingeben"
-                    value={newSubcategoryName}
-                    onChange={(e) => setNewSubcategoryName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        handleCreateFolderInGrid()
-                      } else if (e.key === 'Escape') {
-                        setIsCreatingFolderInGrid(false)
-                        setNewFolderCategory(null)
-                        setNewSubcategoryName('')
-                      }
-                    }}
-                    autoFocus
-                  />
-                  <Button onClick={handleCreateFolderInGrid} disabled={!newSubcategoryName.trim()}>
-                    <Plus className="w-4 h-4" />
+              <div className="p-4 rounded-lg border-2 border-sage-400 bg-sage-50">
+                <div className="flex items-center justify-center mb-3">
+                  <FolderPlus className="w-10 h-10 text-sage-500" />
+                </div>
+                <Input
+                  placeholder="Ordnername"
+                  value={newSubcategoryName}
+                  onChange={(e) => setNewSubcategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleCreateFolderInGrid()
+                    } else if (e.key === 'Escape') {
+                      setIsCreatingFolderInGrid(false)
+                      setNewFolderCategory(null)
+                      setNewSubcategoryName('')
+                    }
+                  }}
+                  autoFocus
+                  className="text-center mb-2"
+                />
+                <div className="flex gap-1">
+                  <Button size="sm" className="flex-1" onClick={handleCreateFolderInGrid} disabled={!newSubcategoryName.trim()}>
+                    Erstellen
                   </Button>
                   <Button
+                    size="sm"
                     variant="ghost"
                     onClick={() => {
                       setIsCreatingFolderInGrid(false)
@@ -648,29 +576,45 @@ export default function DocumentsPage() {
                       setNewSubcategoryName('')
                     }}
                   >
-                    Abbrechen
+                    <ChevronRight className="w-4 h-4 rotate-45" />
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="flex justify-center gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsCreatingFolderInGrid(true)
-                    setNewFolderCategory(category)
-                    setNewSubcategoryName('')
-                  }}
-                >
-                  <FolderPlus className="mr-2 h-4 w-4" />
-                  Ordner erstellen
-                </Button>
-                <Button onClick={() => openUploadDialog(category)}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Dokument hochladen
-                </Button>
-              </div>
+              <button
+                onClick={() => {
+                  setIsCreatingFolderInGrid(true)
+                  setNewFolderCategory(category)
+                  setNewSubcategoryName('')
+                }}
+                className="p-4 rounded-lg border-2 border-dashed border-warmgray-300 hover:border-sage-400 hover:bg-sage-50 transition-all text-center group"
+              >
+                <div className="flex items-center justify-center mb-3">
+                  <FolderPlus className="w-12 h-12 text-warmgray-400 group-hover:text-sage-500 transition-colors" />
+                </div>
+                <p className="font-medium text-warmgray-500 group-hover:text-sage-600">Neuer Ordner</p>
+              </button>
             )}
+          </div>
+        </div>
+
+        {/* Documents without folder */}
+        {uncategorizedDocs.length > 0 && (
+          <div>
+            <h3 className="text-sm font-medium text-warmgray-600 mb-3">
+              Dokumente ohne Ordner
+            </h3>
+            <div className="space-y-2">
+              {uncategorizedDocs.map(renderDocumentItem)}
+            </div>
+          </div>
+        )}
+
+        {/* Empty state - only when no folders AND no documents */}
+        {categorySubcategories.length === 0 && uncategorizedDocs.length === 0 && (
+          <div className="text-center py-4 text-warmgray-500">
+            <p>Noch keine Dokumente in {categoryInfo.name}</p>
+            <p className="text-sm mt-1">Erstelle einen Ordner oben oder lade direkt ein Dokument hoch.</p>
           </div>
         )}
       </div>
