@@ -32,7 +32,9 @@ import {
   Key,
   Lock,
   Shield,
-  Smartphone
+  Smartphone,
+  RotateCcw,
+  Sparkles
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { TwoFactorSetup } from '@/components/auth/two-factor-setup'
@@ -164,6 +166,28 @@ export default function EinstellungenPage() {
     await supabase.auth.signOut()
     router.push('/')
     router.refresh()
+  }
+
+  const handleRestartOnboarding = async () => {
+    const confirmed = confirm(
+      'Möchten Sie die Einführung erneut durchlaufen? Sie werden zur Einrichtungsseite weitergeleitet.'
+    )
+    if (!confirmed) return
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Nicht angemeldet')
+
+      await supabase
+        .from('profiles')
+        .update({ onboarding_completed: false })
+        .eq('id', user.id)
+
+      router.push('/onboarding')
+    } catch (err) {
+      setError('Fehler beim Zurücksetzen. Bitte versuchen Sie es erneut.')
+      console.error('Restart onboarding error:', err)
+    }
   }
 
   const handleDeleteAccount = async () => {
@@ -469,6 +493,21 @@ export default function EinstellungenPage() {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between py-3">
             <div>
+              <p className="font-medium text-warmgray-900">Einführung wiederholen</p>
+              <p className="text-sm text-warmgray-500">
+                Die Ersteinrichtung erneut durchlaufen
+              </p>
+            </div>
+            <Button variant="outline" onClick={handleRestartOnboarding}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Wiederholen
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between py-3">
+            <div>
               <p className="font-medium text-warmgray-900">Abmelden</p>
               <p className="text-sm text-warmgray-500">
                 Von diesem Gerät abmelden
@@ -489,8 +528,8 @@ export default function EinstellungenPage() {
                 Ihr Konto und alle Daten unwiderruflich löschen
               </p>
             </div>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleDeleteAccount}
               className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
             >

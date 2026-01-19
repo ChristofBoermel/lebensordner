@@ -10,7 +10,7 @@ import {
   CreditCard, Check, Loader2, AlertTriangle, CheckCircle2, 
   Calendar, Shield, FileText, Users, HardDrive, Crown, Sparkles
 } from 'lucide-react'
-import { SUBSCRIPTION_TIERS, type SubscriptionTier, type TierConfig } from '@/lib/subscription-tiers'
+import { SUBSCRIPTION_TIERS, getActiveTiers, type SubscriptionTier, type TierConfig } from '@/lib/subscription-tiers'
 
 interface SubscriptionInfo {
   status: string | null
@@ -264,8 +264,8 @@ export default function AboPage() {
       </div>
 
       {/* Pricing Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {Object.values(SUBSCRIPTION_TIERS).map((tier) => {
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {getActiveTiers().map((tier) => {
           const isCurrent = tier.id === currentTier
           const savings = getSavings(tier)
           

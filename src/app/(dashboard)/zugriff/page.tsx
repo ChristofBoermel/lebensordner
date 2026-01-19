@@ -30,9 +30,12 @@ import {
   Info,
   CheckCircle2,
   XCircle,
-  Send
+  Send,
+  Crown
 } from 'lucide-react'
 import type { TrustedPerson } from '@/types/database'
+import { SUBSCRIPTION_TIERS, getTierFromSubscription, canPerformAction, type TierConfig } from '@/lib/subscription-tiers'
+import Link from 'next/link'
 
 const ACCESS_LEVELS = {
   immediate: {
@@ -58,13 +61,14 @@ const ACCESS_LEVELS = {
 export default function ZugriffPage() {
   const searchParams = useSearchParams()
   const shouldOpenAdd = searchParams.get('add') === 'true'
-  
+
   const [trustedPersons, setTrustedPersons] = useState<TrustedPerson[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isDialogOpen, setIsDialogOpen] = useState(shouldOpenAdd)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingPerson, setEditingPerson] = useState<TrustedPerson | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [userTier, setUserTier] = useState<TierConfig>(SUBSCRIPTION_TIERS.free)
 
   const [form, setForm] = useState({
     name: '',
@@ -78,10 +82,30 @@ export default function ZugriffPage() {
 
   const supabase = createClient()
 
+  // Fetch user tier
+  useEffect(() => {
+    async function fetchTier() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_status, stripe_price_id')
+        .eq('id', user.id)
+        .single()
+
+      if (profile) {
+        const tier = getTierFromSubscription(profile.subscription_status, profile.stripe_price_id)
+        setUserTier(tier)
+      }
+    }
+    fetchTier()
+  }, [supabase])
+
   const fetchTrustedPersons = useCallback(async () => {
     setIsLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
-    
+
     if (!user) return
 
     const { data, error } = await supabase
@@ -99,6 +123,13 @@ export default function ZugriffPage() {
   useEffect(() => {
     fetchTrustedPersons()
   }, [fetchTrustedPersons])
+
+  // Open dialog if URL param is set and user can add persons
+  useEffect(() => {
+    if (shouldOpenAdd && canPerformAction(userTier, 'addTrustedPerson', trustedPersons.length)) {
+      setIsDialogOpen(true)
+    }
+  }, [shouldOpenAdd, userTier, trustedPersons.length])
 
   const handleOpenDialog = (person?: TrustedPerson) => {
     if (person) {
@@ -157,9 +188,13 @@ export default function ZugriffPage() {
 
         if (error) throw error
       } else {
-        // Check limit (max 5 trusted persons)
-        if (trustedPersons.length >= 5) {
-          setError('Sie können maximal 5 Vertrauenspersonen hinzufügen.')
+        // Check limit based on tier
+        if (!canPerformAction(userTier, 'addTrustedPerson', trustedPersons.length)) {
+          if (userTier.limits.maxTrustedPersons === 0) {
+            setError('Vertrauenspersonen sind nur mit einem kostenpflichtigen Abo verfügbar.')
+          } else {
+            setError(`Sie können maximal ${userTier.limits.maxTrustedPersons} Vertrauenspersonen hinzufügen. Upgraden Sie für mehr.`)
+          }
           return
         }
 
@@ -243,6 +278,8 @@ export default function ZugriffPage() {
 
   const activePersons = trustedPersons.filter(p => p.is_active)
   const inactivePersons = trustedPersons.filter(p => !p.is_active)
+  const maxTrustedPersons = userTier.limits.maxTrustedPersons
+  const canAddMore = canPerformAction(userTier, 'addTrustedPerson', trustedPersons.length)
 
   if (isLoading) {
     return (
@@ -272,8 +309,8 @@ export default function ZugriffPage() {
             <div>
               <p className="font-medium text-warmgray-900 mb-1">So funktioniert der Zugriff</p>
               <p className="text-sm text-warmgray-600">
-                Vertrauenspersonen erhalten im Notfall Zugang zu Ihren hinterlegten Informationen. 
-                Sie können für jede Person festlegen, ob der Zugriff sofort, nach einer Wartezeit 
+                Vertrauenspersonen erhalten im Notfall Zugang zu Ihren hinterlegten Informationen.
+                Sie können für jede Person festlegen, ob der Zugriff sofort, nach einer Wartezeit
                 oder nur nach Ihrer Bestätigung möglich sein soll.
               </p>
             </div>
@@ -281,18 +318,42 @@ export default function ZugriffPage() {
         </CardContent>
       </Card>
 
+      {/* Upgrade prompt for free tier */}
+      {maxTrustedPersons === 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-4">
+              <Crown className="w-6 h-6 text-amber-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-amber-900 mb-1">Vertrauenspersonen hinzufügen</p>
+                <p className="text-sm text-amber-800 mb-3">
+                  Mit einem kostenpflichtigen Abo können Sie Vertrauenspersonen hinzufügen, die im Notfall auf Ihre Dokumente zugreifen dürfen.
+                </p>
+                <Link href="/abo">
+                  <Button size="sm" variant="outline" className="border-amber-300 hover:bg-amber-100">
+                    Jetzt upgraden
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Add Person Button */}
-      <div className="flex justify-between items-center">
-        <div>
-          <p className="text-warmgray-600">
-            {trustedPersons.length} von 5 Vertrauenspersonen
-          </p>
+      {maxTrustedPersons > 0 && (
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-warmgray-600">
+              {trustedPersons.length} von {maxTrustedPersons} Vertrauenspersonen
+            </p>
+          </div>
+          <Button onClick={() => handleOpenDialog()} disabled={!canAddMore}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Person hinzufügen
+          </Button>
         </div>
-        <Button onClick={() => handleOpenDialog()} disabled={trustedPersons.length >= 5}>
-          <UserPlus className="w-4 h-4 mr-2" />
-          Person hinzufügen
-        </Button>
-      </div>
+      )}
 
       {/* Trusted Persons List */}
       {trustedPersons.length > 0 ? (
@@ -325,7 +386,7 @@ export default function ZugriffPage() {
                             <div>
                               <h3 className="font-semibold text-warmgray-900">{person.name}</h3>
                               <p className="text-sm text-warmgray-600">{person.relationship}</p>
-                              
+
                               <div className="flex items-center gap-4 mt-2 text-sm text-warmgray-500">
                                 <span className="flex items-center gap-1">
                                   <Mail className="w-4 h-4" />
@@ -338,7 +399,7 @@ export default function ZugriffPage() {
                                   </span>
                                 )}
                               </div>
-                              
+
                               <div className={`inline-flex items-center gap-2 mt-3 px-3 py-1.5 rounded-lg border ${accessInfo.color}`}>
                                 <AccessIcon className="w-4 h-4" />
                                 <span className="text-sm font-medium">{accessInfo.name}</span>
@@ -346,7 +407,7 @@ export default function ZugriffPage() {
                                   <span className="text-xs">({person.access_delay_hours}h Wartezeit)</span>
                                 )}
                               </div>
-                              
+
                               {person.notes && (
                                 <p className="text-sm text-warmgray-500 mt-2 italic">
                                   {person.notes}
@@ -354,11 +415,11 @@ export default function ZugriffPage() {
                               )}
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center gap-2">
                             {(!person.invitation_status || person.invitation_status === 'pending') && (
-                              <Button 
-                                variant="outline" 
+                              <Button
+                                variant="outline"
                                 size="sm"
                                 onClick={() => handleSendInvite(person.id)}
                                 title="Einladung senden"
@@ -375,27 +436,27 @@ export default function ZugriffPage() {
                             )}
                             {person.invitation_status === 'accepted' && (
                               <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                                ✓ Akzeptiert
+                                Akzeptiert
                               </span>
                             )}
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="icon"
                               onClick={() => handleOpenDialog(person)}
                               title="Bearbeiten"
                             >
                               <Edit2 className="w-4 h-4" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="icon"
                               onClick={() => handleToggleActive(person)}
                               title="Deaktivieren"
                             >
                               <XCircle className="w-4 h-4 text-warmgray-400" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="icon"
                               onClick={() => handleDelete(person.id)}
                               title="Löschen"
@@ -439,18 +500,18 @@ export default function ZugriffPage() {
                             <p className="text-sm text-warmgray-500 mt-1">{person.email}</p>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             size="sm"
                             onClick={() => handleToggleActive(person)}
                           >
                             <CheckCircle2 className="w-4 h-4 mr-1" />
                             Aktivieren
                           </Button>
-                          <Button 
-                            variant="ghost" 
+                          <Button
+                            variant="ghost"
                             size="icon"
                             onClick={() => handleDelete(person.id)}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -466,7 +527,7 @@ export default function ZugriffPage() {
             </TabsContent>
           )}
         </Tabs>
-      ) : (
+      ) : maxTrustedPersons > 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <Users className="w-16 h-16 text-warmgray-300 mx-auto mb-4" />
@@ -474,7 +535,7 @@ export default function ZugriffPage() {
               Noch keine Vertrauenspersonen
             </h3>
             <p className="text-warmgray-600 mb-6 max-w-md mx-auto">
-              Fügen Sie Personen hinzu, die im Notfall auf Ihre hinterlegten 
+              Fügen Sie Personen hinzu, die im Notfall auf Ihre hinterlegten
               Informationen zugreifen dürfen.
             </p>
             <Button onClick={() => handleOpenDialog()}>
@@ -483,7 +544,7 @@ export default function ZugriffPage() {
             </Button>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* Add/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -493,7 +554,7 @@ export default function ZugriffPage() {
               {editingPerson ? 'Vertrauensperson bearbeiten' : 'Vertrauensperson hinzufügen'}
             </DialogTitle>
             <DialogDescription>
-              {editingPerson 
+              {editingPerson
                 ? 'Aktualisieren Sie die Daten dieser Vertrauensperson.'
                 : 'Fügen Sie eine Person hinzu, die im Notfall auf Ihre Daten zugreifen darf.'}
             </DialogDescription>

@@ -1,5 +1,9 @@
 // Subscription tier configuration
+// Note: 'family' tier is deprecated but kept for legacy subscribers
 export type SubscriptionTier = 'free' | 'basic' | 'premium' | 'family'
+
+// Active tiers shown in the UI (excludes deprecated family)
+export const ACTIVE_TIERS: SubscriptionTier[] = ['free', 'basic', 'premium']
 
 export interface TierConfig {
   id: SubscriptionTier
@@ -12,6 +16,8 @@ export interface TierConfig {
     maxDocuments: number
     maxStorageMB: number
     maxTrustedPersons: number
+    maxSubcategories: number // -1 = unlimited
+    maxCustomCategories: number // -1 = unlimited
     emailReminders: boolean
     documentExpiry: boolean
     twoFactorAuth: boolean
@@ -20,6 +26,7 @@ export interface TierConfig {
   }
   highlighted?: boolean
   badge?: string
+  deprecated?: boolean
 }
 
 // Helper to get price IDs at runtime (for server-side use)
@@ -33,6 +40,7 @@ export function getStripePriceIds() {
       monthly: process.env.STRIPE_PRICE_PREMIUM_MONTHLY || process.env.STRIPE_PRICE_ID || '',
       yearly: process.env.STRIPE_PRICE_PREMIUM_YEARLY || '',
     },
+    // Legacy family prices - kept for existing subscribers
     family: {
       monthly: process.env.STRIPE_PRICE_FAMILY_MONTHLY || '',
       yearly: process.env.STRIPE_PRICE_FAMILY_YEARLY || '',
@@ -50,13 +58,15 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     features: [
       'Bis zu 10 Dokumente',
       '100 MB Speicherplatz',
-      '1 Vertrauensperson',
+      '5 Unterordner',
       'Basis-Dashboard',
     ],
     limits: {
       maxDocuments: 10,
       maxStorageMB: 100,
-      maxTrustedPersons: 1,
+      maxTrustedPersons: 0, // Changed from 1 to 0
+      maxSubcategories: 5,
+      maxCustomCategories: 0,
       emailReminders: false,
       documentExpiry: false,
       twoFactorAuth: false,
@@ -74,6 +84,8 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       'Bis zu 50 Dokumente',
       '500 MB Speicherplatz',
       '3 Vertrauenspersonen',
+      '15 Unterordner',
+      '5 Eigene Kategorien',
       'E-Mail-Erinnerungen',
       'Dokument-Ablaufdatum',
     ],
@@ -81,6 +93,8 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       maxDocuments: 50,
       maxStorageMB: 500,
       maxTrustedPersons: 3,
+      maxSubcategories: 15,
+      maxCustomCategories: 5,
       emailReminders: true,
       documentExpiry: true,
       twoFactorAuth: false,
@@ -92,12 +106,14 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     id: 'premium',
     name: 'Premium',
     description: 'Voller Schutz',
-    priceMonthly: 9.90,
-    priceYearly: 99,
+    priceMonthly: 11.90, // Changed from 9.90 to 11.90
+    priceYearly: 119, // Changed from 99 to 119
     features: [
       'Unbegrenzte Dokumente',
-      '2 GB Speicherplatz',
+      '10 GB Speicherplatz', // Changed from 2 GB to 10 GB
       '10 Vertrauenspersonen',
+      'Unbegrenzte Unterordner',
+      'Unbegrenzte Kategorien',
       'E-Mail-Erinnerungen',
       'Dokument-Ablaufdatum',
       'Zwei-Faktor-Auth',
@@ -105,8 +121,10 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     ],
     limits: {
       maxDocuments: -1, // unlimited
-      maxStorageMB: 2048,
+      maxStorageMB: 10240, // Changed from 2048 (2GB) to 10240 (10GB)
       maxTrustedPersons: 10,
+      maxSubcategories: -1, // unlimited
+      maxCustomCategories: -1, // unlimited
       emailReminders: true,
       documentExpiry: true,
       twoFactorAuth: true,
@@ -116,16 +134,19 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     highlighted: true,
     badge: 'Beliebt',
   },
+  // DEPRECATED: Family tier kept for legacy subscribers only
+  // Do not show in UI for new subscriptions
   family: {
     id: 'family',
-    name: 'Familie',
-    description: 'Für die ganze Familie',
+    name: 'Familie (Legacy)',
+    description: 'Für bestehende Familien-Abonnenten',
     priceMonthly: 14.90,
     priceYearly: 149,
     features: [
       'Alles aus Premium',
       '5 GB Speicherplatz',
       'Bis zu 5 Familienmitglieder',
+      'Unbegrenzte Unterordner',
       'Gemeinsame Dokumente',
       'Familien-Dashboard',
     ],
@@ -133,12 +154,15 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       maxDocuments: -1,
       maxStorageMB: 5120,
       maxTrustedPersons: 20,
+      maxSubcategories: -1,
+      maxCustomCategories: -1,
       emailReminders: true,
       documentExpiry: true,
       twoFactorAuth: true,
       prioritySupport: true,
       familyMembers: 5,
     },
+    deprecated: true, // Mark as deprecated
   },
 }
 
@@ -153,13 +177,14 @@ export function getTierFromSubscription(
 
   // Check price ID against known price IDs
   const priceIds = getStripePriceIds()
-  
+
   if (priceId === priceIds.basic.monthly || priceId === priceIds.basic.yearly) {
     return SUBSCRIPTION_TIERS.basic
   }
   if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) {
     return SUBSCRIPTION_TIERS.premium
   }
+  // Legacy family subscribers still get family tier
   if (priceId === priceIds.family.monthly || priceId === priceIds.family.yearly) {
     return SUBSCRIPTION_TIERS.family
   }
@@ -175,7 +200,7 @@ export function getTierFromSubscription(
 // Check if user can perform action based on tier limits
 export function canPerformAction(
   tier: TierConfig,
-  action: 'uploadDocument' | 'addTrustedPerson' | 'use2FA' | 'useEmailReminders',
+  action: 'uploadDocument' | 'addTrustedPerson' | 'use2FA' | 'useEmailReminders' | 'addSubcategory' | 'addCustomCategory',
   currentCount?: number
 ): boolean {
   switch (action) {
@@ -184,6 +209,12 @@ export function canPerformAction(
       return (currentCount || 0) < tier.limits.maxDocuments
     case 'addTrustedPerson':
       return (currentCount || 0) < tier.limits.maxTrustedPersons
+    case 'addSubcategory':
+      if (tier.limits.maxSubcategories === -1) return true
+      return (currentCount || 0) < tier.limits.maxSubcategories
+    case 'addCustomCategory':
+      if (tier.limits.maxCustomCategories === -1) return true
+      return (currentCount || 0) < tier.limits.maxCustomCategories
     case 'use2FA':
       return tier.limits.twoFactorAuth
     case 'useEmailReminders':
@@ -201,13 +232,18 @@ export function canUploadFile(
 ): { allowed: boolean; reason?: string } {
   const maxStorage = tier.limits.maxStorageMB
   const newTotal = currentStorageMB + fileSizeMB
-  
+
   if (newTotal > maxStorage) {
     return {
       allowed: false,
       reason: `Speicherlimit erreicht. Sie haben ${currentStorageMB.toFixed(1)} MB von ${maxStorage} MB verwendet. Upgrade für mehr Speicherplatz.`
     }
   }
-  
+
   return { allowed: true }
+}
+
+// Get active tiers for display (excludes deprecated)
+export function getActiveTiers(): TierConfig[] {
+  return ACTIVE_TIERS.map(id => SUBSCRIPTION_TIERS[id])
 }

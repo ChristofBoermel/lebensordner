@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 // Document categories as defined in the concept
-export type DocumentCategory = 
+export type DocumentCategory =
   | 'identitaet'      // Identität
   | 'finanzen'        // Finanzen
   | 'versicherungen'  // Versicherungen
@@ -15,6 +15,10 @@ export type DocumentCategory =
   | 'gesundheit'      // Gesundheit
   | 'vertraege'       // Verträge
   | 'rente'           // Rente & Pension
+  | 'familie'         // Familie
+  | 'arbeit'          // Arbeit
+  | 'religion'        // Religion
+  | 'sonstige'        // Sonstige
 
 export const DOCUMENT_CATEGORIES: Record<DocumentCategory, {
   name: string
@@ -64,6 +68,40 @@ export const DOCUMENT_CATEGORIES: Record<DocumentCategory, {
     examples: ['Rentenbescheid', 'Betriebsrente', 'Riester-Verträge', 'Private Altersvorsorge'],
     icon: 'landmark',
   },
+  familie: {
+    name: 'Familie',
+    description: 'Familiendokumente und Urkunden',
+    examples: ['Geburtsurkunden', 'Heiratsurkunde', 'Scheidungsurteil', 'Sorgerechtsdokumente', 'Stammbuch'],
+    icon: 'users',
+  },
+  arbeit: {
+    name: 'Arbeit',
+    description: 'Berufliche Unterlagen und Zeugnisse',
+    examples: ['Arbeitsvertrag', 'Arbeitszeugnisse', 'Gehaltsabrechnungen', 'Weiterbildungen', 'Kündigungen'],
+    icon: 'briefcase',
+  },
+  religion: {
+    name: 'Religion',
+    description: 'Dokumente zur Religionszugehörigkeit',
+    examples: ['Taufurkunde', 'Konfirmationsurkunde', 'Kirchenaustrittbescheinigung', 'Mitgliedsbescheinigung'],
+    icon: 'church',
+  },
+  sonstige: {
+    name: 'Sonstige',
+    description: 'Weitere Dokumente ohne spezielle Kategorie',
+    examples: ['Verschiedene Dokumente', 'Temporäre Ablage'],
+    icon: 'folder',
+  },
+}
+
+// Custom category interface for user-created categories
+export interface CustomCategory {
+  id: string
+  created_at: string
+  user_id: string
+  name: string
+  description: string | null
+  icon: string
 }
 
 export interface Database {
@@ -146,6 +184,7 @@ export interface Database {
           file_type: string
           expiry_date: string | null
           reminder_date: string | null
+          subcategory_id: string | null
         }
         Insert: {
           id?: string
@@ -161,6 +200,7 @@ export interface Database {
           file_type: string
           expiry_date?: string | null
           reminder_date?: string | null
+          subcategory_id?: string | null
         }
         Update: {
           id?: string
@@ -176,6 +216,33 @@ export interface Database {
           file_type?: string
           expiry_date?: string | null
           reminder_date?: string | null
+          subcategory_id?: string | null
+        }
+      }
+      subcategories: {
+        Row: {
+          id: string
+          created_at: string
+          user_id: string
+          parent_category: string
+          name: string
+          icon: string
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          user_id: string
+          parent_category: string
+          name: string
+          icon?: string
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          user_id?: string
+          parent_category?: string
+          name?: string
+          icon?: string
         }
       }
       trusted_persons: {
@@ -286,6 +353,19 @@ export interface Database {
 }
 
 export type Profile = Database['public']['Tables']['profiles']['Row']
-export type Document = Database['public']['Tables']['documents']['Row']
+export type Document = Database['public']['Tables']['documents']['Row'] & {
+  subcategory_id?: string | null
+  subcategory?: Subcategory | null
+}
 export type TrustedPerson = Database['public']['Tables']['trusted_persons']['Row']
 export type Reminder = Database['public']['Tables']['reminders']['Row']
+
+// Subcategory for folder structure
+export interface Subcategory {
+  id: string
+  created_at: string
+  user_id: string
+  parent_category: DocumentCategory
+  name: string
+  icon: string
+}

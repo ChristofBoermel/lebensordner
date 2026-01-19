@@ -11,8 +11,10 @@ import { Progress } from '@/components/ui/progress'
 import {
   User, Phone, MapPin, Calendar, Heart, Users, FileText,
   ArrowRight, ArrowLeft, Check, Loader2, Sparkles, Shield,
-  Upload, UserPlus, HeartPulse
+  Upload, UserPlus, HeartPulse, Wallet, Home, Landmark,
+  Briefcase, Church, FolderOpen
 } from 'lucide-react'
+import { DOCUMENT_CATEGORIES, type DocumentCategory } from '@/types/database'
 
 type Step = 'welcome' | 'profile' | 'emergency' | 'trusted' | 'documents' | 'complete'
 
@@ -408,13 +410,14 @@ export default function OnboardingPage() {
                   />
                 </div>
 
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setSkipSteps({ ...skipSteps, emergency: true })}
-                  className="text-sm text-warmgray-500 hover:text-warmgray-700 underline"
+                  className="w-full border-2 border-warmgray-800 text-warmgray-800 font-semibold hover:bg-warmgray-100"
                 >
                   Später hinzufügen
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="text-center py-8 max-w-md mx-auto">
@@ -503,13 +506,14 @@ export default function OnboardingPage() {
                   </p>
                 </div>
 
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setSkipSteps({ ...skipSteps, trusted: true })}
-                  className="text-sm text-warmgray-500 hover:text-warmgray-700 underline"
+                  className="w-full border-2 border-warmgray-800 text-warmgray-800 font-semibold hover:bg-warmgray-100"
                 >
                   Später hinzufügen
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="text-center py-8 max-w-md mx-auto">
@@ -544,6 +548,21 @@ export default function OnboardingPage() {
         )
 
       case 'documents':
+        const categoryIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+          user: User,
+          wallet: Wallet,
+          shield: Shield,
+          home: Home,
+          'heart-pulse': HeartPulse,
+          'file-text': FileText,
+          landmark: Landmark,
+          users: Users,
+          briefcase: Briefcase,
+          church: Church,
+          folder: FolderOpen,
+        }
+        const highlightedCategories: DocumentCategory[] = ['identitaet', 'versicherungen', 'finanzen', 'gesundheit', 'vertraege', 'rente']
+
         return (
           <div className="space-y-6">
             <div className="text-center">
@@ -551,29 +570,36 @@ export default function OnboardingPage() {
                 <Upload className="w-8 h-8 text-sage-600" />
               </div>
               <h2 className="text-2xl font-serif font-semibold text-warmgray-900 mb-2">
-                Ihr erstes Dokument
+                Ihre Dokumente organisieren
               </h2>
               <p className="text-warmgray-600">
-                Sie können jetzt Ihr erstes Dokument hochladen oder diesen Schritt überspringen.
+                Nach der Einrichtung können Sie Dokumente in diese Kategorien sortieren:
               </p>
             </div>
 
-            <div className="max-w-md mx-auto">
-              <div className="border-2 border-dashed border-warmgray-400 rounded-lg p-8 text-center bg-cream-50">
-                <FileText className="w-12 h-12 text-sage-500 mx-auto mb-4" />
-                <p className="font-medium text-warmgray-900 mb-2">Dokumente hochladen</p>
-                <p className="text-sm text-warmgray-600 mb-4">
-                  Nach Abschluss der Einrichtung können Sie unter "Dokumente" alle wichtigen Unterlagen hochladen.
-                </p>
-                <div className="flex items-center justify-center gap-2 text-sm text-warmgray-500">
-                  <Check className="w-4 h-4 text-sage-500" />
-                  <span>Personalausweis</span>
-                  <Check className="w-4 h-4 text-sage-500" />
-                  <span>Versicherungen</span>
-                  <Check className="w-4 h-4 text-sage-500" />
-                  <span>Verträge</span>
-                </div>
+            <div className="max-w-lg mx-auto">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {highlightedCategories.map((catKey) => {
+                  const cat = DOCUMENT_CATEGORIES[catKey]
+                  const IconComponent = categoryIcons[cat.icon] || FileText
+                  return (
+                    <div
+                      key={catKey}
+                      className="p-4 rounded-lg bg-cream-50 border border-cream-200 text-center"
+                    >
+                      <IconComponent className="w-8 h-8 text-sage-600 mx-auto mb-2" />
+                      <p className="font-medium text-warmgray-900 text-sm">{cat.name}</p>
+                      <p className="text-xs text-warmgray-500 mt-1 truncate">
+                        {cat.examples[0]}
+                      </p>
+                    </div>
+                  )
+                })}
               </div>
+
+              <p className="text-center text-sm text-warmgray-500 mt-4">
+                + weitere Kategorien wie Familie, Arbeit, Religion und Sonstige
+              </p>
             </div>
 
             <div className="flex justify-between max-w-md mx-auto pt-4">
