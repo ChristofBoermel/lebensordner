@@ -29,7 +29,8 @@ import {
   FileDown,
   CreditCard,
   Shield,
-  Search
+  Search,
+  MessageSquare
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { GlobalSearch } from '@/components/search/global-search'
@@ -50,6 +51,7 @@ const navigation = [
   { name: 'Erinnerungen', href: '/erinnerungen', icon: Bell },
   { name: 'Export', href: '/export', icon: FileDown },
   { name: 'Abonnement', href: '/abo', icon: CreditCard },
+  { name: 'Feedback', href: '/feedback', icon: MessageSquare },
 ]
 
 const adminNavigation = [
