@@ -48,11 +48,36 @@ interface ExpiringDocument {
 }
 
 export async function GET(request: Request) {
-  // Verify cron secret to prevent unauthorized access
+  // Verify authorization - allow cron secret OR authenticated user
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  let isAuthorized = false
+
+  // Check cron secret
+  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+    isAuthorized = true
+  }
+
+  // If no cron secret configured, allow the request (for development)
+  if (!cronSecret) {
+    isAuthorized = true
+  }
+
+  // Also allow authenticated Supabase users (for manual testing)
+  if (!isAuthorized && authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '')
+    try {
+      const { data: { user } } = await supabaseAdmin.auth.getUser(token)
+      if (user) {
+        isAuthorized = true
+      }
+    } catch (e) {
+      // Token invalid, continue
+    }
+  }
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
