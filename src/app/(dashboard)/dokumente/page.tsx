@@ -44,7 +44,10 @@ import {
   Plus,
   Users,
   Briefcase,
-  Church
+  Church,
+  MoveRight,
+  Check,
+  X
 } from 'lucide-react'
 import { DOCUMENT_CATEGORIES, type DocumentCategory, type Document, type Subcategory } from '@/types/database'
 import { formatFileSize, formatDate } from '@/lib/utils'
@@ -92,6 +95,14 @@ export default function DocumentsPage() {
   const [newSubcategoryName, setNewSubcategoryName] = useState('')
   const [isCreatingFolderInGrid, setIsCreatingFolderInGrid] = useState(false)
   const [newFolderCategory, setNewFolderCategory] = useState<DocumentCategory | null>(null)
+
+  // Selection & Move state
+  const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
+  const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false)
+  const [moveTargetFolder, setMoveTargetFolder] = useState<string | null>(null)
+  const [isMoving, setIsMoving] = useState(false)
+  const [isCreatingFolderInMove, setIsCreatingFolderInMove] = useState(false)
+  const [newFolderNameInMove, setNewFolderNameInMove] = useState('')
 
   // Upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -387,6 +398,112 @@ export default function DocumentsPage() {
     }
   }
 
+  // Selection handlers
+  const toggleDocumentSelection = (docId: string) => {
+    setSelectedDocuments(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(docId)) {
+        newSet.delete(docId)
+      } else {
+        newSet.add(docId)
+      }
+      return newSet
+    })
+  }
+
+  const selectAllInCategory = (category: DocumentCategory) => {
+    const categoryDocs = documents.filter(d => d.category === category)
+    setSelectedDocuments(new Set(categoryDocs.map(d => d.id)))
+  }
+
+  const clearSelection = () => {
+    setSelectedDocuments(new Set())
+  }
+
+  // Move handlers
+  const openMoveDialog = (docIds?: string[]) => {
+    if (docIds) {
+      setSelectedDocuments(new Set(docIds))
+    }
+    setMoveTargetFolder(null)
+    setIsCreatingFolderInMove(false)
+    setNewFolderNameInMove('')
+    setIsMoveDialogOpen(true)
+  }
+
+  const handleMoveDocuments = async () => {
+    if (selectedDocuments.size === 0) return
+
+    setIsMoving(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // If creating new folder first
+      let targetFolderId = moveTargetFolder
+      if (isCreatingFolderInMove && newFolderNameInMove.trim()) {
+        // Get category from first selected document
+        const firstDocId = Array.from(selectedDocuments)[0]
+        const firstDoc = documents.find(d => d.id === firstDocId)
+        if (!firstDoc) return
+
+        const { data: newFolder, error: folderError } = await supabase
+          .from('subcategories')
+          .insert({
+            user_id: user.id,
+            parent_category: firstDoc.category,
+            name: newFolderNameInMove.trim(),
+            icon: 'folder'
+          })
+          .select()
+          .single()
+
+        if (folderError) {
+          alert('Fehler beim Erstellen des Ordners: ' + folderError.message)
+          setIsMoving(false)
+          return
+        }
+
+        targetFolderId = newFolder.id
+        setSubcategories(prev => [...prev, newFolder as Subcategory])
+      }
+
+      // Move all selected documents
+      const docIds = Array.from(selectedDocuments)
+      const { error } = await supabase
+        .from('documents')
+        .update({ subcategory_id: targetFolderId })
+        .in('id', docIds)
+
+      if (error) {
+        alert('Fehler beim Verschieben: ' + error.message)
+      } else {
+        // Update local state
+        setDocuments(prev => prev.map(doc =>
+          selectedDocuments.has(doc.id)
+            ? { ...doc, subcategory_id: targetFolderId }
+            : doc
+        ))
+        setIsMoveDialogOpen(false)
+        clearSelection()
+      }
+    } catch (error) {
+      console.error('Move error:', error)
+      alert('Fehler beim Verschieben der Dokumente')
+    } finally {
+      setIsMoving(false)
+    }
+  }
+
+  // Get available folders for move (same category as selected docs)
+  const getAvailableFoldersForMove = () => {
+    if (selectedDocuments.size === 0) return []
+    const firstDocId = Array.from(selectedDocuments)[0]
+    const firstDoc = documents.find(d => d.id === firstDocId)
+    if (!firstDoc) return []
+    return subcategories.filter(s => s.parent_category === firstDoc.category)
+  }
+
   const openUploadDialog = (category: DocumentCategory) => {
     setUploadCategory(category)
     setUploadSubcategory(null)
@@ -443,9 +560,22 @@ export default function DocumentsPage() {
     const subcategory = doc.subcategory_id
       ? subcategories.find(s => s.id === doc.subcategory_id)
       : null
+    const isSelected = selectedDocuments.has(doc.id)
 
     return (
-      <div key={doc.id} className="document-item group">
+      <div key={doc.id} className={`document-item group ${isSelected ? 'bg-sage-50 border-sage-300' : ''}`}>
+        {/* Checkbox */}
+        <button
+          onClick={() => toggleDocumentSelection(doc.id)}
+          className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+            isSelected
+              ? 'bg-sage-500 border-sage-500 text-white'
+              : 'border-warmgray-300 hover:border-sage-400'
+          }`}
+        >
+          {isSelected && <Check className="w-4 h-4" />}
+        </button>
+
         <div className="flex items-center gap-4 flex-1 min-w-0">
           <div className="w-12 h-12 rounded-lg bg-sage-50 flex items-center justify-center flex-shrink-0">
             <Icon className="w-6 h-6 text-sage-600" />
@@ -471,6 +601,14 @@ export default function DocumentsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => openMoveDialog([doc.id])}
+            title="Verschieben"
+          >
+            <MoveRight className="w-5 h-5" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -1068,6 +1206,145 @@ export default function DocumentsPage() {
         onClose={() => setPreviewDocument(null)}
         document={previewDocument}
       />
+
+      {/* Move Dialog */}
+      <Dialog open={isMoveDialogOpen} onOpenChange={setIsMoveDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedDocuments.size === 1 ? 'Dokument verschieben' : `${selectedDocuments.size} Dokumente verschieben`}
+            </DialogTitle>
+            <DialogDescription>
+              Wählen Sie einen Zielordner oder erstellen Sie einen neuen.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Existing folders */}
+            <div className="space-y-2">
+              <Label>Zielordner</Label>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {/* Remove from folder option */}
+                <button
+                  onClick={() => {
+                    setMoveTargetFolder(null)
+                    setIsCreatingFolderInMove(false)
+                  }}
+                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${
+                    moveTargetFolder === null && !isCreatingFolderInMove
+                      ? 'border-sage-500 bg-sage-50'
+                      : 'border-warmgray-200 hover:border-warmgray-400'
+                  }`}
+                >
+                  <X className="w-5 h-5 text-warmgray-500" />
+                  <span className="text-sm">Kein Ordner (aus Ordner entfernen)</span>
+                </button>
+
+                {/* Existing folders for this category */}
+                {getAvailableFoldersForMove().map(folder => (
+                  <button
+                    key={folder.id}
+                    onClick={() => {
+                      setMoveTargetFolder(folder.id)
+                      setIsCreatingFolderInMove(false)
+                    }}
+                    className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${
+                      moveTargetFolder === folder.id
+                        ? 'border-sage-500 bg-sage-50'
+                        : 'border-warmgray-200 hover:border-warmgray-400'
+                    }`}
+                  >
+                    <Folder className="w-5 h-5 text-sage-500" />
+                    <span className="text-sm font-medium">{folder.name}</span>
+                  </button>
+                ))}
+
+                {/* Create new folder option */}
+                <button
+                  onClick={() => {
+                    setIsCreatingFolderInMove(true)
+                    setMoveTargetFolder(null)
+                  }}
+                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${
+                    isCreatingFolderInMove
+                      ? 'border-sage-500 bg-sage-50'
+                      : 'border-dashed border-warmgray-300 hover:border-sage-400'
+                  }`}
+                >
+                  <FolderPlus className="w-5 h-5 text-warmgray-400" />
+                  <span className="text-sm">Neuen Ordner erstellen...</span>
+                </button>
+              </div>
+            </div>
+
+            {/* New folder name input */}
+            {isCreatingFolderInMove && (
+              <div className="space-y-2">
+                <Label>Name des neuen Ordners</Label>
+                <Input
+                  placeholder="Ordnername eingeben"
+                  value={newFolderNameInMove}
+                  onChange={(e) => setNewFolderNameInMove(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsMoveDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button
+              onClick={handleMoveDocuments}
+              disabled={isMoving || (isCreatingFolderInMove && !newFolderNameInMove.trim())}
+            >
+              {isMoving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Verschieben...
+                </>
+              ) : (
+                <>
+                  <MoveRight className="mr-2 h-4 w-4" />
+                  Verschieben
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Action Bar - Fixed at bottom when documents selected */}
+      {selectedDocuments.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-warmgray-900 text-white rounded-lg shadow-xl px-6 py-4 flex items-center gap-6 z-50">
+          <div className="flex items-center gap-2">
+            <Check className="w-5 h-5 text-sage-400" />
+            <span className="font-medium">{selectedDocuments.size} ausgewählt</span>
+          </div>
+          <div className="h-6 w-px bg-warmgray-700" />
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-white hover:bg-warmgray-800"
+              onClick={() => openMoveDialog()}
+            >
+              <MoveRight className="mr-2 h-4 w-4" />
+              Verschieben
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-white hover:bg-warmgray-800"
+              onClick={clearSelection}
+            >
+              <X className="mr-2 h-4 w-4" />
+              Auswahl aufheben
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
