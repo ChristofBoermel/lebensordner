@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,8 @@ import {
 } from '@/components/ui/dialog'
 import {
   HeartPulse, Phone, User, Pill, AlertTriangle, Plus,
-  Edit2, Trash2, Loader2, CheckCircle2, Info, Star
+  Edit2, Trash2, Loader2, CheckCircle2, Info, Star,
+  Heart, FileText, Flower2, Scale
 } from 'lucide-react'
 
 interface EmergencyContact {
@@ -39,6 +41,41 @@ interface MedicalInfo {
   doctor_phone: string
   insurance_number: string
   additional_notes: string
+  organ_donor: boolean | null
+  organ_donor_card_location: string
+  organ_donor_notes: string
+}
+
+interface AdvanceDirectives {
+  id?: string
+  has_patient_decree: boolean
+  patient_decree_location: string
+  patient_decree_date: string
+  has_power_of_attorney: boolean
+  power_of_attorney_location: string
+  power_of_attorney_holder: string
+  power_of_attorney_date: string
+  has_care_directive: boolean
+  care_directive_location: string
+  care_directive_date: string
+  has_bank_power_of_attorney: boolean
+  bank_power_of_attorney_holder: string
+  bank_power_of_attorney_banks: string
+  notes: string
+}
+
+interface FuneralWishes {
+  id?: string
+  burial_type: string
+  burial_location: string
+  ceremony_type: string
+  ceremony_wishes: string
+  music_wishes: string
+  flowers_wishes: string
+  additional_wishes: string
+  has_funeral_insurance: boolean
+  funeral_insurance_provider: string
+  funeral_insurance_number: string
 }
 
 const defaultMedicalInfo: MedicalInfo = {
@@ -50,15 +87,71 @@ const defaultMedicalInfo: MedicalInfo = {
   doctor_phone: '',
   insurance_number: '',
   additional_notes: '',
+  organ_donor: null,
+  organ_donor_card_location: '',
+  organ_donor_notes: '',
 }
+
+const defaultAdvanceDirectives: AdvanceDirectives = {
+  has_patient_decree: false,
+  patient_decree_location: '',
+  patient_decree_date: '',
+  has_power_of_attorney: false,
+  power_of_attorney_location: '',
+  power_of_attorney_holder: '',
+  power_of_attorney_date: '',
+  has_care_directive: false,
+  care_directive_location: '',
+  care_directive_date: '',
+  has_bank_power_of_attorney: false,
+  bank_power_of_attorney_holder: '',
+  bank_power_of_attorney_banks: '',
+  notes: '',
+}
+
+const defaultFuneralWishes: FuneralWishes = {
+  burial_type: '',
+  burial_location: '',
+  ceremony_type: '',
+  ceremony_wishes: '',
+  music_wishes: '',
+  flowers_wishes: '',
+  additional_wishes: '',
+  has_funeral_insurance: false,
+  funeral_insurance_provider: '',
+  funeral_insurance_number: '',
+}
+
+const BURIAL_TYPES = [
+  { value: '', label: 'Keine Angabe' },
+  { value: 'erdbestattung', label: 'Erdbestattung' },
+  { value: 'feuerbestattung', label: 'Feuerbestattung / Urne' },
+  { value: 'seebestattung', label: 'Seebestattung' },
+  { value: 'naturbestattung', label: 'Naturbestattung (Friedwald)' },
+  { value: 'keine_praeferenz', label: 'Familie soll entscheiden' },
+]
+
+const CEREMONY_TYPES = [
+  { value: '', label: 'Keine Angabe' },
+  { value: 'kirchlich', label: 'Kirchliche Trauerfeier' },
+  { value: 'weltlich', label: 'Weltliche Trauerfeier' },
+  { value: 'keine', label: 'Keine Trauerfeier' },
+  { value: 'keine_praeferenz', label: 'Familie soll entscheiden' },
+]
 
 export default function NotfallPage() {
   const [isLoading, setIsLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('notfall')
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([])
   const [medicalInfo, setMedicalInfo] = useState<MedicalInfo>(defaultMedicalInfo)
+  const [advanceDirectives, setAdvanceDirectives] = useState<AdvanceDirectives>(defaultAdvanceDirectives)
+  const [funeralWishes, setFuneralWishes] = useState<FuneralWishes>(defaultFuneralWishes)
+
   const [isContactDialogOpen, setIsContactDialogOpen] = useState(false)
   const [editingContact, setEditingContact] = useState<EmergencyContact | null>(null)
   const [isMedicalDialogOpen, setIsMedicalDialogOpen] = useState(false)
+  const [isDirectivesDialogOpen, setIsDirectivesDialogOpen] = useState(false)
+  const [isFuneralDialogOpen, setIsFuneralDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -66,6 +159,8 @@ export default function NotfallPage() {
     name: '', phone: '', relationship: '', is_primary: false, notes: '',
   })
   const [medicalForm, setMedicalForm] = useState<MedicalInfo>(defaultMedicalInfo)
+  const [directivesForm, setDirectivesForm] = useState<AdvanceDirectives>(defaultAdvanceDirectives)
+  const [funeralForm, setFuneralForm] = useState<FuneralWishes>(defaultFuneralWishes)
 
   const supabase = createClient()
 
@@ -81,19 +176,36 @@ export default function NotfallPage() {
       .order('is_primary', { ascending: false }) as { data: EmergencyContact[] | null }
     if (contacts) setEmergencyContacts(contacts)
 
-    // Use maybeSingle() to handle case where no medical info exists yet
-    const { data: medical, error: medicalError } = await supabase
+    const { data: medical } = await supabase
       .from('medical_info')
       .select('*')
       .eq('user_id', user.id)
       .maybeSingle()
-    
-    if (medicalError) {
-      console.error('Error fetching medical info:', medicalError)
-    } else if (medical) {
-      setMedicalInfo(medical as MedicalInfo)
-      setMedicalForm(medical as MedicalInfo)
+    if (medical) {
+      setMedicalInfo({ ...defaultMedicalInfo, ...medical })
+      setMedicalForm({ ...defaultMedicalInfo, ...medical })
     }
+
+    const { data: directives } = await supabase
+      .from('advance_directives')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (directives) {
+      setAdvanceDirectives({ ...defaultAdvanceDirectives, ...directives })
+      setDirectivesForm({ ...defaultAdvanceDirectives, ...directives })
+    }
+
+    const { data: funeral } = await supabase
+      .from('funeral_wishes')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (funeral) {
+      setFuneralWishes({ ...defaultFuneralWishes, ...funeral })
+      setFuneralForm({ ...defaultFuneralWishes, ...funeral })
+    }
+
     setIsLoading(false)
   }, [supabase])
 
@@ -178,6 +290,9 @@ export default function NotfallPage() {
         doctor_phone: medicalForm.doctor_phone || null,
         insurance_number: medicalForm.insurance_number || null,
         additional_notes: medicalForm.additional_notes || null,
+        organ_donor: medicalForm.organ_donor,
+        organ_donor_card_location: medicalForm.organ_donor_card_location || null,
+        organ_donor_notes: medicalForm.organ_donor_notes || null,
       }
 
       if (medicalInfo.id) {
@@ -196,13 +311,91 @@ export default function NotfallPage() {
     }
   }
 
+  const handleSaveDirectives = async () => {
+    setIsSaving(true)
+    setError(null)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Nicht angemeldet')
+
+      const data = {
+        user_id: user.id,
+        has_patient_decree: directivesForm.has_patient_decree,
+        patient_decree_location: directivesForm.patient_decree_location || null,
+        patient_decree_date: directivesForm.patient_decree_date || null,
+        has_power_of_attorney: directivesForm.has_power_of_attorney,
+        power_of_attorney_location: directivesForm.power_of_attorney_location || null,
+        power_of_attorney_holder: directivesForm.power_of_attorney_holder || null,
+        power_of_attorney_date: directivesForm.power_of_attorney_date || null,
+        has_care_directive: directivesForm.has_care_directive,
+        care_directive_location: directivesForm.care_directive_location || null,
+        care_directive_date: directivesForm.care_directive_date || null,
+        has_bank_power_of_attorney: directivesForm.has_bank_power_of_attorney,
+        bank_power_of_attorney_holder: directivesForm.bank_power_of_attorney_holder || null,
+        bank_power_of_attorney_banks: directivesForm.bank_power_of_attorney_banks || null,
+        notes: directivesForm.notes || null,
+      }
+
+      if (advanceDirectives.id) {
+        const { error } = await supabase.from('advance_directives').update(data).eq('id', advanceDirectives.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('advance_directives').insert(data)
+        if (error) throw error
+      }
+      setIsDirectivesDialogOpen(false)
+      fetchData()
+    } catch (err) {
+      setError('Fehler beim Speichern. Bitte versuchen Sie es erneut.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSaveFuneralWishes = async () => {
+    setIsSaving(true)
+    setError(null)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Nicht angemeldet')
+
+      const data = {
+        user_id: user.id,
+        burial_type: funeralForm.burial_type || null,
+        burial_location: funeralForm.burial_location || null,
+        ceremony_type: funeralForm.ceremony_type || null,
+        ceremony_wishes: funeralForm.ceremony_wishes || null,
+        music_wishes: funeralForm.music_wishes || null,
+        flowers_wishes: funeralForm.flowers_wishes || null,
+        additional_wishes: funeralForm.additional_wishes || null,
+        has_funeral_insurance: funeralForm.has_funeral_insurance,
+        funeral_insurance_provider: funeralForm.funeral_insurance_provider || null,
+        funeral_insurance_number: funeralForm.funeral_insurance_number || null,
+      }
+
+      if (funeralWishes.id) {
+        const { error } = await supabase.from('funeral_wishes').update(data).eq('id', funeralWishes.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('funeral_wishes').insert(data)
+        if (error) throw error
+      }
+      setIsFuneralDialogOpen(false)
+      fetchData()
+    } catch (err) {
+      setError('Fehler beim Speichern. Bitte versuchen Sie es erneut.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const status = (() => {
     let complete = 0
     if (emergencyContacts.length > 0) complete++
     if (medicalInfo.blood_type) complete++
-    if (medicalInfo.allergies.length > 0 || medicalInfo.medications.length > 0) complete++
-    if (medicalInfo.doctor_name && medicalInfo.doctor_phone) complete++
-    if (medicalInfo.insurance_number) complete++
+    if (medicalInfo.organ_donor !== null) complete++
+    if (advanceDirectives.has_patient_decree || advanceDirectives.has_power_of_attorney) complete++
+    if (funeralWishes.burial_type) complete++
     return { complete, total: 5, percentage: Math.round((complete / 5) * 100) }
   })()
 
@@ -212,7 +405,7 @@ export default function NotfallPage() {
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="page-header">
         <h1 className="text-3xl font-serif font-semibold text-warmgray-900">Notfall & Vorsorge</h1>
-        <p className="text-lg text-warmgray-600 mt-2">Wichtige Informationen für den Notfall</p>
+        <p className="text-lg text-warmgray-600 mt-2">Wichtige Informationen für den Notfall und Vorsorgedokumente</p>
       </div>
 
       <Card className="border-sage-200 bg-sage-50">
@@ -232,87 +425,175 @@ export default function NotfallPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2"><Phone className="w-5 h-5 text-sage-600" />Notfall-Kontakte</CardTitle>
-              <CardDescription>Personen, die im Notfall kontaktiert werden sollen</CardDescription>
-            </div>
-            <Button onClick={() => handleOpenContactDialog()}><Plus className="w-4 h-4 mr-2" />Hinzufügen</Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {emergencyContacts.length > 0 ? (
-            <div className="space-y-3">
-              {emergencyContacts.map((contact) => (
-                <div key={contact.id} className="flex items-center justify-between p-4 rounded-lg bg-cream-50 border border-cream-200">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-sage-100 flex items-center justify-center"><User className="w-6 h-6 text-sage-600" /></div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-warmgray-900">{contact.name}</p>
-                        {contact.is_primary && <span className="px-2 py-0.5 text-xs font-medium bg-sage-100 text-sage-700 rounded-full flex items-center gap-1"><Star className="w-3 h-3" />Hauptkontakt</span>}
-                      </div>
-                      <p className="text-sm text-warmgray-600">{contact.relationship}</p>
-                      <p className="text-sm text-warmgray-500">{contact.phone}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenContactDialog(contact)}><Edit2 className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteContact(contact.id)} className="text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
-                  </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="notfall">Notfall</TabsTrigger>
+          <TabsTrigger value="gesundheit">Gesundheit</TabsTrigger>
+          <TabsTrigger value="vorsorge">Vollmachten</TabsTrigger>
+          <TabsTrigger value="bestattung">Bestattung</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="notfall" className="mt-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2"><Phone className="w-5 h-5 text-sage-600" />Notfall-Kontakte</CardTitle>
+                  <CardDescription>Personen, die im Notfall kontaktiert werden sollen</CardDescription>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Phone className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
-              <p className="text-warmgray-600 mb-4">Noch keine Notfall-Kontakte</p>
-              <Button variant="outline" onClick={() => handleOpenContactDialog()}><Plus className="w-4 h-4 mr-2" />Ersten Kontakt hinzufügen</Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                <Button onClick={() => handleOpenContactDialog()}><Plus className="w-4 h-4 mr-2" />Hinzufügen</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {emergencyContacts.length > 0 ? (
+                <div className="space-y-3">
+                  {emergencyContacts.map((contact) => (
+                    <div key={contact.id} className="flex items-center justify-between p-4 rounded-lg bg-cream-50 border border-cream-200">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-sage-100 flex items-center justify-center"><User className="w-6 h-6 text-sage-600" /></div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-warmgray-900">{contact.name}</p>
+                            {contact.is_primary && <span className="px-2 py-0.5 text-xs font-medium bg-sage-100 text-sage-700 rounded-full flex items-center gap-1"><Star className="w-3 h-3" />Hauptkontakt</span>}
+                          </div>
+                          <p className="text-sm text-warmgray-600">{contact.relationship}</p>
+                          <p className="text-sm text-warmgray-500">{contact.phone}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenContactDialog(contact)}><Edit2 className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteContact(contact.id)} className="text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Phone className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
+                  <p className="text-warmgray-600 mb-4">Noch keine Notfall-Kontakte</p>
+                  <Button variant="outline" onClick={() => handleOpenContactDialog()}><Plus className="w-4 h-4 mr-2" />Ersten Kontakt hinzufügen</Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2"><HeartPulse className="w-5 h-5 text-sage-600" />Medizinische Informationen</CardTitle>
-              <CardDescription>Wichtige Gesundheitsdaten für Notfälle</CardDescription>
-            </div>
-            <Button variant="outline" onClick={() => { setMedicalForm(medicalInfo); setError(null); setIsMedicalDialogOpen(true) }}><Edit2 className="w-4 h-4 mr-2" />Bearbeiten</Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div><p className="text-sm text-warmgray-500">Blutgruppe</p><p className="font-medium text-warmgray-900">{medicalInfo.blood_type || '–'}</p></div>
-              <div><p className="text-sm text-warmgray-500 flex items-center gap-1"><AlertTriangle className="w-4 h-4" />Allergien</p><p className="font-medium text-warmgray-900">{medicalInfo.allergies.length > 0 ? medicalInfo.allergies.join(', ') : '–'}</p></div>
-              <div><p className="text-sm text-warmgray-500 flex items-center gap-1"><Pill className="w-4 h-4" />Medikamente</p><p className="font-medium text-warmgray-900">{medicalInfo.medications.length > 0 ? medicalInfo.medications.join(', ') : '–'}</p></div>
-            </div>
-            <div className="space-y-4">
-              <div><p className="text-sm text-warmgray-500">Hausarzt</p><p className="font-medium text-warmgray-900">{medicalInfo.doctor_name || '–'}</p><p className="text-sm text-warmgray-600">{medicalInfo.doctor_phone}</p></div>
-              <div><p className="text-sm text-warmgray-500">Versicherungsnummer</p><p className="font-medium text-warmgray-900">{medicalInfo.insurance_number || '–'}</p></div>
-              <div><p className="text-sm text-warmgray-500">Vorerkrankungen</p><p className="font-medium text-warmgray-900">{medicalInfo.conditions.length > 0 ? medicalInfo.conditions.join(', ') : '–'}</p></div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        <TabsContent value="gesundheit" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2"><HeartPulse className="w-5 h-5 text-sage-600" />Medizinische Informationen</CardTitle>
+                  <CardDescription>Wichtige Gesundheitsdaten für Notfälle</CardDescription>
+                </div>
+                <Button variant="outline" onClick={() => { setMedicalForm(medicalInfo); setError(null); setIsMedicalDialogOpen(true) }}><Edit2 className="w-4 h-4 mr-2" />Bearbeiten</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div><p className="text-sm text-warmgray-500">Blutgruppe</p><p className="font-medium text-warmgray-900">{medicalInfo.blood_type || '–'}</p></div>
+                  <div><p className="text-sm text-warmgray-500 flex items-center gap-1"><AlertTriangle className="w-4 h-4" />Allergien</p><p className="font-medium text-warmgray-900">{medicalInfo.allergies.length > 0 ? medicalInfo.allergies.join(', ') : '–'}</p></div>
+                  <div><p className="text-sm text-warmgray-500 flex items-center gap-1"><Pill className="w-4 h-4" />Medikamente</p><p className="font-medium text-warmgray-900">{medicalInfo.medications.length > 0 ? medicalInfo.medications.join(', ') : '–'}</p></div>
+                </div>
+                <div className="space-y-4">
+                  <div><p className="text-sm text-warmgray-500">Hausarzt</p><p className="font-medium text-warmgray-900">{medicalInfo.doctor_name || '–'}</p><p className="text-sm text-warmgray-600">{medicalInfo.doctor_phone}</p></div>
+                  <div><p className="text-sm text-warmgray-500">Versicherungsnummer</p><p className="font-medium text-warmgray-900">{medicalInfo.insurance_number || '–'}</p></div>
+                  <div><p className="text-sm text-warmgray-500">Vorerkrankungen</p><p className="font-medium text-warmgray-900">{medicalInfo.conditions.length > 0 ? medicalInfo.conditions.join(', ') : '–'}</p></div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-      <Card className="border-amber-200 bg-amber-50">
-        <CardContent className="pt-6">
-          <div className="flex gap-4">
-            <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0" />
-            <div>
-              <p className="font-medium text-warmgray-900 mb-1">Wichtiger Hinweis</p>
-              <p className="text-sm text-warmgray-600">Diese Informationen ersetzen keine ärztliche Dokumentation.</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Heart className="w-5 h-5 text-sage-600" />Organspende</CardTitle>
+              <CardDescription>Ihre Entscheidung zur Organspende</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-warmgray-500">Organspendeausweis</p>
+                  <p className="font-medium text-warmgray-900">
+                    {medicalInfo.organ_donor === true && 'Ja, ich bin Organspender'}
+                    {medicalInfo.organ_donor === false && 'Nein, keine Organspende'}
+                    {medicalInfo.organ_donor === null && '– Keine Angabe'}
+                  </p>
+                </div>
+                {medicalInfo.organ_donor_card_location && (
+                  <div><p className="text-sm text-warmgray-500">Aufbewahrungsort</p><p className="font-medium text-warmgray-900">{medicalInfo.organ_donor_card_location}</p></div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
+        <TabsContent value="vorsorge" className="mt-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2"><Scale className="w-5 h-5 text-sage-600" />Vorsorgedokumente</CardTitle>
+                  <CardDescription>Vollmachten und Verfügungen</CardDescription>
+                </div>
+                <Button variant="outline" onClick={() => { setDirectivesForm(advanceDirectives); setError(null); setIsDirectivesDialogOpen(true) }}><Edit2 className="w-4 h-4 mr-2" />Bearbeiten</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {[
+                  { label: 'Patientenverfügung', has: advanceDirectives.has_patient_decree, location: advanceDirectives.patient_decree_location, icon: FileText },
+                  { label: 'Vorsorgevollmacht', has: advanceDirectives.has_power_of_attorney, holder: advanceDirectives.power_of_attorney_holder, icon: Scale },
+                  { label: 'Betreuungsverfügung', has: advanceDirectives.has_care_directive, location: advanceDirectives.care_directive_location, icon: User },
+                  { label: 'Bankvollmacht', has: advanceDirectives.has_bank_power_of_attorney, holder: advanceDirectives.bank_power_of_attorney_holder, icon: Scale },
+                ].map((item) => (
+                  <div key={item.label} className="p-4 rounded-lg bg-cream-50 border border-cream-200">
+                    <div className="flex items-center gap-3 mb-1">
+                      <item.icon className="w-5 h-5 text-sage-600" />
+                      <p className="font-medium text-warmgray-900">{item.label}</p>
+                      <span className={`px-2 py-0.5 text-xs rounded-full ${item.has ? 'bg-green-100 text-green-700' : 'bg-warmgray-100 text-warmgray-600'}`}>
+                        {item.has ? 'Vorhanden' : 'Nicht vorhanden'}
+                      </span>
+                    </div>
+                    {item.has && (item.location || item.holder) && (
+                      <p className="text-sm text-warmgray-600 ml-8">{item.holder ? `Bevollmächtigte(r): ${item.holder}` : `Aufbewahrungsort: ${item.location}`}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="bestattung" className="mt-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2"><Flower2 className="w-5 h-5 text-sage-600" />Bestattungswünsche</CardTitle>
+                  <CardDescription>Ihre Wünsche für die Bestattung</CardDescription>
+                </div>
+                <Button variant="outline" onClick={() => { setFuneralForm(funeralWishes); setError(null); setIsFuneralDialogOpen(true) }}><Edit2 className="w-4 h-4 mr-2" />Bearbeiten</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div><p className="text-sm text-warmgray-500">Bestattungsart</p><p className="font-medium text-warmgray-900">{BURIAL_TYPES.find(b => b.value === funeralWishes.burial_type)?.label || '– Keine Angabe'}</p></div>
+                  {funeralWishes.burial_location && <div><p className="text-sm text-warmgray-500">Gewünschter Ort</p><p className="font-medium text-warmgray-900">{funeralWishes.burial_location}</p></div>}
+                  <div><p className="text-sm text-warmgray-500">Trauerfeier</p><p className="font-medium text-warmgray-900">{CEREMONY_TYPES.find(c => c.value === funeralWishes.ceremony_type)?.label || '– Keine Angabe'}</p></div>
+                </div>
+                <div className="space-y-4">
+                  {funeralWishes.music_wishes && <div><p className="text-sm text-warmgray-500">Musikwünsche</p><p className="font-medium text-warmgray-900">{funeralWishes.music_wishes}</p></div>}
+                  <div><p className="text-sm text-warmgray-500">Bestattungsvorsorge</p><p className="font-medium text-warmgray-900">{funeralWishes.has_funeral_insurance ? `Ja (${funeralWishes.funeral_insurance_provider || 'Anbieter nicht angegeben'})` : 'Keine'}</p></div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Dialogs */}
       <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -321,15 +602,14 @@ export default function NotfallPage() {
           </DialogHeader>
           <div className="space-y-4">
             {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
-            <div className="space-y-2"><Label htmlFor="name">Name *</Label><Input id="name" value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })} placeholder="Max Mustermann" /></div>
-            <div className="space-y-2"><Label htmlFor="phone">Telefonnummer *</Label><Input id="phone" type="tel" value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} placeholder="+49 123 456789" /></div>
-            <div className="space-y-2"><Label htmlFor="relationship">Beziehung *</Label><Input id="relationship" value={contactForm.relationship} onChange={(e) => setContactForm({ ...contactForm, relationship: e.target.value })} placeholder="z.B. Sohn, Tochter" /></div>
-            <div className="space-y-2"><Label htmlFor="notes">Notizen</Label><Input id="notes" value={contactForm.notes} onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })} placeholder="Optional" /></div>
+            <div className="space-y-2"><Label htmlFor="name">Name *</Label><Input id="name" value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })} /></div>
+            <div className="space-y-2"><Label htmlFor="phone">Telefonnummer *</Label><Input id="phone" type="tel" value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} /></div>
+            <div className="space-y-2"><Label htmlFor="relationship">Beziehung *</Label><Input id="relationship" value={contactForm.relationship} onChange={(e) => setContactForm({ ...contactForm, relationship: e.target.value })} /></div>
             <div className="flex items-center gap-2"><input type="checkbox" id="is_primary" checked={contactForm.is_primary} onChange={(e) => setContactForm({ ...contactForm, is_primary: e.target.checked })} className="w-5 h-5 rounded" /><Label htmlFor="is_primary">Hauptkontakt</Label></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsContactDialogOpen(false)}>Abbrechen</Button>
-            <Button onClick={handleSaveContact} disabled={isSaving}>{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Speichern...</> : 'Speichern'}</Button>
+            <Button onClick={handleSaveContact} disabled={isSaving}>{isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Speichern</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -338,22 +618,109 @@ export default function NotfallPage() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Medizinische Informationen</DialogTitle>
-            <DialogDescription>Gesundheitsdaten für den Notfall</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
-            <div className="space-y-2"><Label htmlFor="blood_type">Blutgruppe</Label><Input id="blood_type" value={medicalForm.blood_type} onChange={(e) => setMedicalForm({ ...medicalForm, blood_type: e.target.value })} placeholder="z.B. A+, B-, 0+" /></div>
-            <div className="space-y-2"><Label htmlFor="allergies">Allergien (kommagetrennt)</Label><Input id="allergies" value={medicalForm.allergies.join(', ')} onChange={(e) => setMedicalForm({ ...medicalForm, allergies: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="z.B. Penicillin, Nüsse" /></div>
-            <div className="space-y-2"><Label htmlFor="medications">Medikamente (kommagetrennt)</Label><Input id="medications" value={medicalForm.medications.join(', ')} onChange={(e) => setMedicalForm({ ...medicalForm, medications: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="z.B. Aspirin 100mg" /></div>
-            <div className="space-y-2"><Label htmlFor="conditions">Vorerkrankungen (kommagetrennt)</Label><Input id="conditions" value={medicalForm.conditions.join(', ')} onChange={(e) => setMedicalForm({ ...medicalForm, conditions: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="z.B. Diabetes" /></div>
+            <div className="space-y-2"><Label>Blutgruppe</Label><Input value={medicalForm.blood_type} onChange={(e) => setMedicalForm({ ...medicalForm, blood_type: e.target.value })} placeholder="z.B. A+, 0-" /></div>
+            <div className="space-y-2"><Label>Allergien (kommagetrennt)</Label><Input value={medicalForm.allergies.join(', ')} onChange={(e) => setMedicalForm({ ...medicalForm, allergies: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
+            <div className="space-y-2"><Label>Medikamente (kommagetrennt)</Label><Input value={medicalForm.medications.join(', ')} onChange={(e) => setMedicalForm({ ...medicalForm, medications: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
+            <div className="space-y-2"><Label>Vorerkrankungen (kommagetrennt)</Label><Input value={medicalForm.conditions.join(', ')} onChange={(e) => setMedicalForm({ ...medicalForm, conditions: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
             <Separator />
-            <div className="space-y-2"><Label htmlFor="doctor_name">Hausarzt Name</Label><Input id="doctor_name" value={medicalForm.doctor_name} onChange={(e) => setMedicalForm({ ...medicalForm, doctor_name: e.target.value })} placeholder="Dr. med. Beispiel" /></div>
-            <div className="space-y-2"><Label htmlFor="doctor_phone">Hausarzt Telefon</Label><Input id="doctor_phone" type="tel" value={medicalForm.doctor_phone} onChange={(e) => setMedicalForm({ ...medicalForm, doctor_phone: e.target.value })} placeholder="+49 123 456789" /></div>
-            <div className="space-y-2"><Label htmlFor="insurance_number">Versicherungsnummer</Label><Input id="insurance_number" value={medicalForm.insurance_number} onChange={(e) => setMedicalForm({ ...medicalForm, insurance_number: e.target.value })} placeholder="z.B. A123456789" /></div>
+            <div className="space-y-2"><Label>Hausarzt Name</Label><Input value={medicalForm.doctor_name} onChange={(e) => setMedicalForm({ ...medicalForm, doctor_name: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Hausarzt Telefon</Label><Input value={medicalForm.doctor_phone} onChange={(e) => setMedicalForm({ ...medicalForm, doctor_phone: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Versicherungsnummer</Label><Input value={medicalForm.insurance_number} onChange={(e) => setMedicalForm({ ...medicalForm, insurance_number: e.target.value })} /></div>
+            <Separator />
+            <div className="space-y-2">
+              <Label>Organspende</Label>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2"><input type="radio" name="organ" checked={medicalForm.organ_donor === true} onChange={() => setMedicalForm({ ...medicalForm, organ_donor: true })} /><span>Ja, Organspender</span></label>
+                <label className="flex items-center gap-2"><input type="radio" name="organ" checked={medicalForm.organ_donor === false} onChange={() => setMedicalForm({ ...medicalForm, organ_donor: false })} /><span>Nein</span></label>
+                <label className="flex items-center gap-2"><input type="radio" name="organ" checked={medicalForm.organ_donor === null} onChange={() => setMedicalForm({ ...medicalForm, organ_donor: null })} /><span>Keine Angabe</span></label>
+              </div>
+            </div>
+            <div className="space-y-2"><Label>Aufbewahrungsort Ausweis</Label><Input value={medicalForm.organ_donor_card_location} onChange={(e) => setMedicalForm({ ...medicalForm, organ_donor_card_location: e.target.value })} /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsMedicalDialogOpen(false)}>Abbrechen</Button>
-            <Button onClick={handleSaveMedicalInfo} disabled={isSaving}>{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Speichern...</> : 'Speichern'}</Button>
+            <Button onClick={handleSaveMedicalInfo} disabled={isSaving}>{isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Speichern</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDirectivesDialogOpen} onOpenChange={setIsDirectivesDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Vorsorgedokumente</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
+            {[
+              { key: 'patient_decree', label: 'Patientenverfügung', hasLocation: true },
+              { key: 'power_of_attorney', label: 'Vorsorgevollmacht', hasHolder: true, hasLocation: true },
+              { key: 'care_directive', label: 'Betreuungsverfügung', hasLocation: true },
+              { key: 'bank_power_of_attorney', label: 'Bankvollmacht', hasHolder: true, hasBanks: true },
+            ].map((item) => (
+              <div key={item.key} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={(directivesForm as any)[`has_${item.key}`]} onChange={(e) => setDirectivesForm({ ...directivesForm, [`has_${item.key}`]: e.target.checked })} className="w-5 h-5 rounded" />
+                  <Label className="font-medium">{item.label}</Label>
+                </div>
+                {(directivesForm as any)[`has_${item.key}`] && (
+                  <div className="ml-7 space-y-2">
+                    {item.hasHolder && <Input placeholder="Bevollmächtigte Person" value={(directivesForm as any)[`${item.key}_holder`] || ''} onChange={(e) => setDirectivesForm({ ...directivesForm, [`${item.key}_holder`]: e.target.value })} />}
+                    {item.hasLocation && <Input placeholder="Aufbewahrungsort" value={(directivesForm as any)[`${item.key}_location`] || ''} onChange={(e) => setDirectivesForm({ ...directivesForm, [`${item.key}_location`]: e.target.value })} />}
+                    {item.hasBanks && <Input placeholder="Bei welchen Banken" value={(directivesForm as any)[`${item.key}_banks`] || ''} onChange={(e) => setDirectivesForm({ ...directivesForm, [`${item.key}_banks`]: e.target.value })} />}
+                  </div>
+                )}
+                <Separator />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDirectivesDialogOpen(false)}>Abbrechen</Button>
+            <Button onClick={handleSaveDirectives} disabled={isSaving}>{isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Speichern</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isFuneralDialogOpen} onOpenChange={setIsFuneralDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bestattungswünsche</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
+            <div className="space-y-2">
+              <Label>Bestattungsart</Label>
+              <select value={funeralForm.burial_type} onChange={(e) => setFuneralForm({ ...funeralForm, burial_type: e.target.value })} className="w-full rounded-md border-2 border-warmgray-400 bg-white px-4 py-2 text-base">
+                {BURIAL_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2"><Label>Gewünschter Ort</Label><Input value={funeralForm.burial_location} onChange={(e) => setFuneralForm({ ...funeralForm, burial_location: e.target.value })} /></div>
+            <Separator />
+            <div className="space-y-2">
+              <Label>Trauerfeier</Label>
+              <select value={funeralForm.ceremony_type} onChange={(e) => setFuneralForm({ ...funeralForm, ceremony_type: e.target.value })} className="w-full rounded-md border-2 border-warmgray-400 bg-white px-4 py-2 text-base">
+                {CEREMONY_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2"><Label>Musikwünsche</Label><Input value={funeralForm.music_wishes} onChange={(e) => setFuneralForm({ ...funeralForm, music_wishes: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Blumenwünsche</Label><Input value={funeralForm.flowers_wishes} onChange={(e) => setFuneralForm({ ...funeralForm, flowers_wishes: e.target.value })} /></div>
+            <Separator />
+            <div className="flex items-center gap-2">
+              <input type="checkbox" checked={funeralForm.has_funeral_insurance} onChange={(e) => setFuneralForm({ ...funeralForm, has_funeral_insurance: e.target.checked })} className="w-5 h-5 rounded" />
+              <Label>Bestattungsvorsorge vorhanden</Label>
+            </div>
+            {funeralForm.has_funeral_insurance && (
+              <div className="ml-7 space-y-2">
+                <Input placeholder="Anbieter" value={funeralForm.funeral_insurance_provider} onChange={(e) => setFuneralForm({ ...funeralForm, funeral_insurance_provider: e.target.value })} />
+                <Input placeholder="Vertragsnummer" value={funeralForm.funeral_insurance_number} onChange={(e) => setFuneralForm({ ...funeralForm, funeral_insurance_number: e.target.value })} />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsFuneralDialogOpen(false)}>Abbrechen</Button>
+            <Button onClick={handleSaveFuneralWishes} disabled={isSaving}>{isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Speichern</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
