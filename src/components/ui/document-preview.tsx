@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -198,6 +199,9 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
               {document?.title || 'Dokument'}
             </DialogTitle>
           </div>
+          <DialogDescription className="sr-only">
+            Vorschau des Dokuments {document?.title}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Toolbar */}
