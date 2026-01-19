@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const getResend = () => new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: Request) {
   try {
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
     // Send invitation email via Resend
     try {
-      await resend.emails.send({
+      await getResend().emails.send({
         from: 'Lebensordner <einladung@lebensordner.org>',
         to: trustedPerson.email,
         subject: `${ownerName} hat Sie als Vertrauensperson eingeladen`,

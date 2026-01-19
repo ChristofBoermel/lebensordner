@@ -5,12 +5,12 @@ import { Resend } from 'resend'
 // This endpoint should be called by a cron job (e.g., Vercel Cron, GitHub Actions, or external service)
 // Recommended: Call daily at 8:00 AM
 
-const supabaseAdmin = createClient(
+const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const getResend = () => new Resend(process.env.RESEND_API_KEY)
 
 interface ReminderWithUser {
   id: string
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
   if (!isAuthorized && authHeader?.startsWith('Bearer ')) {
     const token = authHeader.replace('Bearer ', '')
     try {
-      const { data: { user } } = await supabaseAdmin.auth.getUser(token)
+      const { data: { user } } = await getSupabaseAdmin().auth.getUser(token)
       if (user) {
         isAuthorized = true
       }
@@ -94,7 +94,7 @@ export async function GET(request: Request) {
     // ========================================
     // 1. Send reminders for due dates
     // ========================================
-    const { data: reminders, error: reminderError } = await supabaseAdmin
+    const { data: reminders, error: reminderError } = await getSupabaseAdmin()
       .from('reminders')
       .select(`
         id,
@@ -132,7 +132,7 @@ export async function GET(request: Request) {
         // Send email reminder
         if (profile.email_reminders_enabled && daysUntilDue <= profile.email_reminder_days_before) {
           try {
-            await resend.emails.send({
+            await getResend().emails.send({
               from: 'Lebensordner <erinnerung@lebensordner.org>',
               to: profile.email,
               subject: `Erinnerung: ${reminder.title}`,
@@ -151,7 +151,7 @@ export async function GET(request: Request) {
             })
 
             // Mark reminder as sent
-            await supabaseAdmin
+            await getSupabaseAdmin()
               .from('reminders')
               .update({ email_sent: true })
               .eq('id', reminder.id)
@@ -178,7 +178,7 @@ export async function GET(request: Request) {
     // ========================================
     // 2. Send reminders for expiring documents
     // ========================================
-    const { data: expiringDocs, error: docsError } = await supabaseAdmin
+    const { data: expiringDocs, error: docsError } = await getSupabaseAdmin()
       .from('documents')
       .select(`
         id,
@@ -219,7 +219,7 @@ export async function GET(request: Request) {
         // Send email reminder
         if (profile.email_reminders_enabled && daysUntilExpiry <= profile.email_reminder_days_before) {
           try {
-            await resend.emails.send({
+            await getResend().emails.send({
               from: 'Lebensordner <erinnerung@lebensordner.org>',
               to: profile.email,
               subject: `Dokument läuft ab: ${doc.title}`,
@@ -257,7 +257,7 @@ export async function GET(request: Request) {
 
         // Mark as sent if either email or SMS was sent
         if (emailSent || smsSent) {
-          await supabaseAdmin
+          await getSupabaseAdmin()
             .from('documents')
             .update({ expiry_reminder_sent: true })
             .eq('id', doc.id)

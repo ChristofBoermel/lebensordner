@@ -31,7 +31,9 @@ import {
   CheckCircle2,
   XCircle,
   Send,
-  Crown
+  Crown,
+  Bell,
+  ShieldAlert
 } from 'lucide-react'
 import type { TrustedPerson } from '@/types/database'
 import { SUBSCRIPTION_TIERS, getTierFromSubscription, canPerformAction, type TierConfig } from '@/lib/subscription-tiers'
@@ -58,17 +60,31 @@ const ACCESS_LEVELS = {
   },
 }
 
+interface EmergencyAccessRequest {
+  id: string
+  trusted_person_id: string
+  requester_id: string
+  status: string
+  reason: string | null
+  created_at: string
+  requester_name?: string
+  trusted_person_name?: string
+}
+
 export default function ZugriffPage() {
   const searchParams = useSearchParams()
   const shouldOpenAdd = searchParams.get('add') === 'true'
+  const approveRequestId = searchParams.get('approve')
 
   const [trustedPersons, setTrustedPersons] = useState<TrustedPerson[]>([])
+  const [pendingRequests, setPendingRequests] = useState<EmergencyAccessRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingPerson, setEditingPerson] = useState<TrustedPerson | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [userTier, setUserTier] = useState<TierConfig>(SUBSCRIPTION_TIERS.free)
+  const [isRespondingToRequest, setIsRespondingToRequest] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     name: '',
@@ -120,9 +136,45 @@ export default function ZugriffPage() {
     setIsLoading(false)
   }, [supabase])
 
+  const fetchPendingRequests = useCallback(async () => {
+    try {
+      const response = await fetch('/api/emergency-access/pending')
+      const data = await response.json()
+      if (response.ok && data.requests) {
+        setPendingRequests(data.requests)
+      }
+    } catch (err) {
+      console.error('Error fetching pending requests:', err)
+    }
+  }, [])
+
   useEffect(() => {
     fetchTrustedPersons()
-  }, [fetchTrustedPersons])
+    fetchPendingRequests()
+  }, [fetchTrustedPersons, fetchPendingRequests])
+
+  const handleRespondToRequest = async (requestId: string, action: 'approve' | 'deny') => {
+    setIsRespondingToRequest(requestId)
+    try {
+      const response = await fetch('/api/emergency-access/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId, action }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Fehler bei der Verarbeitung')
+      }
+
+      fetchPendingRequests()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setIsRespondingToRequest(null)
+    }
+  }
 
   // Open dialog if URL param is set and user can add persons
   useEffect(() => {
@@ -335,6 +387,72 @@ export default function ZugriffPage() {
                   </Button>
                 </Link>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pending Emergency Access Requests */}
+      {pendingRequests.length > 0 && (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-red-700">
+              <ShieldAlert className="w-5 h-5" />
+              Offene Notfallzugriff-Anfragen ({pendingRequests.length})
+            </CardTitle>
+            <CardDescription className="text-red-600">
+              Folgende Personen haben Notfallzugriff auf Ihre Dokumente angefordert
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingRequests.map((request) => (
+                <div key={request.id} className="flex items-start justify-between p-4 rounded-lg bg-white border border-red-200">
+                  <div>
+                    <p className="font-medium text-warmgray-900">{request.requester_name}</p>
+                    <p className="text-sm text-warmgray-600">als {request.trusted_person_name}</p>
+                    {request.reason && (
+                      <p className="text-sm text-warmgray-500 mt-1 italic">"{request.reason}"</p>
+                    )}
+                    <p className="text-xs text-warmgray-400 mt-1">
+                      Angefragt am {new Date(request.created_at).toLocaleDateString('de-DE')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRespondToRequest(request.id, 'deny')}
+                      disabled={isRespondingToRequest === request.id}
+                      className="text-red-600 border-red-200 hover:bg-red-100"
+                    >
+                      {isRespondingToRequest === request.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <XCircle className="w-4 h-4 mr-1" />
+                          Ablehnen
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleRespondToRequest(request.id, 'approve')}
+                      disabled={isRespondingToRequest === request.id}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {isRespondingToRequest === request.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-1" />
+                          Genehmigen
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
