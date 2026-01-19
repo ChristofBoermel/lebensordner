@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -19,7 +20,10 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCw,
-  Maximize2
+  Maximize2,
+  Calendar,
+  StickyNote,
+  AlertTriangle
 } from 'lucide-react'
 
 interface DocumentPreviewProps {
@@ -32,6 +36,9 @@ interface DocumentPreviewProps {
     file_path: string
     file_type: string
     file_size: number
+    expiry_date?: string | null
+    notes?: string | null
+    category?: string
   } | null
 }
 
@@ -192,6 +199,9 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
               {document?.title || 'Dokument'}
             </DialogTitle>
           </div>
+          <DialogDescription className="sr-only">
+            Vorschau des Dokuments {document?.title}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Toolbar */}
@@ -259,12 +269,54 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
           {renderPreview()}
         </div>
 
-        {/* File Info */}
-        <div className="mt-4 pt-4 border-t border-warmgray-200">
-          <div className="flex items-center justify-between text-sm text-warmgray-500">
+        {/* Document Info */}
+        <div className="mt-4 pt-4 border-t border-warmgray-200 space-y-3">
+          {/* Expiry Date */}
+          {document?.expiry_date && (
+            <div className="flex items-start gap-2">
+              <Calendar className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-warmgray-700">Ablaufdatum</p>
+                <p className={`text-sm ${
+                  new Date(document.expiry_date) < new Date()
+                    ? 'text-red-600 font-medium'
+                    : new Date(document.expiry_date) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                    ? 'text-amber-600'
+                    : 'text-warmgray-600'
+                }`}>
+                  {new Date(document.expiry_date).toLocaleDateString('de-DE', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                  {new Date(document.expiry_date) < new Date() && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-red-600">
+                      <AlertTriangle className="w-3 h-3" />
+                      Abgelaufen
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          {document?.notes && (
+            <div className="flex items-start gap-2">
+              <StickyNote className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-warmgray-700">Notizen</p>
+                <p className="text-sm text-warmgray-600 whitespace-pre-wrap">{document.notes}</p>
+              </div>
+            </div>
+          )}
+
+          {/* File Info */}
+          <div className="flex items-center justify-between text-sm text-warmgray-500 pt-2">
             <span>{document?.file_name}</span>
             <span>
-              {document?.file_size 
+              {document?.file_size
                 ? `${(document.file_size / 1024 / 1024).toFixed(2)} MB`
                 : ''}
             </span>
