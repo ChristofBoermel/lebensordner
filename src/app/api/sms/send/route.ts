@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 // Twilio SMS sending
-// Install: npm install twilio
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,9 +17,32 @@ interface SendSMSRequest {
 
 export async function POST(request: Request) {
   try {
-    // Verify authorization
+    // Two ways to authorize:
+    // 1. Internal API key (for cron jobs/server calls)
+    // 2. Authenticated user session (for user-initiated sends)
+
     const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
+    const internalApiKey = process.env.INTERNAL_API_KEY
+
+    let isAuthorized = false
+    let authenticatedUserId: string | null = null
+
+    // Check for internal API key
+    if (authHeader === `Bearer ${internalApiKey}` && internalApiKey) {
+      isAuthorized = true
+    }
+
+    // Check for user session
+    if (!isAuthorized && authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '')
+      const { data: { user } } = await supabaseAdmin.auth.getUser(token)
+      if (user) {
+        isAuthorized = true
+        authenticatedUserId = user.id
+      }
+    }
+
+    if (!isAuthorized) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
