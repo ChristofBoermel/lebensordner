@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { cn } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -67,6 +68,12 @@ export default function EinstellungenPage() {
     setPasswordError(null)
     setPasswordSuccess(false)
 
+    // First verify old password is provided
+    if (!currentPassword) {
+      setPasswordError('Bitte geben Sie Ihr aktuelles Passwort ein.')
+      return
+    }
+
     if (newPassword !== confirmNewPassword) {
       setPasswordError('Die neuen Passwörter stimmen nicht überein.')
       return
@@ -80,6 +87,25 @@ export default function EinstellungenPage() {
     setIsChangingPassword(true)
 
     try {
+      // First, verify the current password by re-authenticating
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user?.email) {
+        throw new Error('Benutzer nicht gefunden')
+      }
+
+      // Re-authenticate with current password
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword
+      })
+
+      if (signInError) {
+        setPasswordError('Das aktuelle Passwort ist nicht korrekt.')
+        setIsChangingPassword(false)
+        return
+      }
+
+      // Now update to new password
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       })
@@ -90,7 +116,7 @@ export default function EinstellungenPage() {
       setCurrentPassword('')
       setNewPassword('')
       setConfirmNewPassword('')
-      
+
       setTimeout(() => {
         setIsPasswordDialogOpen(false)
         setPasswordSuccess(false)
@@ -147,6 +173,8 @@ export default function EinstellungenPage() {
           onboarding_completed: true,
           email_reminders_enabled: profile.email_reminders_enabled ?? true,
           email_reminder_days_before: profile.email_reminder_days_before ?? 7,
+          sms_reminders_enabled: profile.sms_reminders_enabled ?? false,
+          sms_reminder_days_before: profile.sms_reminder_days_before ?? 3,
         })
         .eq('id', user.id)
 
@@ -406,6 +434,71 @@ export default function EinstellungenPage() {
         </CardContent>
       </Card>
 
+      {/* SMS Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Smartphone className="w-5 h-5 text-sage-600" />
+            SMS-Benachrichtigungen
+          </CardTitle>
+          <CardDescription>
+            Lassen Sie sich per SMS an wichtige Fristen erinnern
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Erinnerungs-SMS</p>
+              <p className="text-sm text-warmgray-500">
+                Erhalten Sie SMS vor Fälligkeitsdaten
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={profile.sms_reminders_enabled ?? false}
+                onChange={(e) => setProfile({ ...profile, sms_reminders_enabled: e.target.checked })}
+                disabled={!profile.phone}
+                className="sr-only peer"
+              />
+              <div className={cn(
+                "w-11 h-6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all",
+                !profile.phone
+                  ? "bg-warmgray-100 cursor-not-allowed"
+                  : "bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 peer-checked:bg-sage-600"
+              )}></div>
+            </label>
+          </div>
+
+          {!profile.phone && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm">
+              Bitte geben Sie eine Telefonnummer in Ihren persönlichen Daten ein, um SMS-Benachrichtigungen zu aktivieren.
+            </div>
+          )}
+
+          {profile.sms_reminders_enabled && profile.phone && (
+            <div className="space-y-2 pt-2">
+              <Label htmlFor="sms_reminder_days">SMS-Erinnerung senden vor Fälligkeit</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="sms_reminder_days"
+                  type="number"
+                  min="1"
+                  max="14"
+                  value={profile.sms_reminder_days_before ?? 3}
+                  onChange={(e) => setProfile({ ...profile, sms_reminder_days_before: parseInt(e.target.value) || 3 })}
+                  className="w-24"
+                />
+                <span className="text-warmgray-600">Tage</span>
+              </div>
+              <p className="text-xs text-warmgray-500">
+                SMS-Benachrichtigungen sind auf 1-14 Tage vor Fälligkeit begrenzt.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Security */}
       <Card>
         <CardHeader>
@@ -576,7 +669,7 @@ export default function EinstellungenPage() {
           <DialogHeader>
             <DialogTitle>Passwort ändern</DialogTitle>
             <DialogDescription>
-              Geben Sie Ihr neues Passwort ein. Es muss mindestens 8 Zeichen lang sein.
+              Geben Sie zuerst Ihr aktuelles Passwort ein, dann das neue Passwort.
             </DialogDescription>
           </DialogHeader>
 
@@ -595,7 +688,20 @@ export default function EinstellungenPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="new_password">Neues Passwort</Label>
+              <Label htmlFor="current_password">Aktuelles Passwort *</Label>
+              <Input
+                id="current_password"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Ihr aktuelles Passwort"
+              />
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <Label htmlFor="new_password">Neues Passwort *</Label>
               <Input
                 id="new_password"
                 type="password"
@@ -606,7 +712,7 @@ export default function EinstellungenPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirm_new_password">Neues Passwort bestätigen</Label>
+              <Label htmlFor="confirm_new_password">Neues Passwort bestätigen *</Label>
               <Input
                 id="confirm_new_password"
                 type="password"
@@ -621,14 +727,14 @@ export default function EinstellungenPage() {
             <Button variant="outline" onClick={() => setIsPasswordDialogOpen(false)}>
               Abbrechen
             </Button>
-            <Button 
+            <Button
               onClick={handlePasswordChange}
-              disabled={isChangingPassword || !newPassword || !confirmNewPassword}
+              disabled={isChangingPassword || !currentPassword || !newPassword || !confirmNewPassword}
             >
               {isChangingPassword ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Speichern...
+                  Überprüfen...
                 </>
               ) : (
                 'Passwort ändern'

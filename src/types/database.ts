@@ -127,6 +127,9 @@ export interface Database {
           subscription_current_period_end: string | null
           two_factor_enabled: boolean
           two_factor_secret: string | null
+          sms_reminders_enabled: boolean
+          sms_reminder_days_before: number
+          phone_verified: boolean
         }
         Insert: {
           id: string
@@ -147,6 +150,9 @@ export interface Database {
           subscription_current_period_end?: string | null
           two_factor_enabled?: boolean
           two_factor_secret?: string | null
+          sms_reminders_enabled?: boolean
+          sms_reminder_days_before?: number
+          phone_verified?: boolean
         }
         Update: {
           id?: string
@@ -167,6 +173,9 @@ export interface Database {
           subscription_current_period_end?: string | null
           two_factor_enabled?: boolean
           two_factor_secret?: string | null
+          sms_reminders_enabled?: boolean
+          sms_reminder_days_before?: number
+          phone_verified?: boolean
         }
       }
       documents: {
