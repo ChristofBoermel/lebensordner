@@ -504,6 +504,62 @@ export default function DocumentsPage() {
     return subcategories.filter(s => s.parent_category === firstDoc.category)
   }
 
+  // Delete folder handler
+  const handleDeleteFolder = async (folder: Subcategory, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent folder click
+
+    const docsInFolder = documents.filter(d => d.subcategory_id === folder.id)
+    const confirmMessage = docsInFolder.length > 0
+      ? `Ordner "${folder.name}" mit ${docsInFolder.length} Dokument(en) löschen? Die Dokumente werden nicht gelöscht, sondern nur aus dem Ordner entfernt.`
+      : `Ordner "${folder.name}" wirklich löschen?`
+
+    if (!confirm(confirmMessage)) return
+
+    try {
+      // First, remove folder reference from all documents in this folder
+      if (docsInFolder.length > 0) {
+        const { error: updateError } = await supabase
+          .from('documents')
+          .update({ subcategory_id: null })
+          .eq('subcategory_id', folder.id)
+
+        if (updateError) {
+          alert('Fehler beim Entfernen der Dokumente aus dem Ordner.')
+          return
+        }
+
+        // Update local documents state
+        setDocuments(prev => prev.map(doc =>
+          doc.subcategory_id === folder.id
+            ? { ...doc, subcategory_id: null }
+            : doc
+        ))
+      }
+
+      // Delete the folder
+      const { error: deleteError } = await supabase
+        .from('subcategories')
+        .delete()
+        .eq('id', folder.id)
+
+      if (deleteError) {
+        alert('Fehler beim Löschen des Ordners.')
+        return
+      }
+
+      // Update local state
+      setSubcategories(prev => prev.filter(s => s.id !== folder.id))
+
+      // If we were viewing this folder, go back
+      if (currentFolder?.id === folder.id) {
+        setCurrentFolder(null)
+      }
+    } catch (error) {
+      console.error('Delete folder error:', error)
+      alert('Fehler beim Löschen des Ordners.')
+    }
+  }
+
   const openUploadDialog = (category: DocumentCategory) => {
     setUploadCategory(category)
     setUploadSubcategory(null)
@@ -663,11 +719,19 @@ export default function DocumentsPage() {
             {categorySubcategories.map(subcategory => {
               const docCount = getDocumentsForSubcategory(subcategory.id).length
               return (
-                <button
+                <div
                   key={subcategory.id}
+                  className="relative p-4 rounded-lg border-2 border-warmgray-200 hover:border-sage-400 hover:bg-sage-50 transition-all text-left group cursor-pointer"
                   onClick={() => setCurrentFolder(subcategory)}
-                  className="p-4 rounded-lg border-2 border-warmgray-200 hover:border-sage-400 hover:bg-sage-50 transition-all text-left group"
                 >
+                  {/* Delete button - appears on hover */}
+                  <button
+                    onClick={(e) => handleDeleteFolder(subcategory, e)}
+                    className="absolute top-2 right-2 p-1 rounded-full bg-white/80 hover:bg-red-100 text-warmgray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all"
+                    title="Ordner löschen"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                   <div className="flex items-center justify-center mb-3">
                     <Folder className="w-12 h-12 text-sage-500 group-hover:text-sage-600 transition-colors" />
                   </div>
@@ -675,7 +739,7 @@ export default function DocumentsPage() {
                   <p className="text-xs text-warmgray-500 text-center mt-1">
                     {docCount} Dokument{docCount !== 1 ? 'e' : ''}
                   </p>
-                </button>
+                </div>
               )
             })}
             {/* Add new folder - inline input or button */}
