@@ -23,45 +23,53 @@ export async function POST() {
 
     // Find any trusted_persons records where email matches and invitation was accepted
     // but linked_user_id is not yet set
+    // Use ilike for case-insensitive email matching
     const { data: pendingLinks, error: fetchError } = await adminClient
       .from('trusted_persons')
-      .select('id, user_id, name')
-      .eq('email', user.email)
-      .eq('invitation_status', 'accepted')
+      .select('id, user_id, name, email, invitation_status')
+      .ilike('email', user.email || '')
       .is('linked_user_id', null)
+
+    console.log('Link API - User email:', user.email)
+    console.log('Link API - Found pending links:', pendingLinks)
 
     if (fetchError) {
       console.error('Error fetching pending links:', fetchError)
       return NextResponse.json({ error: 'Datenbankfehler' }, { status: 500 })
     }
 
-    if (!pendingLinks || pendingLinks.length === 0) {
+    // Filter to only accepted invitations
+    const acceptedLinks = (pendingLinks || []).filter(
+      link => link.invitation_status === 'accepted'
+    )
+
+    if (acceptedLinks.length === 0) {
       return NextResponse.json({
         success: true,
         linked: 0,
-        message: 'Keine ausstehenden Verknüpfungen gefunden'
+        message: 'Keine ausstehenden Verknüpfungen gefunden',
+        debug: { userEmail: user.email, foundRecords: pendingLinks?.length || 0 }
       })
     }
 
-    // Link all matching records
+    // Link all matching records by their IDs
+    const idsToLink = acceptedLinks.map(link => link.id)
     const { error: updateError } = await adminClient
       .from('trusted_persons')
       .update({ linked_user_id: user.id })
-      .eq('email', user.email)
-      .eq('invitation_status', 'accepted')
-      .is('linked_user_id', null)
+      .in('id', idsToLink)
 
     if (updateError) {
       console.error('Error linking trusted person:', updateError)
       return NextResponse.json({ error: 'Verknüpfung fehlgeschlagen' }, { status: 500 })
     }
 
-    console.log(`Linked ${pendingLinks.length} trusted person record(s) for user ${user.id}`)
+    console.log(`Linked ${acceptedLinks.length} trusted person record(s) for user ${user.id}`)
 
     return NextResponse.json({
       success: true,
-      linked: pendingLinks.length,
-      message: `${pendingLinks.length} Verknüpfung(en) erstellt`
+      linked: acceptedLinks.length,
+      message: `${acceptedLinks.length} Verknüpfung(en) erstellt`
     })
   } catch (error: any) {
     console.error('Link trusted person error:', error)
