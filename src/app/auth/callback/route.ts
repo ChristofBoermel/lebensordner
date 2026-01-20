@@ -40,9 +40,29 @@ export async function GET(request: Request) {
             full_name: data.user.user_metadata?.full_name || '',
             onboarding_completed: false,
           })
-        
+
+        // Link any pending trusted person invitations
+        if (data.user.email) {
+          await supabaseAdmin
+            .from('trusted_persons')
+            .update({ linked_user_id: data.user.id })
+            .eq('email', data.user.email)
+            .eq('invitation_status', 'accepted')
+            .is('linked_user_id', null)
+        }
+
         // Always go to onboarding for new users
         return NextResponse.redirect(`${origin}/onboarding`)
+      }
+
+      // For existing users, also check for pending links
+      if (data.user.email) {
+        await supabaseAdmin
+          .from('trusted_persons')
+          .update({ linked_user_id: data.user.id })
+          .eq('email', data.user.email)
+          .eq('invitation_status', 'accepted')
+          .is('linked_user_id', null)
       }
       
       // If onboarding completed, go to dashboard, otherwise onboarding

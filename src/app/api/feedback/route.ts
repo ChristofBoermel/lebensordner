@@ -2,12 +2,12 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 
-const supabaseAdmin = createClient(
+const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const getResend = () => new Resend(process.env.RESEND_API_KEY)
 
 interface FeedbackRequest {
   email: string
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     }
 
     // Save feedback to database
-    const { data: feedback, error: dbError } = await supabaseAdmin
+    const { data: feedback, error: dbError } = await getSupabaseAdmin()
       .from('feedback')
       .insert({
         user_id: userId || null,
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     const supportEmail = process.env.SUPPORT_EMAIL || 'support@lebensordner.org'
 
     try {
-      await resend.emails.send({
+      await getResend().emails.send({
         from: 'Lebensordner Feedback <feedback@lebensordner.org>',
         to: supportEmail,
         replyTo: email,
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       })
 
       // Send confirmation email to user
-      await resend.emails.send({
+      await getResend().emails.send({
         from: 'Lebensordner <noreply@lebensordner.org>',
         to: email,
         subject: 'Ihr Feedback wurde empfangen',

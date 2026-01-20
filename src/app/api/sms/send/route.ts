@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 // Twilio SMS sending
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const getSupabaseAdmin = () => {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 interface SendSMSRequest {
   to: string
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
     // Check for user session
     if (!isAuthorized && authHeader?.startsWith('Bearer ')) {
       const token = authHeader.replace('Bearer ', '')
+      const supabaseAdmin = getSupabaseAdmin()
       const { data: { user } } = await supabaseAdmin.auth.getUser(token)
       if (user) {
         isAuthorized = true
