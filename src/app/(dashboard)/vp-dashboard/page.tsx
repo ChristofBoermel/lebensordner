@@ -75,6 +75,15 @@ export default function VPDashboardPage() {
 
   const supabase = createClient()
 
+  // Try to link any pending trusted person invitations when page loads
+  const linkPendingInvitations = useCallback(async () => {
+    try {
+      await fetch('/api/trusted-person/link', { method: 'POST' })
+    } catch (err) {
+      console.error('Error linking invitations:', err)
+    }
+  }, [])
+
   const fetchAccessRecords = useCallback(async () => {
     setIsLoading(true)
     try {
@@ -94,8 +103,13 @@ export default function VPDashboardPage() {
   }, [])
 
   useEffect(() => {
-    fetchAccessRecords()
-  }, [fetchAccessRecords])
+    // First try to link any pending invitations, then fetch access records
+    const init = async () => {
+      await linkPendingInvitations()
+      await fetchAccessRecords()
+    }
+    init()
+  }, [linkPendingInvitations, fetchAccessRecords])
 
   const fetchOwnerDocuments = async (ownerId: string) => {
     try {
