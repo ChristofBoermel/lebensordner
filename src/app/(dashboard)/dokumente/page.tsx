@@ -109,6 +109,7 @@ export default function DocumentsPage() {
   const [uploadTitle, setUploadTitle] = useState('')
   const [uploadNotes, setUploadNotes] = useState('')
   const [uploadExpiryDate, setUploadExpiryDate] = useState('')
+  const [uploadCustomReminderDays, setUploadCustomReminderDays] = useState<number | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
 
@@ -320,6 +321,7 @@ export default function DocumentsPage() {
           file_size: uploadFile.size,
           file_type: uploadFile.type || 'application/octet-stream',
           expiry_date: uploadExpiryDate || null,
+          custom_reminder_days: uploadCustomReminderDays,
         })
 
       if (insertError) throw insertError
@@ -343,6 +345,7 @@ export default function DocumentsPage() {
       setUploadTitle('')
       setUploadNotes('')
       setUploadExpiryDate('')
+      setUploadCustomReminderDays(null)
       setUploadSubcategory(null)
       setIsUploadOpen(false)
       fetchDocuments()
@@ -1241,6 +1244,38 @@ export default function DocumentsPage() {
                 Sie werden automatisch erinnert, wenn das Dokument bald abläuft
               </p>
             </div>
+
+            {/* Custom Reminder - only show when expiry date is set */}
+            {uploadExpiryDate && (
+              <div className="space-y-2">
+                <Label>Erinnerung (optional)</Label>
+                <select
+                  value={uploadCustomReminderDays === null ? '_default' : uploadCustomReminderDays.toString()}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === '_default') {
+                      setUploadCustomReminderDays(null)
+                    } else {
+                      setUploadCustomReminderDays(parseInt(value))
+                    }
+                  }}
+                  className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
+                >
+                  <option value="_default">Standard (aus Einstellungen)</option>
+                  <option value="1">1 Tag vorher</option>
+                  <option value="3">3 Tage vorher</option>
+                  <option value="7">7 Tage vorher</option>
+                  <option value="14">14 Tage vorher</option>
+                  <option value="30">1 Monat vorher</option>
+                  <option value="60">2 Monate vorher</option>
+                  <option value="90">3 Monate vorher</option>
+                  <option value="180">6 Monate vorher</option>
+                </select>
+                <p className="text-xs text-warmgray-500">
+                  Überschreibt die allgemeine Erinnerungseinstellung für dieses Dokument
+                </p>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
