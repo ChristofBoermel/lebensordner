@@ -348,51 +348,36 @@ export interface Database {
           reminder_type?: 'document_expiry' | 'annual_review' | 'custom'
         }
       }
-      emergency_access_requests: {
+      download_tokens: {
         Row: {
           id: string
-          trusted_person_id: string
-          requester_id: string
-          owner_id: string
-          status: 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled'
-          reason: string | null
+          user_id: string
+          token: string
           created_at: string
-          updated_at: string
-          approved_at: string | null
-          denied_at: string | null
-          expires_at: string | null
-          approved_by: string | null
-          denial_reason: string | null
+          expires_at: string
+          used_at: string | null
+          recipient_name: string | null
+          recipient_email: string | null
         }
         Insert: {
           id?: string
-          trusted_person_id: string
-          requester_id: string
-          owner_id: string
-          status?: 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled'
-          reason?: string | null
+          user_id: string
+          token: string
           created_at?: string
-          updated_at?: string
-          approved_at?: string | null
-          denied_at?: string | null
-          expires_at?: string | null
-          approved_by?: string | null
-          denial_reason?: string | null
+          expires_at: string
+          used_at?: string | null
+          recipient_name?: string | null
+          recipient_email?: string | null
         }
         Update: {
           id?: string
-          trusted_person_id?: string
-          requester_id?: string
-          owner_id?: string
-          status?: 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled'
-          reason?: string | null
+          user_id?: string
+          token?: string
           created_at?: string
-          updated_at?: string
-          approved_at?: string | null
-          denied_at?: string | null
-          expires_at?: string | null
-          approved_by?: string | null
-          denial_reason?: string | null
+          expires_at?: string
+          used_at?: string | null
+          recipient_name?: string | null
+          recipient_email?: string | null
         }
       }
     }
@@ -415,7 +400,7 @@ export type Document = Database['public']['Tables']['documents']['Row'] & {
 }
 export type TrustedPerson = Database['public']['Tables']['trusted_persons']['Row']
 export type Reminder = Database['public']['Tables']['reminders']['Row']
-export type EmergencyAccessRequest = Database['public']['Tables']['emergency_access_requests']['Row']
+export type DownloadToken = Database['public']['Tables']['download_tokens']['Row']
 
 // Subcategory for folder structure
 export interface Subcategory {
