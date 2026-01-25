@@ -194,6 +194,7 @@ export interface Database {
           expiry_date: string | null
           reminder_date: string | null
           subcategory_id: string | null
+          custom_reminder_days: number | null
         }
         Insert: {
           id?: string
@@ -210,6 +211,7 @@ export interface Database {
           expiry_date?: string | null
           reminder_date?: string | null
           subcategory_id?: string | null
+          custom_reminder_days?: number | null
         }
         Update: {
           id?: string
@@ -226,6 +228,7 @@ export interface Database {
           expiry_date?: string | null
           reminder_date?: string | null
           subcategory_id?: string | null
+          custom_reminder_days?: number | null
         }
       }
       subcategories: {

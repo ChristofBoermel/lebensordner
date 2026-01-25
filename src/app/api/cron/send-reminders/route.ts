@@ -35,6 +35,7 @@ interface ExpiringDocument {
   title: string
   category: string
   expiry_date: string
+  custom_reminder_days: number | null
   user_id: string
   profiles: {
     email: string
@@ -185,6 +186,7 @@ export async function GET(request: Request) {
         title,
         category,
         expiry_date,
+        custom_reminder_days,
         expiry_reminder_sent,
         user_id,
         profiles!documents_user_id_fkey (
@@ -213,11 +215,15 @@ export async function GET(request: Request) {
         const expiryDate = new Date(doc.expiry_date)
         const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 
+        // Use custom reminder days if set, otherwise use profile default
+        const emailReminderDays = doc.custom_reminder_days ?? profile.email_reminder_days_before
+        const smsReminderDays = doc.custom_reminder_days ?? profile.sms_reminder_days_before
+
         let emailSent = false
         let smsSent = false
 
         // Send email reminder
-        if (profile.email_reminders_enabled && daysUntilExpiry <= profile.email_reminder_days_before) {
+        if (profile.email_reminders_enabled && daysUntilExpiry <= emailReminderDays) {
           try {
             await getResend().emails.send({
               from: 'Lebensordner <erinnerung@lebensordner.org>',
@@ -244,7 +250,7 @@ export async function GET(request: Request) {
         }
 
         // Send SMS reminder
-        if (profile.sms_reminders_enabled && profile.phone && daysUntilExpiry <= profile.sms_reminder_days_before) {
+        if (profile.sms_reminders_enabled && profile.phone && daysUntilExpiry <= smsReminderDays) {
           try {
             const smsMessage = `Lebensordner: "${doc.title}" läuft in ${daysUntilExpiry} Tag${daysUntilExpiry > 1 ? 'en' : ''} ab.`
             await sendSMS(profile.phone, smsMessage)
