@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,79 +19,48 @@ import {
   Users,
   UserPlus,
   Shield,
-  Clock,
-  AlertTriangle,
   Mail,
   Phone,
   Edit2,
   Trash2,
   Loader2,
-  Info,
   CheckCircle2,
   XCircle,
   Send,
   Crown,
-  Bell,
-  ShieldAlert
+  Link2,
+  Clock,
+  Download,
+  Copy,
+  ExternalLink
 } from 'lucide-react'
 import type { TrustedPerson } from '@/types/database'
 import { SUBSCRIPTION_TIERS, getTierFromSubscription, canPerformAction, type TierConfig } from '@/lib/subscription-tiers'
 import Link from 'next/link'
 
-const ACCESS_LEVELS = {
-  immediate: {
-    name: 'Sofortiger Zugriff',
-    description: 'Kann jederzeit auf Ihre Dokumente zugreifen',
-    color: 'text-green-600 bg-green-50 border-green-200',
-    icon: CheckCircle2,
-  },
-  emergency: {
-    name: 'Notfall-Zugriff',
-    description: 'Zugriff nach Wartezeit möglich',
-    color: 'text-amber-600 bg-amber-50 border-amber-200',
-    icon: Clock,
-  },
-  after_confirmation: {
-    name: 'Nach Bestätigung',
-    description: 'Zugriff nur nach Ihrer expliziten Freigabe',
-    color: 'text-blue-600 bg-blue-50 border-blue-200',
-    icon: Shield,
-  },
-}
-
-interface EmergencyAccessRequest {
-  id: string
-  trusted_person_id: string
-  requester_id: string
-  status: string
-  reason: string | null
-  created_at: string
-  requester_name?: string
-  trusted_person_name?: string
-}
-
 export default function ZugriffPage() {
-  const searchParams = useSearchParams()
-  const shouldOpenAdd = searchParams.get('add') === 'true'
-  const approveRequestId = searchParams.get('approve')
-
   const [trustedPersons, setTrustedPersons] = useState<TrustedPerson[]>([])
-  const [pendingRequests, setPendingRequests] = useState<EmergencyAccessRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isDownloadLinkDialogOpen, setIsDownloadLinkDialogOpen] = useState(false)
   const [editingPerson, setEditingPerson] = useState<TrustedPerson | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [userTier, setUserTier] = useState<TierConfig>(SUBSCRIPTION_TIERS.free)
-  const [isRespondingToRequest, setIsRespondingToRequest] = useState<string | null>(null)
+
+  const [downloadLinkForm, setDownloadLinkForm] = useState({
+    name: '',
+    email: '',
+  })
+  const [generatedLink, setGeneratedLink] = useState<{ url: string; expiresAt: string } | null>(null)
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
 
   const [form, setForm] = useState({
     name: '',
     email: '',
     phone: '',
     relationship: '',
-    access_level: 'emergency' as TrustedPerson['access_level'],
-    access_delay_hours: 48,
     notes: '',
   })
 
@@ -136,52 +104,9 @@ export default function ZugriffPage() {
     setIsLoading(false)
   }, [supabase])
 
-  const fetchPendingRequests = useCallback(async () => {
-    try {
-      const response = await fetch('/api/emergency-access/pending')
-      const data = await response.json()
-      if (response.ok && data.requests) {
-        setPendingRequests(data.requests)
-      }
-    } catch (err) {
-      console.error('Error fetching pending requests:', err)
-    }
-  }, [])
-
   useEffect(() => {
     fetchTrustedPersons()
-    fetchPendingRequests()
-  }, [fetchTrustedPersons, fetchPendingRequests])
-
-  const handleRespondToRequest = async (requestId: string, action: 'approve' | 'deny') => {
-    setIsRespondingToRequest(requestId)
-    try {
-      const response = await fetch('/api/emergency-access/respond', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId, action }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Fehler bei der Verarbeitung')
-      }
-
-      fetchPendingRequests()
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setIsRespondingToRequest(null)
-    }
-  }
-
-  // Open dialog if URL param is set and user can add persons
-  useEffect(() => {
-    if (shouldOpenAdd && canPerformAction(userTier, 'addTrustedPerson', trustedPersons.length)) {
-      setIsDialogOpen(true)
-    }
-  }, [shouldOpenAdd, userTier, trustedPersons.length])
+  }, [fetchTrustedPersons])
 
   const handleOpenDialog = (person?: TrustedPerson) => {
     if (person) {
@@ -191,8 +116,6 @@ export default function ZugriffPage() {
         email: person.email,
         phone: person.phone || '',
         relationship: person.relationship,
-        access_level: person.access_level,
-        access_delay_hours: person.access_delay_hours,
         notes: person.notes || '',
       })
     } else {
@@ -202,13 +125,62 @@ export default function ZugriffPage() {
         email: '',
         phone: '',
         relationship: '',
-        access_level: 'emergency',
-        access_delay_hours: 48,
         notes: '',
       })
     }
     setError(null)
     setIsDialogOpen(true)
+  }
+
+  const handleOpenDownloadLinkDialog = () => {
+    setDownloadLinkForm({ name: '', email: '' })
+    setGeneratedLink(null)
+    setError(null)
+    setIsDownloadLinkDialogOpen(true)
+  }
+
+  const handleGenerateDownloadLink = async () => {
+    if (!downloadLinkForm.name || !downloadLinkForm.email) {
+      setError('Bitte füllen Sie Name und E-Mail aus.')
+      return
+    }
+
+    setIsGeneratingLink(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/download-link/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipientName: downloadLinkForm.name,
+          recipientEmail: downloadLinkForm.email,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Fehler beim Erstellen')
+      }
+
+      setGeneratedLink({
+        url: data.downloadUrl,
+        expiresAt: data.expiresAt,
+      })
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setIsGeneratingLink(false)
+    }
+  }
+
+  const copyLinkToClipboard = async () => {
+    if (generatedLink?.url) {
+      await navigator.clipboard.writeText(generatedLink.url)
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2000)
+    }
   }
 
   const handleSave = async () => {
@@ -232,15 +204,12 @@ export default function ZugriffPage() {
             email: form.email,
             phone: form.phone || null,
             relationship: form.relationship,
-            access_level: form.access_level,
-            access_delay_hours: form.access_delay_hours,
             notes: form.notes || null,
           })
           .eq('id', editingPerson.id)
 
         if (error) throw error
       } else {
-        // Check limit based on tier
         if (!canPerformAction(userTier, 'addTrustedPerson', trustedPersons.length)) {
           if (userTier.limits.maxTrustedPersons === 0) {
             setError('Vertrauenspersonen sind nur mit einem kostenpflichtigen Abo verfügbar.')
@@ -258,8 +227,8 @@ export default function ZugriffPage() {
             email: form.email,
             phone: form.phone || null,
             relationship: form.relationship,
-            access_level: form.access_level,
-            access_delay_hours: form.access_delay_hours,
+            access_level: 'immediate', // Default to immediate access for family dashboard
+            access_delay_hours: 0,
             notes: form.notes || null,
           })
 
@@ -277,7 +246,7 @@ export default function ZugriffPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Möchten Sie diese Vertrauensperson wirklich entfernen?')) return
+    if (!confirm('Möchten Sie diese Person wirklich entfernen?')) return
 
     try {
       const { error } = await supabase
@@ -349,26 +318,91 @@ export default function ZugriffPage() {
           Zugriff & Familie
         </h1>
         <p className="text-lg text-warmgray-600 mt-2">
-          Bestimmen Sie, wer im Notfall auf Ihre Informationen zugreifen darf
+          Teilen Sie Ihre Dokumente mit vertrauten Personen
         </p>
       </div>
 
-      {/* Info Card */}
-      <Card className="border-sage-200 bg-sage-50">
-        <CardContent className="pt-6">
-          <div className="flex gap-4">
-            <Shield className="w-6 h-6 text-sage-600 flex-shrink-0" />
-            <div>
-              <p className="font-medium text-warmgray-900 mb-1">So funktioniert der Zugriff</p>
-              <p className="text-sm text-warmgray-600">
-                Vertrauenspersonen erhalten im Notfall Zugang zu Ihren hinterlegten Informationen.
-                Sie können für jede Person festlegen, ob der Zugriff sofort, nach einer Wartezeit
-                oder nur nach Ihrer Bestätigung möglich sein soll.
-              </p>
+      {/* Two Options Cards */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Option 1: One-Time Download Link */}
+        <Card className="border-sage-200">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center">
+                <Link2 className="w-6 h-6 text-sage-600" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Einmal-Download-Link</CardTitle>
+                <CardDescription>Für schnellen Zugriff ohne Anmeldung</CardDescription>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <ul className="space-y-2 text-sm text-warmgray-600">
+              <li className="flex items-start gap-2">
+                <Clock className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
+                <span>Link ist 12 Stunden gültig</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Download className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
+                <span>Alle Dokumente als ZIP-Datei</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Shield className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
+                <span>Keine Registrierung nötig</span>
+              </li>
+            </ul>
+            <Button
+              onClick={handleOpenDownloadLinkDialog}
+              className="w-full"
+              disabled={maxTrustedPersons === 0}
+            >
+              <Link2 className="w-4 h-4 mr-2" />
+              Download-Link erstellen
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Option 2: Family Dashboard Invitation */}
+        <Card className="border-sage-200">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center">
+                <Users className="w-6 h-6 text-sage-600" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Familien-Übersicht</CardTitle>
+                <CardDescription>Dauerhafter Zugang mit eigenem Konto</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <ul className="space-y-2 text-sm text-warmgray-600">
+              <li className="flex items-start gap-2">
+                <Users className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
+                <span>Gegenseitige Verbindung in der Familie</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Download className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
+                <span>Jederzeit Dokumente herunterladen</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Shield className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
+                <span>Registrierung erforderlich</span>
+              </li>
+            </ul>
+            <Button
+              onClick={() => handleOpenDialog()}
+              className="w-full"
+              disabled={!canAddMore}
+              variant="outline"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Person einladen
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Upgrade prompt for free tier */}
       {maxTrustedPersons === 0 && (
@@ -377,9 +411,9 @@ export default function ZugriffPage() {
             <div className="flex items-start gap-4">
               <Crown className="w-6 h-6 text-amber-600 flex-shrink-0" />
               <div className="flex-1">
-                <p className="font-medium text-amber-900 mb-1">Vertrauenspersonen hinzufügen</p>
+                <p className="font-medium text-amber-900 mb-1">Premium-Funktion</p>
                 <p className="text-sm text-amber-800 mb-3">
-                  Mit einem kostenpflichtigen Abo können Sie Vertrauenspersonen hinzufügen, die im Notfall auf Ihre Dokumente zugreifen dürfen.
+                  Mit einem kostenpflichtigen Abo können Sie Dokumente mit Vertrauenspersonen teilen.
                 </p>
                 <Link href="/abo">
                   <Button size="sm" variant="outline" className="border-amber-300 hover:bg-amber-100">
@@ -392,108 +426,34 @@ export default function ZugriffPage() {
         </Card>
       )}
 
-      {/* Pending Emergency Access Requests */}
-      {pendingRequests.length > 0 && (
-        <Card className="border-red-200 bg-red-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-red-700">
-              <ShieldAlert className="w-5 h-5" />
-              Offene Notfallzugriff-Anfragen ({pendingRequests.length})
-            </CardTitle>
-            <CardDescription className="text-red-600">
-              Folgende Personen haben Notfallzugriff auf Ihre Dokumente angefordert
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {pendingRequests.map((request) => (
-                <div key={request.id} className="flex items-start justify-between p-4 rounded-lg bg-white border border-red-200">
-                  <div>
-                    <p className="font-medium text-warmgray-900">{request.requester_name}</p>
-                    <p className="text-sm text-warmgray-600">als {request.trusted_person_name}</p>
-                    {request.reason && (
-                      <p className="text-sm text-warmgray-500 mt-1 italic">"{request.reason}"</p>
-                    )}
-                    <p className="text-xs text-warmgray-400 mt-1">
-                      Angefragt am {new Date(request.created_at).toLocaleDateString('de-DE')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleRespondToRequest(request.id, 'deny')}
-                      disabled={isRespondingToRequest === request.id}
-                      className="text-red-600 border-red-200 hover:bg-red-100"
-                    >
-                      {isRespondingToRequest === request.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <XCircle className="w-4 h-4 mr-1" />
-                          Ablehnen
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => handleRespondToRequest(request.id, 'approve')}
-                      disabled={isRespondingToRequest === request.id}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      {isRespondingToRequest === request.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 mr-1" />
-                          Genehmigen
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Add Person Button */}
-      {maxTrustedPersons > 0 && (
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-warmgray-600">
-              {trustedPersons.length} von {maxTrustedPersons} Vertrauenspersonen
-            </p>
-          </div>
-          <Button onClick={() => handleOpenDialog()} disabled={!canAddMore}>
-            <UserPlus className="w-4 h-4 mr-2" />
-            Person hinzufügen
-          </Button>
-        </div>
-      )}
-
       {/* Trusted Persons List */}
-      {trustedPersons.length > 0 ? (
-        <Tabs defaultValue="active">
-          <TabsList>
-            <TabsTrigger value="active">
-              Aktiv ({activePersons.length})
-            </TabsTrigger>
-            {inactivePersons.length > 0 && (
-              <TabsTrigger value="inactive">
-                Deaktiviert ({inactivePersons.length})
-              </TabsTrigger>
+      {trustedPersons.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold text-warmgray-900">Eingeladene Personen</h2>
+            {maxTrustedPersons > 0 && (
+              <p className="text-warmgray-600">
+                {trustedPersons.length} von {maxTrustedPersons}
+              </p>
             )}
-          </TabsList>
+          </div>
 
-          <TabsContent value="active" className="mt-6">
-            {activePersons.length > 0 ? (
-              <div className="space-y-4">
-                {activePersons.map((person) => {
-                  const accessInfo = ACCESS_LEVELS[person.access_level]
-                  const AccessIcon = accessInfo.icon
-                  return (
+          <Tabs defaultValue="active">
+            <TabsList>
+              <TabsTrigger value="active">
+                Aktiv ({activePersons.length})
+              </TabsTrigger>
+              {inactivePersons.length > 0 && (
+                <TabsTrigger value="inactive">
+                  Deaktiviert ({inactivePersons.length})
+                </TabsTrigger>
+              )}
+            </TabsList>
+
+            <TabsContent value="active" className="mt-6">
+              {activePersons.length > 0 ? (
+                <div className="space-y-4">
+                  {activePersons.map((person) => (
                     <Card key={person.id}>
                       <CardContent className="pt-6">
                         <div className="flex items-start justify-between">
@@ -515,14 +475,6 @@ export default function ZugriffPage() {
                                     <Phone className="w-4 h-4" />
                                     {person.phone}
                                   </span>
-                                )}
-                              </div>
-
-                              <div className={`inline-flex items-center gap-2 mt-3 px-3 py-1.5 rounded-lg border ${accessInfo.color}`}>
-                                <AccessIcon className="w-4 h-4" />
-                                <span className="text-sm font-medium">{accessInfo.name}</span>
-                                {person.access_level === 'emergency' && (
-                                  <span className="text-xs">({person.access_delay_hours}h Wartezeit)</span>
                                 )}
                               </div>
 
@@ -553,8 +505,9 @@ export default function ZugriffPage() {
                               </span>
                             )}
                             {person.invitation_status === 'accepted' && (
-                              <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                                Akzeptiert
+                              <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Verbunden
                               </span>
                             )}
                             <Button
@@ -586,66 +539,68 @@ export default function ZugriffPage() {
                         </div>
                       </CardContent>
                     </Card>
-                  )
-                })}
-              </div>
-            ) : (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Users className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
-                  <p className="text-warmgray-600">
-                    Keine aktiven Vertrauenspersonen
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          {inactivePersons.length > 0 && (
-            <TabsContent value="inactive" className="mt-6">
-              <div className="space-y-4">
-                {inactivePersons.map((person) => (
-                  <Card key={person.id} className="opacity-60">
-                    <CardContent className="pt-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex gap-4">
-                          <div className="w-12 h-12 rounded-full bg-warmgray-100 flex items-center justify-center flex-shrink-0">
-                            <Users className="w-6 h-6 text-warmgray-400" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-warmgray-700">{person.name}</h3>
-                            <p className="text-sm text-warmgray-500">{person.relationship}</p>
-                            <p className="text-sm text-warmgray-500 mt-1">{person.email}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleToggleActive(person)}
-                          >
-                            <CheckCircle2 className="w-4 h-4 mr-1" />
-                            Aktivieren
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(person.id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <Users className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
+                    <p className="text-warmgray-600">
+                      Keine aktiven Vertrauenspersonen
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
-          )}
-        </Tabs>
-      ) : maxTrustedPersons > 0 ? (
+
+            {inactivePersons.length > 0 && (
+              <TabsContent value="inactive" className="mt-6">
+                <div className="space-y-4">
+                  {inactivePersons.map((person) => (
+                    <Card key={person.id} className="opacity-60">
+                      <CardContent className="pt-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex gap-4">
+                            <div className="w-12 h-12 rounded-full bg-warmgray-100 flex items-center justify-center flex-shrink-0">
+                              <Users className="w-6 h-6 text-warmgray-400" />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-warmgray-700">{person.name}</h3>
+                              <p className="text-sm text-warmgray-500">{person.relationship}</p>
+                              <p className="text-sm text-warmgray-500 mt-1">{person.email}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleActive(person)}
+                            >
+                              <CheckCircle2 className="w-4 h-4 mr-1" />
+                              Aktivieren
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(person.id)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </TabsContent>
+            )}
+          </Tabs>
+        </div>
+      )}
+
+      {trustedPersons.length === 0 && maxTrustedPersons > 0 && (
         <Card>
           <CardContent className="py-12 text-center">
             <Users className="w-16 h-16 text-warmgray-300 mx-auto mb-4" />
@@ -653,32 +608,140 @@ export default function ZugriffPage() {
               Noch keine Vertrauenspersonen
             </h3>
             <p className="text-warmgray-600 mb-6 max-w-md mx-auto">
-              Fügen Sie Personen hinzu, die im Notfall auf Ihre hinterlegten
-              Informationen zugreifen dürfen.
+              Wählen Sie oben eine der Optionen, um Ihre Dokumente mit einer vertrauten Person zu teilen.
             </p>
-            <Button onClick={() => handleOpenDialog()}>
-              <UserPlus className="w-4 h-4 mr-2" />
-              Erste Person hinzufügen
-            </Button>
           </CardContent>
         </Card>
-      ) : null}
+      )}
 
-      {/* Add/Edit Dialog */}
+      {/* Download Link Dialog */}
+      <Dialog open={isDownloadLinkDialogOpen} onOpenChange={setIsDownloadLinkDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="w-5 h-5 text-sage-600" />
+              Einmal-Download-Link erstellen
+            </DialogTitle>
+            <DialogDescription>
+              Erstellen Sie einen Link, mit dem die Person alle Ihre Dokumente als ZIP-Datei herunterladen kann.
+              Der Link ist 12 Stunden gültig und kann nur einmal verwendet werden.
+            </DialogDescription>
+          </DialogHeader>
+
+          {generatedLink ? (
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg bg-green-50 border border-green-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  <span className="font-medium text-green-800">Link erstellt und per E-Mail gesendet!</span>
+                </div>
+                <p className="text-sm text-green-700">
+                  {downloadLinkForm.name} wurde per E-Mail benachrichtigt.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Download-Link</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={generatedLink.url}
+                    readOnly
+                    className="font-mono text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={copyLinkToClipboard}
+                    title="Link kopieren"
+                  >
+                    {linkCopied ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              <p className="text-sm text-warmgray-500">
+                Gültig bis: {new Date(generatedLink.expiresAt).toLocaleDateString('de-DE')}{' '}
+                {new Date(generatedLink.expiresAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
+              </p>
+
+              <DialogFooter>
+                <Button onClick={() => setIsDownloadLinkDialogOpen(false)}>
+                  Schließen
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4">
+                {error && (
+                  <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="dl-name">Name des Empfängers *</Label>
+                  <Input
+                    id="dl-name"
+                    value={downloadLinkForm.name}
+                    onChange={(e) => setDownloadLinkForm({ ...downloadLinkForm, name: e.target.value })}
+                    placeholder="Max Mustermann"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dl-email">E-Mail-Adresse *</Label>
+                  <Input
+                    id="dl-email"
+                    type="email"
+                    value={downloadLinkForm.email}
+                    onChange={(e) => setDownloadLinkForm({ ...downloadLinkForm, email: e.target.value })}
+                    placeholder="max@beispiel.de"
+                  />
+                  <p className="text-xs text-warmgray-500">
+                    Der Link wird automatisch an diese E-Mail-Adresse gesendet.
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDownloadLinkDialogOpen(false)}>
+                  Abbrechen
+                </Button>
+                <Button onClick={handleGenerateDownloadLink} disabled={isGeneratingLink}>
+                  {isGeneratingLink ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Erstellen...
+                    </>
+                  ) : (
+                    <>
+                      <Link2 className="mr-2 h-4 w-4" />
+                      Link erstellen
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add/Edit Person Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editingPerson ? 'Vertrauensperson bearbeiten' : 'Vertrauensperson hinzufügen'}
+              {editingPerson ? 'Person bearbeiten' : 'Person zur Familien-Übersicht einladen'}
             </DialogTitle>
             <DialogDescription>
               {editingPerson
-                ? 'Aktualisieren Sie die Daten dieser Vertrauensperson.'
-                : 'Fügen Sie eine Person hinzu, die im Notfall auf Ihre Daten zugreifen darf.'}
+                ? 'Aktualisieren Sie die Daten dieser Person.'
+                : 'Laden Sie eine Person ein, die dann Zugriff auf Ihre Dokumente in der Familien-Übersicht hat.'}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+          <div className="space-y-4">
             {error && (
               <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                 {error}
@@ -726,56 +789,6 @@ export default function ZugriffPage() {
                 placeholder="z.B. Sohn, Tochter, Ehepartner"
               />
             </div>
-
-            <div className="space-y-3">
-              <Label>Zugriffsart</Label>
-              <div className="space-y-2">
-                {Object.entries(ACCESS_LEVELS).map(([key, level]) => {
-                  const Icon = level.icon
-                  return (
-                    <label
-                      key={key}
-                      className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
-                        form.access_level === key
-                          ? 'border-sage-500 bg-sage-50'
-                          : 'border-warmgray-200 hover:border-warmgray-300'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="access_level"
-                        value={key}
-                        checked={form.access_level === key}
-                        onChange={() => setForm({ ...form, access_level: key as TrustedPerson['access_level'] })}
-                        className="sr-only"
-                      />
-                      <Icon className={`w-5 h-5 mt-0.5 ${form.access_level === key ? 'text-sage-600' : 'text-warmgray-400'}`} />
-                      <div>
-                        <p className="font-medium text-warmgray-900">{level.name}</p>
-                        <p className="text-sm text-warmgray-500">{level.description}</p>
-                      </div>
-                    </label>
-                  )
-                })}
-              </div>
-            </div>
-
-            {form.access_level === 'emergency' && (
-              <div className="space-y-2">
-                <Label htmlFor="delay">Wartezeit (Stunden)</Label>
-                <Input
-                  id="delay"
-                  type="number"
-                  min="1"
-                  max="168"
-                  value={form.access_delay_hours}
-                  onChange={(e) => setForm({ ...form, access_delay_hours: parseInt(e.target.value) || 48 })}
-                />
-                <p className="text-xs text-warmgray-500">
-                  Nach dieser Zeit kann die Person auf Ihre Daten zugreifen, wenn Sie nicht reagieren.
-                </p>
-              </div>
-            )}
 
             <div className="space-y-2">
               <Label htmlFor="notes">Notizen (optional)</Label>

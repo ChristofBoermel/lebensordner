@@ -30,8 +30,7 @@ import {
   CreditCard,
   Shield,
   Search,
-  MessageSquare,
-  ShieldAlert
+  MessageSquare
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { GlobalSearch } from '@/components/search/global-search'
@@ -49,7 +48,7 @@ const navigation = [
   { name: 'Dokumente', href: '/dokumente', icon: FileText },
   { name: 'Notfall & Vorsorge', href: '/notfall', icon: Heart },
   { name: 'Zugriff & Familie', href: '/zugriff', icon: Users },
-  { name: 'VP-Dashboard', href: '/vp-dashboard', icon: ShieldAlert },
+  { name: 'Familien-Übersicht', href: '/vp-dashboard', icon: Users },
   { name: 'Erinnerungen', href: '/erinnerungen', icon: Bell },
   { name: 'Export', href: '/export', icon: FileDown },
   { name: 'Abonnement', href: '/abo', icon: CreditCard },
