@@ -97,6 +97,7 @@ export default function DocumentsPage() {
   const [subcategories, setSubcategories] = useState<Subcategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState<DocumentCategory | null>(initialCategory)
+  const [activeTab, setActiveTab] = useState<string>(initialCategory || 'overview')
   const [isUploadOpen, setIsUploadOpen] = useState(shouldOpenUpload)
   const [uploadCategory, setUploadCategory] = useState<DocumentCategory | null>(initialCategory)
   const [uploadSubcategory, setUploadSubcategory] = useState<string | null>(null)
@@ -1195,8 +1196,9 @@ export default function DocumentsPage() {
 
       {/* Category Tabs */}
       <Tabs
-        value={selectedCustomCategory ? `custom:${selectedCustomCategory}` : (selectedCategory || 'overview')}
+        value={activeTab}
         onValueChange={(val) => {
+          setActiveTab(val)
           if (val.startsWith('custom:')) {
             const customId = val.replace('custom:', '')
             setSelectedCustomCategory(customId)
@@ -1245,7 +1247,14 @@ export default function DocumentsPage() {
               </TabsTrigger>
             )
           })}
-          {/* Add Category Button */}
+          {/* All Tab */}
+          <TabsTrigger
+            value="all"
+            className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700"
+          >
+            Alle ({documents.length})
+          </TabsTrigger>
+          {/* Add Category Button - Last */}
           {userTier.limits.maxCustomCategories !== 0 && (userTier.limits.maxCustomCategories === -1 || customCategories.length < userTier.limits.maxCustomCategories) && (
             <Button
               variant="ghost"
@@ -1257,13 +1266,6 @@ export default function DocumentsPage() {
               Neue Kategorie
             </Button>
           )}
-          {/* All Tab - Last */}
-          <TabsTrigger
-            value="all"
-            className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700"
-          >
-            Alle ({documents.length})
-          </TabsTrigger>
         </TabsList>
 
         {/* Overview - Shows 3 newest documents + category overview */}
@@ -1291,57 +1293,6 @@ export default function DocumentsPage() {
                     </Button>
                   </div>
                 )}
-              </div>
-
-              {/* Category Overview */}
-              <div>
-                <h2 className="text-lg font-semibold text-warmgray-900 mb-4">Kategorien</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
-                    const count = getDocumentCountForCategory(key as DocumentCategory)
-                    const Icon = iconMap[category.icon] || FileText
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => {
-                          setSelectedCategory(key as DocumentCategory)
-                          setSelectedCustomCategory(null)
-                        }}
-                        className="flex items-center gap-4 p-4 rounded-lg border border-warmgray-200 bg-white hover:bg-warmgray-50 hover:border-sage-300 transition-colors text-left"
-                      >
-                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${categoryColorMap[key] || 'bg-sage-100 text-sage-600'}`}>
-                          <Icon className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-warmgray-900">{category.name}</p>
-                          <p className="text-sm text-warmgray-500">{count} Dokument{count !== 1 ? 'e' : ''}</p>
-                        </div>
-                      </button>
-                    )
-                  })}
-                  {/* Custom Categories in Overview */}
-                  {customCategories.map((cat) => {
-                    const count = getDocumentCountForCustomCategory(cat.id)
-                    return (
-                      <button
-                        key={cat.id}
-                        onClick={() => {
-                          setSelectedCustomCategory(cat.id)
-                          setSelectedCategory(null)
-                        }}
-                        className="flex items-center gap-4 p-4 rounded-lg border border-warmgray-200 bg-white hover:bg-warmgray-50 hover:border-sage-300 transition-colors text-left"
-                      >
-                        <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-sage-100 text-sage-600">
-                          <Tag className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-warmgray-900">{cat.name}</p>
-                          <p className="text-sm text-warmgray-500">{count} Dokument{count !== 1 ? 'e' : ''}</p>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
               </div>
             </div>
           )}
