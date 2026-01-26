@@ -72,6 +72,20 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   church: Church,
 }
 
+const categoryColorMap: Record<string, string> = {
+  identitaet: 'bg-blue-100 text-blue-600',
+  finanzen: 'bg-emerald-100 text-emerald-600',
+  versicherungen: 'bg-amber-100 text-amber-600',
+  wohnen: 'bg-orange-100 text-orange-600',
+  gesundheit: 'bg-red-100 text-red-600',
+  vertraege: 'bg-purple-100 text-purple-600',
+  rente: 'bg-indigo-100 text-indigo-600',
+  familie: 'bg-pink-100 text-pink-600',
+  arbeit: 'bg-cyan-100 text-cyan-600',
+  religion: 'bg-violet-100 text-violet-600',
+  sonstiges: 'bg-warmgray-100 text-warmgray-600',
+}
+
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
 
 export default function DocumentsPage() {
@@ -1181,25 +1195,29 @@ export default function DocumentsPage() {
 
       {/* Category Tabs */}
       <Tabs
-        value={selectedCustomCategory ? `custom:${selectedCustomCategory}` : (selectedCategory || 'all')}
+        value={selectedCustomCategory ? `custom:${selectedCustomCategory}` : (selectedCategory || 'overview')}
         onValueChange={(val) => {
           if (val.startsWith('custom:')) {
             const customId = val.replace('custom:', '')
             setSelectedCustomCategory(customId)
             setSelectedCategory(null)
+          } else if (val === 'overview' || val === 'all') {
+            setSelectedCustomCategory(null)
+            setSelectedCategory(null)
           } else {
             setSelectedCustomCategory(null)
-            setSelectedCategory(val === 'all' ? null : val as DocumentCategory)
+            setSelectedCategory(val as DocumentCategory)
           }
           setCurrentFolder(null) // Reset folder when changing category
         }}
       >
         <TabsList className="w-full h-auto flex-wrap justify-start bg-transparent gap-2 p-0">
+          {/* Overview Tab - First */}
           <TabsTrigger
-            value="all"
+            value="overview"
             className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700"
           >
-            Alle ({documents.length})
+            Übersicht
           </TabsTrigger>
           {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
             const count = getDocumentCountForCategory(key as DocumentCategory)
@@ -1239,9 +1257,97 @@ export default function DocumentsPage() {
               Neue Kategorie
             </Button>
           )}
+          {/* All Tab - Last */}
+          <TabsTrigger
+            value="all"
+            className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700"
+          >
+            Alle ({documents.length})
+          </TabsTrigger>
         </TabsList>
 
-        {/* All categories view */}
+        {/* Overview - Shows 3 newest documents + category overview */}
+        <TabsContent value="overview" className="mt-6">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-sage-600" />
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Recent Documents */}
+              <div>
+                <h2 className="text-lg font-semibold text-warmgray-900 mb-4">Zuletzt hinzugefügt</h2>
+                {documents.length > 0 ? (
+                  <div className="space-y-3">
+                    {documents.slice(0, 3).map(renderDocumentItem)}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 border-2 border-dashed border-warmgray-200 rounded-lg">
+                    <FileText className="w-10 h-10 text-warmgray-300 mx-auto mb-3" />
+                    <p className="text-warmgray-500">Noch keine Dokumente vorhanden</p>
+                    <Button onClick={() => openUploadDialog('identitaet')} className="mt-3">
+                      <Upload className="mr-2 h-4 w-4" />
+                      Erstes Dokument hochladen
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Category Overview */}
+              <div>
+                <h2 className="text-lg font-semibold text-warmgray-900 mb-4">Kategorien</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
+                    const count = getDocumentCountForCategory(key as DocumentCategory)
+                    const Icon = iconMap[category.icon] || FileText
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => {
+                          setSelectedCategory(key as DocumentCategory)
+                          setSelectedCustomCategory(null)
+                        }}
+                        className="flex items-center gap-4 p-4 rounded-lg border border-warmgray-200 bg-white hover:bg-warmgray-50 hover:border-sage-300 transition-colors text-left"
+                      >
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${categoryColorMap[key] || 'bg-sage-100 text-sage-600'}`}>
+                          <Icon className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-warmgray-900">{category.name}</p>
+                          <p className="text-sm text-warmgray-500">{count} Dokument{count !== 1 ? 'e' : ''}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                  {/* Custom Categories in Overview */}
+                  {customCategories.map((cat) => {
+                    const count = getDocumentCountForCustomCategory(cat.id)
+                    return (
+                      <button
+                        key={cat.id}
+                        onClick={() => {
+                          setSelectedCustomCategory(cat.id)
+                          setSelectedCategory(null)
+                        }}
+                        className="flex items-center gap-4 p-4 rounded-lg border border-warmgray-200 bg-white hover:bg-warmgray-50 hover:border-sage-300 transition-colors text-left"
+                      >
+                        <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-sage-100 text-sage-600">
+                          <Tag className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-warmgray-900">{cat.name}</p>
+                          <p className="text-sm text-warmgray-500">{count} Dokument{count !== 1 ? 'e' : ''}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* All documents view */}
         <TabsContent value="all" className="mt-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
