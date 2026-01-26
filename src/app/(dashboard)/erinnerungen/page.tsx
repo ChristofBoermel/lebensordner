@@ -25,7 +25,8 @@ import {
   Trash2,
   Edit2,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Users
 } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
@@ -37,7 +38,14 @@ interface Reminder {
   is_completed: boolean
   reminder_type: 'document_expiry' | 'annual_review' | 'custom'
   document_id: string | null
+  reminder_watcher_id: string | null
   created_at: string
+}
+
+interface FamilyMember {
+  id: string
+  name: string
+  email: string
 }
 
 const REMINDER_TYPES = {
@@ -74,7 +82,11 @@ export default function ErinnerungenPage() {
     description: '',
     due_date: '',
     reminder_type: 'custom' as Reminder['reminder_type'],
+    reminder_watcher_id: null as string | null,
   })
+
+  // Family members for reminder watcher
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
 
   const supabase = createClient()
 
@@ -96,9 +108,30 @@ export default function ErinnerungenPage() {
     setIsLoading(false)
   }, [supabase])
 
+  const fetchFamilyMembers = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    // Get trusted persons that are linked (have user accounts and accepted invitations)
+    const { data: trustedPersons } = await supabase
+      .from('trusted_persons')
+      .select('id, name, email, linked_user_id')
+      .eq('user_id', user.id)
+      .not('linked_user_id', 'is', null)
+
+    if (trustedPersons) {
+      setFamilyMembers(trustedPersons.map(tp => ({
+        id: tp.id,
+        name: tp.name,
+        email: tp.email
+      })))
+    }
+  }, [supabase])
+
   useEffect(() => {
     fetchReminders()
-  }, [fetchReminders])
+    fetchFamilyMembers()
+  }, [fetchReminders, fetchFamilyMembers])
 
   const handleOpenDialog = (reminder?: Reminder) => {
     if (reminder) {
@@ -108,6 +141,7 @@ export default function ErinnerungenPage() {
         description: reminder.description || '',
         due_date: reminder.due_date,
         reminder_type: reminder.reminder_type,
+        reminder_watcher_id: reminder.reminder_watcher_id || null,
       })
     } else {
       setEditingReminder(null)
@@ -119,6 +153,7 @@ export default function ErinnerungenPage() {
         description: '',
         due_date: defaultDate.toISOString().split('T')[0],
         reminder_type: 'custom',
+        reminder_watcher_id: null,
       })
     }
     setError(null)
@@ -138,6 +173,9 @@ export default function ErinnerungenPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
 
+      const isNewWatcher = form.reminder_watcher_id &&
+        (!editingReminder || editingReminder.reminder_watcher_id !== form.reminder_watcher_id)
+
       if (editingReminder) {
         const { error } = await supabase
           .from('reminders')
@@ -146,6 +184,7 @@ export default function ErinnerungenPage() {
             description: form.description || null,
             due_date: form.due_date,
             reminder_type: form.reminder_type,
+            reminder_watcher_id: form.reminder_watcher_id,
           })
           .eq('id', editingReminder.id)
 
@@ -159,9 +198,32 @@ export default function ErinnerungenPage() {
             description: form.description || null,
             due_date: form.due_date,
             reminder_type: form.reminder_type,
+            reminder_watcher_id: form.reminder_watcher_id,
           })
 
         if (error) throw error
+      }
+
+      // Send notification to new watcher
+      if (isNewWatcher) {
+        const watcher = familyMembers.find(m => m.id === form.reminder_watcher_id)
+        if (watcher) {
+          try {
+            await fetch('/api/reminder-watcher/notify-reminder', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                reminderTitle: form.title,
+                reminderDescription: form.description,
+                dueDate: form.due_date,
+                watcherEmail: watcher.email,
+                watcherName: watcher.name,
+              })
+            })
+          } catch (err) {
+            console.error('Failed to notify watcher:', err)
+          }
+        }
       }
 
       setIsDialogOpen(false)
@@ -529,6 +591,34 @@ export default function ErinnerungenPage() {
                 })}
               </div>
             </div>
+
+            {/* Reminder Watcher - only show if family members exist */}
+            {familyMembers.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Soll eine weitere Person den Termin im Blick haben?
+                </Label>
+                <select
+                  value={form.reminder_watcher_id || '_none'}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setForm({ ...form, reminder_watcher_id: value === '_none' ? null : value })
+                  }}
+                  className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
+                >
+                  <option value="_none">Nein, nur ich</option>
+                  {familyMembers.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} ({member.email})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-warmgray-500">
+                  Diese Person erhält eine Bestätigung und wird ebenfalls an den Termin erinnert
+                </p>
+              </div>
+            )}
           </div>
 
           <DialogFooter>

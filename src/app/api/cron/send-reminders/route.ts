@@ -18,6 +18,8 @@ interface ReminderWithUser {
   description: string | null
   due_date: string
   reminder_type: string
+  reminder_watcher_id: string | null
+  reminder_watcher_notified_at: string | null
   user_id: string
   profiles: {
     email: string
@@ -28,6 +30,10 @@ interface ReminderWithUser {
     sms_reminders_enabled: boolean
     sms_reminder_days_before: number
   }
+  trusted_persons: {
+    name: string
+    email: string
+  } | null
 }
 
 interface ExpiringDocument {
@@ -110,6 +116,8 @@ export async function GET(request: Request) {
         description,
         due_date,
         reminder_type,
+        reminder_watcher_id,
+        reminder_watcher_notified_at,
         user_id,
         profiles!reminders_user_id_fkey (
           email,
@@ -119,6 +127,10 @@ export async function GET(request: Request) {
           email_reminder_days_before,
           sms_reminders_enabled,
           sms_reminder_days_before
+        ),
+        trusted_persons!reminders_reminder_watcher_id_fkey (
+          name,
+          email
         )
       `)
       .eq('is_completed', false)
@@ -178,6 +190,40 @@ export async function GET(request: Request) {
             results.sms_sent++
           } catch (smsError: any) {
             results.errors.push(`SMS error for reminder ${reminder.id}: ${smsError.message}`)
+          }
+        }
+
+        // Send notification to reminder watcher (trusted person)
+        if (reminder.trusted_persons && daysUntilDue <= profile.email_reminder_days_before && !reminder.reminder_watcher_notified_at) {
+          try {
+            await getResend().emails.send({
+              from: 'Lebensordner <erinnerung@lebensordner.org>',
+              to: reminder.trusted_persons.email,
+              subject: `Erinnerung: ${reminder.title} von ${profile.full_name || 'einem Familienmitglied'}`,
+              html: generateWatcherReminderEmail({
+                watcherName: reminder.trusted_persons.name,
+                ownerName: profile.full_name || 'Ihr Familienmitglied',
+                documentTitle: reminder.title,
+                category: 'Erinnerung',
+                expiryDate: dueDate.toLocaleDateString('de-DE', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                }),
+                daysUntilExpiry: daysUntilDue,
+              }),
+            })
+
+            // Mark watcher as notified
+            await getSupabaseAdmin()
+              .from('reminders')
+              .update({ reminder_watcher_notified_at: new Date().toISOString() })
+              .eq('id', reminder.id)
+
+            results.watcher_emails_sent++
+          } catch (watcherError: any) {
+            results.errors.push(`Watcher email error for reminder ${reminder.id}: ${watcherError.message}`)
           }
         }
       }
