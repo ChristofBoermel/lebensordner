@@ -195,6 +195,7 @@ export interface Database {
           reminder_date: string | null
           subcategory_id: string | null
           custom_reminder_days: number | null
+          custom_category_id: string | null
         }
         Insert: {
           id?: string
@@ -212,6 +213,7 @@ export interface Database {
           reminder_date?: string | null
           subcategory_id?: string | null
           custom_reminder_days?: number | null
+          custom_category_id?: string | null
         }
         Update: {
           id?: string
@@ -229,6 +231,7 @@ export interface Database {
           reminder_date?: string | null
           subcategory_id?: string | null
           custom_reminder_days?: number | null
+          custom_category_id?: string | null
         }
       }
       subcategories: {
@@ -400,6 +403,8 @@ export type Profile = Database['public']['Tables']['profiles']['Row']
 export type Document = Database['public']['Tables']['documents']['Row'] & {
   subcategory_id?: string | null
   subcategory?: Subcategory | null
+  custom_category_id?: string | null
+  custom_category?: CustomCategory | null
 }
 export type TrustedPerson = Database['public']['Tables']['trusted_persons']['Row']
 export type Reminder = Database['public']['Tables']['reminders']['Row']

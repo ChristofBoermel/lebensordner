@@ -47,9 +47,12 @@ import {
   Church,
   MoveRight,
   Check,
-  X
+  X,
+  Pencil,
+  PlusCircle,
+  Tag
 } from 'lucide-react'
-import { DOCUMENT_CATEGORIES, type DocumentCategory, type Document, type Subcategory } from '@/types/database'
+import { DOCUMENT_CATEGORIES, type DocumentCategory, type Document, type Subcategory, type CustomCategory } from '@/types/database'
 import { formatFileSize, formatDate } from '@/lib/utils'
 import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
 import { SUBSCRIPTION_TIERS, getTierFromSubscription, canUploadFile, canPerformAction, type TierConfig } from '@/lib/subscription-tiers'
@@ -90,6 +93,15 @@ export default function DocumentsPage() {
   const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set())
   const [currentFolder, setCurrentFolder] = useState<Subcategory | null>(null)
 
+  // Custom categories
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([])
+  const [selectedCustomCategory, setSelectedCustomCategory] = useState<string | null>(null)
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<CustomCategory | null>(null)
+  const [categoryForm, setCategoryForm] = useState({ name: '', description: '' })
+  const [isSavingCategory, setIsSavingCategory] = useState(false)
+  const [categoryError, setCategoryError] = useState<string | null>(null)
+
   // New subcategory creation
   const [isCreatingSubcategory, setIsCreatingSubcategory] = useState(false)
   const [newSubcategoryName, setNewSubcategoryName] = useState('')
@@ -110,6 +122,7 @@ export default function DocumentsPage() {
   const [uploadNotes, setUploadNotes] = useState('')
   const [uploadExpiryDate, setUploadExpiryDate] = useState('')
   const [uploadCustomReminderDays, setUploadCustomReminderDays] = useState<number | null>(null)
+  const [uploadCustomCategory, setUploadCustomCategory] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
 
@@ -171,10 +184,26 @@ export default function DocumentsPage() {
     }
   }, [supabase])
 
+  const fetchCustomCategories = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from('custom_categories')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('name', { ascending: true })
+
+    if (!error && data) {
+      setCustomCategories(data as CustomCategory[])
+    }
+  }, [supabase])
+
   useEffect(() => {
     fetchDocuments()
     fetchSubcategories()
-  }, [fetchDocuments, fetchSubcategories])
+    fetchCustomCategories()
+  }, [fetchDocuments, fetchSubcategories, fetchCustomCategories])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -314,6 +343,7 @@ export default function DocumentsPage() {
           user_id: user.id,
           category: uploadCategory,
           subcategory_id: uploadSubcategory || null,
+          custom_category_id: uploadCustomCategory || null,
           title: uploadTitle,
           notes: uploadNotes || null,
           file_name: uploadFile.name,
@@ -347,6 +377,7 @@ export default function DocumentsPage() {
       setUploadExpiryDate('')
       setUploadCustomReminderDays(null)
       setUploadSubcategory(null)
+      setUploadCustomCategory(null)
       setIsUploadOpen(false)
       fetchDocuments()
     } catch (error) {
@@ -563,12 +594,127 @@ export default function DocumentsPage() {
     }
   }
 
-  const openUploadDialog = (category: DocumentCategory) => {
+  const openUploadDialog = (category: DocumentCategory | null, customCategoryId?: string) => {
     setUploadCategory(category)
+    setUploadCustomCategory(customCategoryId || null)
     setUploadSubcategory(null)
     setIsCreatingSubcategory(false)
     setNewSubcategoryName('')
     setIsUploadOpen(true)
+  }
+
+  // Custom category handlers
+  const openCategoryDialog = (category?: CustomCategory) => {
+    if (category) {
+      setEditingCategory(category)
+      setCategoryForm({ name: category.name, description: category.description || '' })
+    } else {
+      setEditingCategory(null)
+      setCategoryForm({ name: '', description: '' })
+    }
+    setCategoryError(null)
+    setIsCategoryDialogOpen(true)
+  }
+
+  const handleSaveCategory = async () => {
+    if (!categoryForm.name.trim()) {
+      setCategoryError('Bitte geben Sie einen Namen ein.')
+      return
+    }
+
+    setIsSavingCategory(true)
+    setCategoryError(null)
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Nicht angemeldet')
+
+      if (editingCategory) {
+        // Update existing
+        const { error } = await supabase
+          .from('custom_categories')
+          .update({
+            name: categoryForm.name.trim(),
+            description: categoryForm.description.trim() || null,
+          })
+          .eq('id', editingCategory.id)
+
+        if (error) throw error
+      } else {
+        // Check limit
+        if (!canPerformAction(userTier, 'addCustomCategory', customCategories.length)) {
+          setCategoryError(`Kategorie-Limit erreicht. Ihr Plan erlaubt maximal ${userTier.limits.maxCustomCategories} eigene Kategorien.`)
+          setIsSavingCategory(false)
+          return
+        }
+
+        // Create new
+        const { error } = await supabase
+          .from('custom_categories')
+          .insert({
+            user_id: user.id,
+            name: categoryForm.name.trim(),
+            description: categoryForm.description.trim() || null,
+            icon: 'tag',
+          })
+
+        if (error) {
+          if (error.code === '23505') {
+            setCategoryError('Eine Kategorie mit diesem Namen existiert bereits.')
+          } else {
+            throw error
+          }
+          setIsSavingCategory(false)
+          return
+        }
+      }
+
+      setIsCategoryDialogOpen(false)
+      fetchCustomCategories()
+    } catch (error) {
+      console.error('Save category error:', error)
+      setCategoryError('Fehler beim Speichern. Bitte versuchen Sie es erneut.')
+    } finally {
+      setIsSavingCategory(false)
+    }
+  }
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    const docsInCategory = documents.filter(d => d.custom_category_id === categoryId)
+    const confirmMessage = docsInCategory.length > 0
+      ? `Diese Kategorie mit ${docsInCategory.length} Dokument(en) löschen? Die Dokumente werden in "Sonstige" verschoben.`
+      : 'Diese Kategorie wirklich löschen?'
+
+    if (!confirm(confirmMessage)) return
+
+    try {
+      // Move documents to "sonstige" category
+      if (docsInCategory.length > 0) {
+        await supabase
+          .from('documents')
+          .update({ custom_category_id: null, category: 'sonstige' as DocumentCategory })
+          .eq('custom_category_id', categoryId)
+      }
+
+      const { error } = await supabase
+        .from('custom_categories')
+        .delete()
+        .eq('id', categoryId)
+
+      if (error) throw error
+
+      // Reset selection if deleted category was selected
+      if (selectedCustomCategory === categoryId) {
+        setSelectedCustomCategory(null)
+        setSelectedCategory(null)
+      }
+
+      fetchCustomCategories()
+      fetchDocuments()
+    } catch (error) {
+      console.error('Delete category error:', error)
+      alert('Fehler beim Löschen der Kategorie.')
+    }
   }
 
   const toggleSubcategoryExpand = (subcategoryId: string) => {
@@ -584,15 +730,30 @@ export default function DocumentsPage() {
   }
 
   const filteredDocuments = documents.filter(doc => {
+    // Check if viewing a custom category
+    if (selectedCustomCategory) {
+      const matchesCustomCategory = doc.custom_category_id === selectedCustomCategory
+      const matchesSearch = !searchQuery ||
+        doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        doc.notes?.toLowerCase().includes(searchQuery.toLowerCase())
+      return matchesCustomCategory && matchesSearch
+    }
+    // Check standard category
     const matchesCategory = !selectedCategory || doc.category === selectedCategory
+    // Also filter out documents that have a custom category when viewing standard categories
+    const notInCustomCategory = !doc.custom_category_id
     const matchesSearch = !searchQuery ||
       doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       doc.notes?.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesCategory && matchesSearch
+    return matchesCategory && (selectedCategory ? notInCustomCategory : true) && matchesSearch
   })
 
   const getDocumentCountForCategory = (category: DocumentCategory) => {
-    return documents.filter(d => d.category === category).length
+    return documents.filter(d => d.category === category && !d.custom_category_id).length
+  }
+
+  const getDocumentCountForCustomCategory = (categoryId: string) => {
+    return documents.filter(d => d.custom_category_id === categoryId).length
   }
 
   const getSubcategoriesForCategory = (category: DocumentCategory) => {
@@ -962,9 +1123,16 @@ export default function DocumentsPage() {
 
       {/* Category Tabs */}
       <Tabs
-        value={selectedCategory || 'all'}
+        value={selectedCustomCategory ? `custom:${selectedCustomCategory}` : (selectedCategory || 'all')}
         onValueChange={(val) => {
-          setSelectedCategory(val === 'all' ? null : val as DocumentCategory)
+          if (val.startsWith('custom:')) {
+            const customId = val.replace('custom:', '')
+            setSelectedCustomCategory(customId)
+            setSelectedCategory(null)
+          } else {
+            setSelectedCustomCategory(null)
+            setSelectedCategory(val === 'all' ? null : val as DocumentCategory)
+          }
           setCurrentFolder(null) // Reset folder when changing category
         }}
       >
@@ -987,6 +1155,32 @@ export default function DocumentsPage() {
               </TabsTrigger>
             )
           })}
+          {/* Custom Categories */}
+          {customCategories.map((cat) => {
+            const count = getDocumentCountForCustomCategory(cat.id)
+            return (
+              <TabsTrigger
+                key={cat.id}
+                value={`custom:${cat.id}`}
+                className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700 group relative"
+              >
+                <Tag className="w-3 h-3 mr-1" />
+                {cat.name} ({count})
+              </TabsTrigger>
+            )
+          })}
+          {/* Add Category Button */}
+          {(userTier.limits.maxCustomCategories === -1 || customCategories.length < userTier.limits.maxCustomCategories) && userTier.limits.maxCustomCategories > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => openCategoryDialog()}
+              className="h-8 text-sage-600 hover:text-sage-700 hover:bg-sage-50"
+            >
+              <PlusCircle className="w-4 h-4 mr-1" />
+              Neue Kategorie
+            </Button>
+          )}
         </TabsList>
 
         {/* All categories view */}
@@ -1035,6 +1229,76 @@ export default function DocumentsPage() {
             ) : (
               // Show folder grid for the category
               renderFolderGrid(key as DocumentCategory)
+            )}
+          </TabsContent>
+        ))}
+
+        {/* Custom Category Views */}
+        {customCategories.map((cat) => (
+          <TabsContent key={cat.id} value={`custom:${cat.id}`} className="mt-6">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-sage-600" />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Header with actions */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Tag className="w-5 h-5 text-sage-600" />
+                    <div>
+                      <h2 className="text-lg font-semibold text-warmgray-900">{cat.name}</h2>
+                      {cat.description && (
+                        <p className="text-sm text-warmgray-500">{cat.description}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openCategoryDialog(cat)}
+                      title="Bearbeiten"
+                    >
+                      <Pencil className="w-4 h-4 mr-1" />
+                      Bearbeiten
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteCategory(cat.id)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      title="Löschen"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Löschen
+                    </Button>
+                    <Button onClick={() => openUploadDialog(null, cat.id)}>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Dokument hochladen
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Documents */}
+                {filteredDocuments.length > 0 ? (
+                  <div className="space-y-2">
+                    {filteredDocuments.map(renderDocumentItem)}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 border-2 border-dashed border-warmgray-200 rounded-lg">
+                    <Tag className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
+                    <h3 className="text-warmgray-700 font-medium mb-2">Keine Dokumente in dieser Kategorie</h3>
+                    <p className="text-warmgray-500 text-sm mb-4">
+                      Laden Sie ein Dokument hoch, um es hier zu speichern
+                    </p>
+                    <Button onClick={() => openUploadDialog(null, cat.id)}>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Dokument hochladen
+                    </Button>
+                  </div>
+                )}
+              </div>
             )}
           </TabsContent>
         ))}
@@ -1119,11 +1383,12 @@ export default function DocumentsPage() {
                     type="button"
                     onClick={() => {
                       setUploadCategory(key as DocumentCategory)
+                      setUploadCustomCategory(null)
                       setUploadSubcategory(null)
                       setIsCreatingSubcategory(false)
                     }}
                     className={`p-3 text-left rounded-lg border-2 transition-colors ${
-                      uploadCategory === key
+                      uploadCategory === key && !uploadCustomCategory
                         ? 'border-sage-500 bg-sage-50 text-sage-800'
                         : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
                     }`}
@@ -1131,11 +1396,32 @@ export default function DocumentsPage() {
                     <span className="text-sm font-medium">{category.name}</span>
                   </button>
                 ))}
+                {/* Custom Categories */}
+                {customCategories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      setUploadCategory('sonstige')
+                      setUploadCustomCategory(cat.id)
+                      setUploadSubcategory(null)
+                      setIsCreatingSubcategory(false)
+                    }}
+                    className={`p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-2 ${
+                      uploadCustomCategory === cat.id
+                        ? 'border-sage-500 bg-sage-50 text-sage-800'
+                        : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
+                    }`}
+                  >
+                    <Tag className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-sm font-medium">{cat.name}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Subcategory Selection - Dropdown */}
-            {uploadCategory && (
+            {/* Subcategory Selection - Dropdown (only for standard categories) */}
+            {uploadCategory && !uploadCustomCategory && (
               <div className="space-y-2">
                 <Label>Unterordner (optional)</Label>
                 <div className="space-y-2">
@@ -1444,6 +1730,66 @@ export default function DocumentsPage() {
           </div>
         </div>
       )}
+
+      {/* Category Dialog */}
+      <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie erstellen'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingCategory
+                ? 'Ändern Sie den Namen oder die Beschreibung der Kategorie.'
+                : 'Erstellen Sie eine eigene Kategorie für Ihre Dokumente.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {categoryError && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {categoryError}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="category-name">Name *</Label>
+              <Input
+                id="category-name"
+                value={categoryForm.name}
+                onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                placeholder="z.B. Fahrzeuge, Haustiere, Hobbys"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="category-description">Beschreibung (optional)</Label>
+              <Input
+                id="category-description"
+                value={categoryForm.description}
+                onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                placeholder="Kurze Beschreibung der Kategorie"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleSaveCategory} disabled={isSavingCategory || !categoryForm.name.trim()}>
+              {isSavingCategory ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Speichern...
+                </>
+              ) : (
+                'Speichern'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
