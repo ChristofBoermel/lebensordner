@@ -123,8 +123,17 @@ export default function DocumentsPage() {
   const [uploadExpiryDate, setUploadExpiryDate] = useState('')
   const [uploadCustomReminderDays, setUploadCustomReminderDays] = useState<number | null>(null)
   const [uploadCustomCategory, setUploadCustomCategory] = useState<string | null>(null)
+  const [uploadReminderWatcher, setUploadReminderWatcher] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  // Family members for reminder watcher
+  interface FamilyMember {
+    id: string
+    name: string
+    email: string
+  }
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
 
   const supabase = createClient()
   const { capture } = usePostHog()
@@ -199,11 +208,32 @@ export default function DocumentsPage() {
     }
   }, [supabase])
 
+  const fetchFamilyMembers = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    // Get trusted persons that are linked (have user accounts and accepted invitations)
+    const { data: trustedPersons } = await supabase
+      .from('trusted_persons')
+      .select('id, name, email, linked_user_id')
+      .eq('user_id', user.id)
+      .not('linked_user_id', 'is', null)
+
+    if (trustedPersons) {
+      setFamilyMembers(trustedPersons.map(tp => ({
+        id: tp.id,
+        name: tp.name,
+        email: tp.email
+      })))
+    }
+  }, [supabase])
+
   useEffect(() => {
     fetchDocuments()
     fetchSubcategories()
     fetchCustomCategories()
-  }, [fetchDocuments, fetchSubcategories, fetchCustomCategories])
+    fetchFamilyMembers()
+  }, [fetchDocuments, fetchSubcategories, fetchCustomCategories, fetchFamilyMembers])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -337,7 +367,7 @@ export default function DocumentsPage() {
       if (uploadError) throw uploadError
 
       // Create document record with subcategory
-      const { error: insertError } = await supabase
+      const { data: insertedDoc, error: insertError } = await supabase
         .from('documents')
         .insert({
           user_id: user.id,
@@ -352,9 +382,36 @@ export default function DocumentsPage() {
           file_type: uploadFile.type || 'application/octet-stream',
           expiry_date: uploadExpiryDate || null,
           custom_reminder_days: uploadCustomReminderDays,
+          reminder_watcher_id: uploadReminderWatcher || null,
         })
+        .select()
+        .single()
 
       if (insertError) throw insertError
+
+      // Send notification to reminder watcher if selected
+      if (uploadReminderWatcher && uploadExpiryDate && insertedDoc) {
+        const watcher = familyMembers.find(m => m.id === uploadReminderWatcher)
+        if (watcher) {
+          // Send confirmation email to watcher
+          try {
+            await fetch('/api/reminder-watcher/notify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                documentId: insertedDoc.id,
+                documentTitle: uploadTitle,
+                category: uploadCategory,
+                expiryDate: uploadExpiryDate,
+                watcherEmail: watcher.email,
+                watcherName: watcher.name,
+              })
+            })
+          } catch (err) {
+            console.error('Failed to notify watcher:', err)
+          }
+        }
+      }
 
       // Update storage used in profile
       await supabase
@@ -378,6 +435,7 @@ export default function DocumentsPage() {
       setUploadCustomReminderDays(null)
       setUploadSubcategory(null)
       setUploadCustomCategory(null)
+      setUploadReminderWatcher(null)
       setIsUploadOpen(false)
       fetchDocuments()
     } catch (error) {
@@ -1559,6 +1617,31 @@ export default function DocumentsPage() {
                 </select>
                 <p className="text-xs text-warmgray-500">
                   Überschreibt die allgemeine Erinnerungseinstellung für dieses Dokument
+                </p>
+              </div>
+            )}
+
+            {/* Reminder Watcher - only show when expiry date is set and family members exist */}
+            {uploadExpiryDate && familyMembers.length > 0 && (
+              <div className="space-y-2">
+                <Label>Soll eine weitere Person den Termin im Blick haben?</Label>
+                <select
+                  value={uploadReminderWatcher || '_none'}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setUploadReminderWatcher(value === '_none' ? null : value)
+                  }}
+                  className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
+                >
+                  <option value="_none">Nein, nur ich</option>
+                  {familyMembers.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} ({member.email})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-warmgray-500">
+                  Diese Person erhält eine Bestätigung und wird ebenfalls an den Termin erinnert
                 </p>
               </div>
             )}

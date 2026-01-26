@@ -59,6 +59,19 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Font size variants for accessibility */
+  html.font-normal {
+    font-size: 17px;
+  }
+
+  html.font-large {
+    font-size: 20px;
+  }
+
+  html.font-xlarge {
+    font-size: 24px;
+  }
   
   body {
     @apply bg-background text-foreground;

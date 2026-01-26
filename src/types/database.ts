@@ -196,6 +196,8 @@ export interface Database {
           subcategory_id: string | null
           custom_reminder_days: number | null
           custom_category_id: string | null
+          reminder_watcher_id: string | null
+          reminder_watcher_notified_at: string | null
         }
         Insert: {
           id?: string
@@ -214,6 +216,8 @@ export interface Database {
           subcategory_id?: string | null
           custom_reminder_days?: number | null
           custom_category_id?: string | null
+          reminder_watcher_id?: string | null
+          reminder_watcher_notified_at?: string | null
         }
         Update: {
           id?: string
@@ -232,6 +236,8 @@ export interface Database {
           subcategory_id?: string | null
           custom_reminder_days?: number | null
           custom_category_id?: string | null
+          reminder_watcher_id?: string | null
+          reminder_watcher_notified_at?: string | null
         }
       }
       subcategories: {

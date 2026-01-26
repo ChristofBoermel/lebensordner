@@ -3,11 +3,14 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 
 type Theme = 'light' | 'dark' | 'system'
+type FontSize = 'normal' | 'large' | 'xlarge'
 
 interface ThemeContextType {
   theme: Theme
   setTheme: (theme: Theme) => void
   resolvedTheme: 'light' | 'dark'
+  fontSize: FontSize
+  setFontSize: (size: FontSize) => void
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
@@ -15,12 +18,18 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('system')
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
+  const [fontSize, setFontSize] = useState<FontSize>('normal')
 
   useEffect(() => {
     // Load saved theme
     const savedTheme = localStorage.getItem('theme') as Theme | null
     if (savedTheme) {
       setTheme(savedTheme)
+    }
+    // Load saved font size
+    const savedFontSize = localStorage.getItem('fontSize') as FontSize | null
+    if (savedFontSize) {
+      setFontSize(savedFontSize)
     }
   }, [])
 
@@ -60,8 +69,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => mediaQuery.removeEventListener('change', handleChange)
   }, [theme])
 
+  // Apply font size
+  useEffect(() => {
+    const root = window.document.documentElement
+    root.classList.remove('font-normal', 'font-large', 'font-xlarge')
+    root.classList.add(`font-${fontSize}`)
+    localStorage.setItem('fontSize', fontSize)
+  }, [fontSize])
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme, fontSize, setFontSize }}>
       {children}
     </ThemeContext.Provider>
   )

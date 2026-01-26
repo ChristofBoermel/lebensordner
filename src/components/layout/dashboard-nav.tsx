@@ -30,10 +30,14 @@ import {
   CreditCard,
   Shield,
   Search,
-  MessageSquare
+  MessageSquare,
+  Sun,
+  Moon,
+  Type
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { GlobalSearch } from '@/components/search/global-search'
+import { useTheme } from '@/components/theme/theme-provider'
 
 interface DashboardNavProps {
   user: {
@@ -59,12 +63,19 @@ const adminNavigation = [
   { name: 'Admin', href: '/admin', icon: Shield },
 ]
 
+const fontSizeLabels = {
+  normal: 'Normal',
+  large: 'Groß',
+  xlarge: 'Sehr Groß'
+}
+
 export function DashboardNav({ user }: DashboardNavProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { theme, setTheme, resolvedTheme, fontSize, setFontSize } = useTheme()
 
   // Keyboard shortcut for search (Cmd/Ctrl + K)
   useEffect(() => {
@@ -96,14 +107,14 @@ export function DashboardNav({ user }: DashboardNavProps) {
 
       {/* Desktop Sidebar */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
-        <div className="flex flex-1 flex-col border-r border-warmgray-200 bg-white">
+        <div className="flex flex-1 flex-col border-r border-warmgray-200 dark:border-warmgray-800 bg-white dark:bg-warmgray-900">
           {/* Logo */}
-          <div className="flex h-20 items-center px-6 border-b border-warmgray-200">
+          <div className="flex h-20 items-center px-6 border-b border-warmgray-200 dark:border-warmgray-800">
             <Link href="/dashboard" className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-lg bg-sage-600 flex items-center justify-center">
                 <Leaf className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-semibold text-warmgray-900">Lebensordner</span>
+              <span className="text-xl font-semibold text-warmgray-900 dark:text-warmgray-100">Lebensordner</span>
             </Link>
           </div>
 
@@ -166,11 +177,65 @@ export function DashboardNav({ user }: DashboardNavProps) {
             )}
           </nav>
 
+          {/* Accessibility Controls */}
+          <div className="border-t border-warmgray-200 px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              {/* Dark Mode Toggle */}
+              <button
+                onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+                className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
+                title={resolvedTheme === 'dark' ? 'Hellmodus' : 'Dunkelmodus'}
+              >
+                {resolvedTheme === 'dark' ? (
+                  <Sun className="w-5 h-5 text-warmgray-600 dark:text-warmgray-400" />
+                ) : (
+                  <Moon className="w-5 h-5 text-warmgray-600" />
+                )}
+              </button>
+
+              {/* Font Size Control */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="flex items-center gap-1.5 px-3 h-10 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors text-sm text-warmgray-600 dark:text-warmgray-400"
+                    title="Schriftgröße ändern"
+                  >
+                    <Type className="w-4 h-4" />
+                    <span className="hidden sm:inline">{fontSizeLabels[fontSize]}</span>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuLabel>Schriftgröße</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setFontSize('normal')}
+                    className={cn("cursor-pointer", fontSize === 'normal' && "bg-sage-50 text-sage-700")}
+                  >
+                    Normal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setFontSize('large')}
+                    className={cn("cursor-pointer", fontSize === 'large' && "bg-sage-50 text-sage-700")}
+                  >
+                    Groß
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setFontSize('xlarge')}
+                    className={cn("cursor-pointer", fontSize === 'xlarge' && "bg-sage-50 text-sage-700")}
+                  >
+                    Sehr Groß
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
           {/* User Menu */}
           <div className="border-t border-warmgray-200 p-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex w-full items-center gap-3 rounded-lg px-3 py-3 hover:bg-warmgray-50 transition-colors">
+                <button className="flex w-full items-center gap-3 rounded-lg px-3 py-3 hover:bg-warmgray-50 dark:hover:bg-warmgray-800 transition-colors">
                   <Avatar className="h-10 w-10 flex-shrink-0">
                     <AvatarFallback>{initials}</AvatarFallback>
                   </Avatar>
@@ -215,10 +280,10 @@ export function DashboardNav({ user }: DashboardNavProps) {
       </aside>
 
       {/* Mobile Header */}
-      <div className="sticky top-0 z-40 flex h-20 items-center gap-x-4 border-b border-warmgray-200 bg-white px-4 lg:hidden">
+      <div className="sticky top-0 z-40 flex h-20 items-center gap-x-2 border-b border-warmgray-200 bg-white dark:bg-warmgray-900 dark:border-warmgray-800 px-4 lg:hidden">
         <button
           type="button"
-          className="-m-2.5 p-2.5 text-warmgray-700"
+          className="-m-2.5 p-2.5 text-warmgray-700 dark:text-warmgray-300"
           onClick={() => setMobileMenuOpen(true)}
         >
           <span className="sr-only">Menü öffnen</span>
@@ -230,9 +295,55 @@ export function DashboardNav({ user }: DashboardNavProps) {
             <div className="w-8 h-8 rounded-lg bg-sage-600 flex items-center justify-center">
               <Leaf className="w-5 h-5 text-white" />
             </div>
-            <span className="text-lg font-semibold text-warmgray-900">Lebensordner</span>
+            <span className="text-lg font-semibold text-warmgray-900 dark:text-warmgray-100">Lebensordner</span>
           </Link>
         </div>
+
+        {/* Mobile Accessibility Controls */}
+        <button
+          onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+          className="p-2 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
+          title={resolvedTheme === 'dark' ? 'Hellmodus' : 'Dunkelmodus'}
+        >
+          {resolvedTheme === 'dark' ? (
+            <Sun className="w-5 h-5 text-warmgray-600 dark:text-warmgray-400" />
+          ) : (
+            <Moon className="w-5 h-5 text-warmgray-600" />
+          )}
+        </button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="p-2 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
+              title="Schriftgröße"
+            >
+              <Type className="w-5 h-5 text-warmgray-600 dark:text-warmgray-400" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuLabel>Schriftgröße</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => setFontSize('normal')}
+              className={cn("cursor-pointer", fontSize === 'normal' && "bg-sage-50 text-sage-700")}
+            >
+              Normal
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setFontSize('large')}
+              className={cn("cursor-pointer", fontSize === 'large' && "bg-sage-50 text-sage-700")}
+            >
+              Groß
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setFontSize('xlarge')}
+              className={cn("cursor-pointer", fontSize === 'xlarge' && "bg-sage-50 text-sage-700")}
+            >
+              Sehr Groß
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
