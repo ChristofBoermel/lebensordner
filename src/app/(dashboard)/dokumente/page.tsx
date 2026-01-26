@@ -1170,7 +1170,7 @@ export default function DocumentsPage() {
             )
           })}
           {/* Add Category Button */}
-          {(userTier.limits.maxCustomCategories === -1 || customCategories.length < userTier.limits.maxCustomCategories) && userTier.limits.maxCustomCategories > 0 && (
+          {userTier.limits.maxCustomCategories !== 0 && (userTier.limits.maxCustomCategories === -1 || customCategories.length < userTier.limits.maxCustomCategories) && (
             <Button
               variant="ghost"
               size="sm"
