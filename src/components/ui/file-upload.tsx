@@ -97,26 +97,26 @@ export function FileUpload({
   if (selectedFile) {
     return (
       <div className={cn('space-y-2', className)}>
-        <div className="flex items-center gap-3 p-4 rounded-lg bg-sage-50 border border-sage-200 overflow-hidden">
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-sage-50 border border-sage-200">
           <div className="flex-shrink-0">
             {getFileIcon(selectedFile)}
           </div>
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <p className="font-medium text-warmgray-900 truncate max-w-full" title={selectedFile.name}>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-warmgray-900 truncate" title={selectedFile.name}>
               {selectedFile.name}
             </p>
             <p className="text-sm text-warmgray-500">
               {formatFileSize(selectedFile.size)}
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <CheckCircle2 className="w-5 h-5 text-green-600" />
+          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
             <Button
               type="button"
               variant="ghost"
               size="icon"
               onClick={onClear}
-              className="text-warmgray-400 hover:text-warmgray-600"
+              className="text-warmgray-400 hover:text-warmgray-600 flex-shrink-0"
             >
               <X className="w-5 h-5" />
             </Button>

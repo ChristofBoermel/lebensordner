@@ -190,12 +190,12 @@ export function DashboardNav({ user }: DashboardNavProps) {
           </nav>
 
           {/* Accessibility Controls */}
-          <div className="border-t border-warmgray-200 px-4 py-3">
-            <div className="flex items-center justify-between gap-2">
+          <div className="border-t border-warmgray-200 px-4 py-4">
+            <div className="flex items-center justify-between gap-4">
               {/* Dark Mode Toggle */}
               <button
                 onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-                className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
+                className="flex items-center justify-center w-11 h-11 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
                 title={resolvedTheme === 'dark' ? 'Hellmodus' : 'Dunkelmodus'}
               >
                 {resolvedTheme === 'dark' ? (
@@ -209,10 +209,10 @@ export function DashboardNav({ user }: DashboardNavProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="flex items-center gap-1.5 px-3 h-10 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors text-sm text-warmgray-600 dark:text-warmgray-400"
+                    className="flex items-center gap-2 px-3 h-11 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors text-sm text-warmgray-600 dark:text-warmgray-400"
                     title="Schriftgröße ändern"
                   >
-                    <Type className="w-4 h-4" />
+                    <Type className="w-5 h-5" />
                     <span className="hidden sm:inline">{fontSizeLabels[fontSize]}</span>
                     <ChevronDown className="w-3 h-3" />
                   </button>
