@@ -35,7 +35,9 @@ import {
   Shield,
   Smartphone,
   RotateCcw,
-  Sparkles
+  Sparkles,
+  Camera,
+  X
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { TwoFactorSetup } from '@/components/auth/two-factor-setup'
@@ -60,7 +62,13 @@ export default function EinstellungenPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSuccess, setPasswordSuccess] = useState(false)
   const [isChangingPassword, setIsChangingPassword] = useState(false)
-  
+
+  // Profile picture state
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false)
+
+  // Account deletion state
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
+
   const router = useRouter()
   const supabase = createClient()
 
@@ -233,16 +241,124 @@ export default function EinstellungenPage() {
 
     if (!doubleConfirmed) return
 
+    setIsDeletingAccount(true)
+    setError(null)
+
     try {
-      // Note: In production, this would need a server-side function to properly delete
-      // all user data and the auth account
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-      
+      const response = await fetch('/api/account/delete', {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Fehler beim Löschen')
+      }
+
+      // Redirect to home page
       router.push('/')
-    } catch (err) {
-      setError('Fehler beim Löschen des Kontos. Bitte kontaktieren Sie den Support.')
+      router.refresh()
+    } catch (err: any) {
+      setError(err.message || 'Fehler beim Löschen des Kontos. Bitte kontaktieren Sie den Support.')
       console.error('Delete error:', err)
+    } finally {
+      setIsDeletingAccount(false)
+    }
+  }
+
+  // Profile picture upload
+  const handleProfilePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Bitte wählen Sie ein Bild aus (JPG, PNG)')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Das Bild darf maximal 5 MB groß sein')
+      return
+    }
+
+    setIsUploadingPicture(true)
+    setError(null)
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Nicht angemeldet')
+
+      // Delete old picture if exists
+      if (profile.profile_picture_url) {
+        const oldPath = profile.profile_picture_url.split('/').slice(-2).join('/')
+        await supabase.storage.from('avatars').remove([oldPath])
+      }
+
+      // Upload new picture
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file)
+
+      if (uploadError) throw uploadError
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName)
+
+      // Update profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ profile_picture_url: publicUrl })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      setProfile({ ...profile, profile_picture_url: publicUrl })
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (err: any) {
+      setError('Fehler beim Hochladen des Bildes')
+      console.error('Upload error:', err)
+    } finally {
+      setIsUploadingPicture(false)
+    }
+  }
+
+  const handleRemoveProfilePicture = async () => {
+    if (!profile.profile_picture_url) return
+
+    setIsUploadingPicture(true)
+    setError(null)
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Nicht angemeldet')
+
+      // Delete from storage
+      const filePath = profile.profile_picture_url.split('/').slice(-2).join('/')
+      await supabase.storage.from('avatars').remove([filePath])
+
+      // Update profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ profile_picture_url: null })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      setProfile({ ...profile, profile_picture_url: null })
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (err: any) {
+      setError('Fehler beim Entfernen des Bildes')
+      console.error('Remove error:', err)
+    } finally {
+      setIsUploadingPicture(false)
     }
   }
 
@@ -294,6 +410,63 @@ export default function EinstellungenPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Profile Picture */}
+          <div className="space-y-2">
+            <Label>Profilbild</Label>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                {profile.profile_picture_url ? (
+                  <img
+                    src={profile.profile_picture_url}
+                    alt="Profilbild"
+                    className="w-20 h-20 rounded-full object-cover border-2 border-warmgray-200"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-sage-100 flex items-center justify-center border-2 border-warmgray-200">
+                    <User className="w-8 h-8 text-sage-600" />
+                  </div>
+                )}
+                {isUploadingPicture && (
+                  <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 text-white animate-spin" />
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleProfilePictureUpload}
+                    className="hidden"
+                    disabled={isUploadingPicture}
+                  />
+                  <Button variant="outline" size="sm" asChild disabled={isUploadingPicture}>
+                    <span>
+                      <Camera className="w-4 h-4 mr-2" />
+                      {profile.profile_picture_url ? 'Ändern' : 'Hochladen'}
+                    </span>
+                  </Button>
+                </label>
+                {profile.profile_picture_url && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveProfilePicture}
+                    disabled={isUploadingPicture}
+                    className="text-red-600 hover:bg-red-50"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Entfernen
+                  </Button>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-warmgray-500">JPG, PNG oder WebP, max. 5 MB</p>
+          </div>
+
+          <Separator />
+
           <div className="space-y-2">
             <Label htmlFor="full_name">Vollständiger Name</Label>
             <div className="relative">
