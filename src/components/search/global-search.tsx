@@ -86,7 +86,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
             title: doc.title,
             subtitle: DOCUMENT_CATEGORIES[doc.category as DocumentCategory]?.name,
             category: doc.category as DocumentCategory,
-            url: `/dokumente?category=${doc.category}`,
+            url: `/dokumente?kategorie=${doc.category}&highlight=${doc.id}`,
           })
         })
       }

@@ -281,40 +281,128 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="max-w-md mx-auto">
-            <div className="card-elevated p-8 text-center">
-              <h3 className="text-2xl font-semibold text-warmgray-900 mb-2">
-                Lebensordner Digital
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {/* Free Tier */}
+            <div className="card-elevated p-6 text-center">
+              <h3 className="text-xl font-semibold text-warmgray-900 mb-1">
+                Kostenlos
               </h3>
-              <p className="text-warmgray-600 mb-6">
-                Alles, was Sie brauchen, um Ihre wichtigen Unterlagen zu organisieren.
+              <p className="text-warmgray-600 text-sm mb-4">
+                Für den Einstieg
               </p>
-              
+
               <div className="mb-6">
-                <span className="text-4xl font-semibold text-warmgray-900">9,90 €</span>
+                <span className="text-3xl font-semibold text-warmgray-900">0 €</span>
                 <span className="text-warmgray-600"> / Monat</span>
               </div>
 
-              <ul className="text-left space-y-3 mb-8">
-                <li className="flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Unbegrenzte Dokumente (bis 2 GB)</span>
+              <ul className="text-left space-y-2 mb-6 text-sm">
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">Bis zu 10 Dokumente</span>
                 </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Notfall-Informationen</span>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">100 MB Speicherplatz</span>
                 </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Bis zu 5 Vertrauenspersonen</span>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">5 Unterordner</span>
                 </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Erinnerungen & Fristen</span>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">Basis-Dashboard</span>
                 </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">PDF-Export & Druckfunktion</span>
+              </ul>
+
+              <Link href="/registrieren">
+                <Button variant="outline" className="w-full">
+                  Kostenlos starten
+                </Button>
+              </Link>
+            </div>
+
+            {/* Basic Tier */}
+            <div className="card-elevated p-6 text-center">
+              <h3 className="text-xl font-semibold text-warmgray-900 mb-1">
+                Basis
+              </h3>
+              <p className="text-warmgray-600 text-sm mb-4">
+                Für Einzelpersonen
+              </p>
+
+              <div className="mb-6">
+                <span className="text-3xl font-semibold text-warmgray-900">4,90 €</span>
+                <span className="text-warmgray-600"> / Monat</span>
+              </div>
+
+              <ul className="text-left space-y-2 mb-6 text-sm">
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">Bis zu 50 Dokumente</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">500 MB Speicherplatz</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">3 Vertrauenspersonen</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">E-Mail-Erinnerungen</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">Dokument-Ablaufdatum</span>
+                </li>
+              </ul>
+
+              <Link href="/registrieren">
+                <Button variant="outline" className="w-full">
+                  30 Tage kostenlos testen
+                </Button>
+              </Link>
+            </div>
+
+            {/* Premium Tier */}
+            <div className="card-elevated p-6 text-center border-2 border-sage-500 relative">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-sage-600 text-white text-xs font-medium rounded-full">
+                Beliebt
+              </div>
+              <h3 className="text-xl font-semibold text-warmgray-900 mb-1">
+                Premium
+              </h3>
+              <p className="text-warmgray-600 text-sm mb-4">
+                Voller Schutz
+              </p>
+
+              <div className="mb-6">
+                <span className="text-3xl font-semibold text-warmgray-900">11,90 €</span>
+                <span className="text-warmgray-600"> / Monat</span>
+              </div>
+
+              <ul className="text-left space-y-2 mb-6 text-sm">
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">Unbegrenzte Dokumente</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">10 GB Speicherplatz</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">10 Vertrauenspersonen</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">Zwei-Faktor-Auth</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">Prioritäts-Support</span>
                 </li>
               </ul>
 
@@ -323,11 +411,11 @@ export default function HomePage() {
                   30 Tage kostenlos testen
                 </Button>
               </Link>
-              <p className="text-sm text-warmgray-500 mt-4">
-                Jederzeit kündbar. Keine versteckten Kosten.
-              </p>
             </div>
           </div>
+          <p className="text-center text-sm text-warmgray-500 mt-6">
+            Jederzeit kündbar. Keine versteckten Kosten.
+          </p>
         </div>
       </section>
 

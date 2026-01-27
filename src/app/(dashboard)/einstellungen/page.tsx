@@ -41,10 +41,12 @@ import {
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { TwoFactorSetup } from '@/components/auth/two-factor-setup'
+import { SUBSCRIPTION_TIERS, getTierFromSubscription, type TierConfig } from '@/lib/subscription-tiers'
 import type { Profile } from '@/types/database'
 
 export default function EinstellungenPage() {
   const [profile, setProfile] = useState<Partial<Profile>>({})
+  const [userTier, setUserTier] = useState<TierConfig>(SUBSCRIPTION_TIERS.free)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -154,6 +156,9 @@ export default function EinstellungenPage() {
     if (!error && data) {
       setProfile(data)
       setIs2FAEnabled(data.two_factor_enabled || false)
+      // Set user tier based on subscription
+      const tier = getTierFromSubscription(data.subscription_status, null)
+      setUserTier(tier)
     }
     setIsLoading(false)
   }, [supabase, router])
@@ -180,7 +185,7 @@ export default function EinstellungenPage() {
           address: profile.address,
           onboarding_completed: true,
           email_reminders_enabled: profile.email_reminders_enabled ?? true,
-          email_reminder_days_before: profile.email_reminder_days_before ?? 7,
+          email_reminder_days_before: profile.email_reminder_days_before ?? 30,
           sms_reminders_enabled: profile.sms_reminders_enabled ?? false,
           sms_reminder_days_before: profile.sms_reminder_days_before ?? 3,
         })
@@ -596,7 +601,7 @@ export default function EinstellungenPage() {
                   type="number"
                   min="1"
                   max="30"
-                  value={profile.email_reminder_days_before ?? 7}
+                  value={profile.email_reminder_days_before ?? 30}
                   onChange={(e) => setProfile({ ...profile, email_reminder_days_before: parseInt(e.target.value) || 7 })}
                   className="w-24"
                 />
@@ -812,27 +817,39 @@ export default function EinstellungenPage() {
           <CardTitle>Speicherplatz</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-warmgray-900">
-                {((profile.storage_used || 0) / (1024 * 1024)).toFixed(1)} MB verwendet
-              </p>
-              <p className="text-sm text-warmgray-500">
-                von 2 GB verfügbar
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-semibold text-sage-600">
-                {(((profile.storage_used || 0) / (2 * 1024 * 1024 * 1024)) * 100).toFixed(1)}%
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 h-2 rounded-full bg-warmgray-100">
-            <div 
-              className="h-full rounded-full bg-sage-500 transition-all"
-              style={{ width: `${Math.min(((profile.storage_used || 0) / (2 * 1024 * 1024 * 1024)) * 100, 100)}%` }}
-            />
-          </div>
+          {(() => {
+            const storageUsedMB = (profile.storage_used || 0) / (1024 * 1024)
+            const maxStorageMB = userTier.limits.maxStorageMB
+            const maxStorageDisplay = maxStorageMB >= 1024
+              ? `${(maxStorageMB / 1024).toFixed(0)} GB`
+              : `${maxStorageMB} MB`
+            const usagePercent = (storageUsedMB / maxStorageMB) * 100
+            return (
+              <>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-warmgray-900">
+                      {storageUsedMB.toFixed(1)} MB verwendet
+                    </p>
+                    <p className="text-sm text-warmgray-500">
+                      von {maxStorageDisplay} verfügbar ({userTier.name})
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-semibold text-sage-600">
+                      {usagePercent.toFixed(1)}%
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 h-2 rounded-full bg-warmgray-100">
+                  <div
+                    className="h-full rounded-full bg-sage-500 transition-all"
+                    style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                  />
+                </div>
+              </>
+            )
+          })()}
         </CardContent>
       </Card>
 
