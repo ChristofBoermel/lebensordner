@@ -283,7 +283,7 @@ export default function HomePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {/* Free Tier */}
-            <div className="card-elevated p-6 text-center">
+            <div className="card-elevated p-6 text-center flex flex-col">
               <h3 className="text-xl font-semibold text-warmgray-900 mb-1">
                 Kostenlos
               </h3>
@@ -296,7 +296,7 @@ export default function HomePage() {
                 <span className="text-warmgray-600"> / Monat</span>
               </div>
 
-              <ul className="text-left space-y-2 mb-6 text-sm">
+              <ul className="text-left space-y-2 mb-6 text-sm flex-1">
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
                   <span className="text-warmgray-700">Bis zu 10 Dokumente</span>
@@ -315,7 +315,7 @@ export default function HomePage() {
                 </li>
               </ul>
 
-              <Link href="/registrieren">
+              <Link href="/registrieren" className="mt-auto">
                 <Button variant="outline" className="w-full">
                   Kostenlos starten
                 </Button>
@@ -323,7 +323,7 @@ export default function HomePage() {
             </div>
 
             {/* Basic Tier */}
-            <div className="card-elevated p-6 text-center">
+            <div className="card-elevated p-6 text-center flex flex-col">
               <h3 className="text-xl font-semibold text-warmgray-900 mb-1">
                 Basis
               </h3>
@@ -336,7 +336,7 @@ export default function HomePage() {
                 <span className="text-warmgray-600"> / Monat</span>
               </div>
 
-              <ul className="text-left space-y-2 mb-6 text-sm">
+              <ul className="text-left space-y-2 mb-6 text-sm flex-1">
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
                   <span className="text-warmgray-700">Bis zu 50 Dokumente</span>
@@ -359,7 +359,7 @@ export default function HomePage() {
                 </li>
               </ul>
 
-              <Link href="/registrieren">
+              <Link href="/registrieren" className="mt-auto">
                 <Button variant="outline" className="w-full">
                   30 Tage kostenlos testen
                 </Button>
@@ -367,7 +367,7 @@ export default function HomePage() {
             </div>
 
             {/* Premium Tier */}
-            <div className="card-elevated p-6 text-center border-2 border-sage-500 relative">
+            <div className="card-elevated p-6 text-center border-2 border-sage-500 relative flex flex-col">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-sage-600 text-white text-xs font-medium rounded-full">
                 Beliebt
               </div>
@@ -383,7 +383,7 @@ export default function HomePage() {
                 <span className="text-warmgray-600"> / Monat</span>
               </div>
 
-              <ul className="text-left space-y-2 mb-6 text-sm">
+              <ul className="text-left space-y-2 mb-6 text-sm flex-1">
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-sage-600 flex-shrink-0" />
                   <span className="text-warmgray-700">Unbegrenzte Dokumente</span>
@@ -406,7 +406,7 @@ export default function HomePage() {
                 </li>
               </ul>
 
-              <Link href="/registrieren">
+              <Link href="/registrieren" className="mt-auto">
                 <Button size="lg" className="w-full">
                   30 Tage kostenlos testen
                 </Button>
