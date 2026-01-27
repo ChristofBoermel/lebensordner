@@ -17,12 +17,17 @@ import {
   Calendar,
   Archive,
   Download,
-  HardDrive
+  HardDrive,
+  QrCode,
+  Info,
+  Smartphone,
+  CreditCard
 } from 'lucide-react'
 import { DOCUMENT_CATEGORIES, type DocumentCategory } from '@/types/database'
 import { formatDate } from '@/lib/utils'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
+import QRCode from 'qrcode'
 
 interface DocumentRow {
   id: string
@@ -50,6 +55,33 @@ interface ProfileRow {
   address: string | null
 }
 
+interface EmergencyContactRow {
+  id: string
+  name: string
+  phone: string
+  email: string | null
+  relationship: string
+  is_primary: boolean
+}
+
+interface MedicalInfoRow {
+  blood_type: string | null
+  allergies: string[]
+  medications: string[]
+  conditions: string[]
+  doctor_name: string | null
+  doctor_phone: string | null
+  insurance_number: string | null
+  organ_donor: boolean | null
+}
+
+interface AdvanceDirectivesRow {
+  has_patient_decree: boolean
+  has_power_of_attorney: boolean
+  has_care_directive: boolean
+  has_bank_power_of_attorney: boolean
+}
+
 export default function ExportPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -58,9 +90,12 @@ export default function ExportPage() {
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [documents, setDocuments] = useState<DocumentRow[]>([])
   const [trustedPersons, setTrustedPersons] = useState<TrustedPersonRow[]>([])
-  const [emergencyContacts, setEmergencyContacts] = useState<any[]>([])
-  const [medicalInfo, setMedicalInfo] = useState<any>(null)
+  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContactRow[]>([])
+  const [medicalInfo, setMedicalInfo] = useState<MedicalInfoRow | null>(null)
+  const [advanceDirectives, setAdvanceDirectives] = useState<AdvanceDirectivesRow | null>(null)
   const [reminders, setReminders] = useState<any[]>([])
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null)
+  const [isGeneratingQR, setIsGeneratingQR] = useState(false)
 
   const supabase = createClient()
 
@@ -97,12 +132,32 @@ export default function ExportPage() {
     
     if (trustedData) setTrustedPersons(trustedData)
 
-    // Fetch emergency info from localStorage (will be migrated to Supabase later)
-    const storedContacts = localStorage.getItem('emergencyContacts')
-    const storedMedical = localStorage.getItem('medicalInfo')
-    
-    if (storedContacts) setEmergencyContacts(JSON.parse(storedContacts))
-    if (storedMedical) setMedicalInfo(JSON.parse(storedMedical))
+    // Fetch emergency contacts from Supabase
+    const { data: contactsData } = await supabase
+      .from('emergency_contacts')
+      .select('id, name, phone, email, relationship, is_primary')
+      .eq('user_id', user.id)
+      .order('is_primary', { ascending: false })
+
+    if (contactsData) setEmergencyContacts(contactsData as EmergencyContactRow[])
+
+    // Fetch medical info from Supabase
+    const { data: medicalData } = await supabase
+      .from('medical_info')
+      .select('blood_type, allergies, medications, conditions, doctor_name, doctor_phone, insurance_number, organ_donor')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (medicalData) setMedicalInfo(medicalData as MedicalInfoRow)
+
+    // Fetch advance directives from Supabase
+    const { data: directivesData } = await supabase
+      .from('advance_directives')
+      .select('has_patient_decree, has_power_of_attorney, has_care_directive, has_bank_power_of_attorney')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (directivesData) setAdvanceDirectives(directivesData as AdvanceDirectivesRow)
 
     // Fetch reminders
     const { data: remindersData } = await supabase
@@ -118,6 +173,85 @@ export default function ExportPage() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  // Generate emergency QR code with compact data
+  const generateEmergencyQR = useCallback(async () => {
+    setIsGeneratingQR(true)
+    try {
+      // Build compact emergency data structure
+      const emergencyData: Record<string, any> = {
+        // Header
+        t: 'NOTFALL', // type
+        v: 1, // version
+      }
+
+      // Personal info (name only)
+      if (profile?.full_name) {
+        emergencyData.n = profile.full_name
+      }
+
+      // Emergency contacts (max 2, most important)
+      if (emergencyContacts.length > 0) {
+        emergencyData.k = emergencyContacts.slice(0, 2).map(c => ({
+          n: c.name,
+          t: c.phone,
+          b: c.relationship,
+        }))
+      }
+
+      // Medical info
+      if (medicalInfo) {
+        const med: Record<string, any> = {}
+        if (medicalInfo.blood_type) med.bg = medicalInfo.blood_type
+        if (medicalInfo.allergies?.length > 0) med.al = medicalInfo.allergies
+        if (medicalInfo.medications?.length > 0) med.me = medicalInfo.medications
+        if (medicalInfo.conditions?.length > 0) med.ve = medicalInfo.conditions
+        if (medicalInfo.doctor_name) {
+          med.ha = medicalInfo.doctor_name
+          if (medicalInfo.doctor_phone) med.ht = medicalInfo.doctor_phone
+        }
+        if (medicalInfo.insurance_number) med.vn = medicalInfo.insurance_number
+        if (medicalInfo.organ_donor !== null) med.os = medicalInfo.organ_donor ? 'J' : 'N'
+        if (Object.keys(med).length > 0) emergencyData.m = med
+      }
+
+      // Advance directives (yes/no only)
+      if (advanceDirectives) {
+        const dir: string[] = []
+        if (advanceDirectives.has_patient_decree) dir.push('PV')
+        if (advanceDirectives.has_power_of_attorney) dir.push('VV')
+        if (advanceDirectives.has_care_directive) dir.push('BV')
+        if (advanceDirectives.has_bank_power_of_attorney) dir.push('BaV')
+        if (dir.length > 0) emergencyData.vo = dir
+      }
+
+      // Generate QR code
+      const jsonData = JSON.stringify(emergencyData)
+      const dataUrl = await QRCode.toDataURL(jsonData, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#1a1a1a',
+          light: '#ffffff',
+        },
+        errorCorrectionLevel: 'M',
+      })
+
+      setQrCodeDataUrl(dataUrl)
+    } catch (error) {
+      console.error('QR generation error:', error)
+      alert('Fehler beim Erstellen des QR-Codes.')
+    } finally {
+      setIsGeneratingQR(false)
+    }
+  }, [profile, emergencyContacts, medicalInfo, advanceDirectives])
+
+  // Auto-generate QR code when data is loaded
+  useEffect(() => {
+    if (!isLoading && (emergencyContacts.length > 0 || medicalInfo)) {
+      generateEmergencyQR()
+    }
+  }, [isLoading, emergencyContacts, medicalInfo, generateEmergencyQR])
 
   const generatePDF = async () => {
     setIsGenerating(true)
@@ -524,9 +658,201 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
           </Button>
 
           <p className="text-xs text-warmgray-500">
-            Das Backup enthält alle Ihre Daten im JSON-Format sowie alle hochgeladenen Dateien. 
+            Das Backup enthält alle Ihre Daten im JSON-Format sowie alle hochgeladenen Dateien.
             Bewahren Sie es an einem sicheren Ort auf.
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Emergency QR Code Section */}
+      <Card className="border-red-200 bg-gradient-to-br from-red-50 to-white">
+        <CardHeader>
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-lg bg-red-100 flex items-center justify-center">
+              <QrCode className="w-6 h-6 text-red-600" />
+            </div>
+            <div>
+              <CardTitle className="text-red-900">Notfall-QR-Code</CardTitle>
+              <CardDescription>
+                Alle wichtigen Notfallinformationen in einem QR-Code - offline lesbar
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* QR Code Display */}
+          <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex flex-col items-center">
+              {isGeneratingQR ? (
+                <div className="w-[200px] h-[200px] flex items-center justify-center bg-warmgray-100 rounded-lg">
+                  <Loader2 className="w-8 h-8 animate-spin text-warmgray-400" />
+                </div>
+              ) : qrCodeDataUrl ? (
+                <div className="p-3 bg-white rounded-lg shadow-sm border border-warmgray-200">
+                  <img
+                    src={qrCodeDataUrl}
+                    alt="Notfall QR-Code"
+                    className="w-[200px] h-[200px]"
+                    id="emergency-qr-code"
+                  />
+                </div>
+              ) : (
+                <div className="w-[200px] h-[200px] flex items-center justify-center bg-warmgray-100 rounded-lg text-warmgray-500 text-sm text-center p-4">
+                  <div>
+                    <QrCode className="w-10 h-10 mx-auto mb-2 text-warmgray-400" />
+                    Keine Notfalldaten vorhanden
+                  </div>
+                </div>
+              )}
+              <Button
+                onClick={generateEmergencyQR}
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                disabled={isGeneratingQR}
+              >
+                {isGeneratingQR ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <QrCode className="mr-2 h-4 w-4" />
+                )}
+                QR-Code aktualisieren
+              </Button>
+            </div>
+
+            {/* QR Code Content Summary */}
+            <div className="flex-1 space-y-3">
+              <h4 className="font-medium text-warmgray-900">Enthaltene Informationen:</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${emergencyContacts.length > 0 ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={emergencyContacts.length > 0 ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    Notfallkontakte ({emergencyContacts.length})
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.blood_type ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={medicalInfo?.blood_type ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    Blutgruppe {medicalInfo?.blood_type ? `(${medicalInfo.blood_type})` : ''}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.allergies?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={medicalInfo?.allergies?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    Allergien ({medicalInfo?.allergies?.length || 0})
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.medications?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={medicalInfo?.medications?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    Medikamente ({medicalInfo?.medications?.length || 0})
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.conditions?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={medicalInfo?.conditions?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    Vorerkrankungen ({medicalInfo?.conditions?.length || 0})
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.organ_donor !== null ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={medicalInfo?.organ_donor !== null ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    Organspende {medicalInfo?.organ_donor !== null ? (medicalInfo?.organ_donor ? '(Ja)' : '(Nein)') : ''}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${advanceDirectives?.has_patient_decree || advanceDirectives?.has_power_of_attorney ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={advanceDirectives?.has_patient_decree || advanceDirectives?.has_power_of_attorney ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    Vollmachten (Ja/Nein)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.doctor_name ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={medicalInfo?.doctor_name ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    Hausarzt
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Instructions */}
+          <div className="bg-white rounded-lg p-4 border border-warmgray-200">
+            <div className="flex items-start gap-3 mb-4">
+              <Info className="w-5 h-5 text-sage-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="font-medium text-warmgray-900">So nutzen Sie den Notfall-QR-Code</h4>
+                <p className="text-sm text-warmgray-600 mt-1">
+                  Der QR-Code enthält Ihre wichtigsten Notfallinformationen und kann von jedem Smartphone gescannt werden - auch ohne Internet.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-warmgray-50">
+                <div className="w-8 h-8 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sage-700 font-semibold text-sm">1</span>
+                </div>
+                <div>
+                  <p className="font-medium text-warmgray-900 text-sm">QR-Code drucken</p>
+                  <p className="text-xs text-warmgray-500 mt-0.5">
+                    Rechtsklick auf den QR-Code → "Bild speichern" → Ausdrucken in Originalgröße
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-warmgray-50">
+                <div className="w-8 h-8 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sage-700 font-semibold text-sm">2</span>
+                </div>
+                <div>
+                  <p className="font-medium text-warmgray-900 text-sm">Ausschneiden</p>
+                  <p className="text-xs text-warmgray-500 mt-0.5">
+                    Den QR-Code passend ausschneiden (ca. 3x3 cm)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-warmgray-50">
+                <div className="w-8 h-8 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sage-700 font-semibold text-sm">3</span>
+                </div>
+                <div>
+                  <p className="font-medium text-warmgray-900 text-sm">Aufkleben</p>
+                  <p className="text-xs text-warmgray-500 mt-0.5">
+                    Auf der Rückseite Ihrer Krankenkassenkarte oder im Portemonnaie befestigen
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Print Tips */}
+          <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200">
+            <CreditCard className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <h4 className="font-medium text-amber-900 text-sm">Tipp: Ideale Stellen für den QR-Code</h4>
+              <ul className="text-xs text-amber-800 mt-1 space-y-1">
+                <li>• <strong>Krankenkassenkarte</strong> - Wird bei jedem Arztbesuch vorgelegt</li>
+                <li>• <strong>Personalausweis-Hülle</strong> - Immer dabei im Notfall</li>
+                <li>• <strong>Smartphone-Hülle</strong> - Leicht zugänglich für Ersthelfer</li>
+                <li>• <strong>Kühlschrank</strong> - Für Notfälle zu Hause (Rettungskräfte schauen oft dort)</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Scan Demo */}
+          <div className="flex items-center gap-4 p-4 rounded-lg bg-sage-50 border border-sage-200">
+            <Smartphone className="w-8 h-8 text-sage-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-warmgray-700">
+                <strong>Zum Lesen:</strong> Öffnen Sie die Kamera-App Ihres Smartphones und richten Sie sie auf den QR-Code.
+                Die Notfallinformationen werden automatisch angezeigt.
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
