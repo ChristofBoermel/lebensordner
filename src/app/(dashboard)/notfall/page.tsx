@@ -19,13 +19,16 @@ import {
 import {
   HeartPulse, Phone, User, Pill, AlertTriangle, Plus,
   Edit2, Trash2, Loader2, CheckCircle2, Info, Star,
-  Heart, FileText, Flower2, Scale
+  Heart, FileText, Flower2, Scale, Mail, Upload, Download, Eye, Lock
 } from 'lucide-react'
+import { SUBSCRIPTION_TIERS, getTierFromSubscription, type TierConfig } from '@/lib/subscription-tiers'
+import Link from 'next/link'
 
 interface EmergencyContact {
   id: string
   name: string
   phone: string
+  email: string | null
   relationship: string
   is_primary: boolean
   notes: string | null
@@ -51,17 +54,27 @@ interface AdvanceDirectives {
   has_patient_decree: boolean
   patient_decree_location: string
   patient_decree_date: string
+  patient_decree_document_id: string | null
   has_power_of_attorney: boolean
   power_of_attorney_location: string
   power_of_attorney_holder: string
   power_of_attorney_date: string
+  power_of_attorney_document_id: string | null
   has_care_directive: boolean
   care_directive_location: string
   care_directive_date: string
+  care_directive_document_id: string | null
   has_bank_power_of_attorney: boolean
   bank_power_of_attorney_holder: string
   bank_power_of_attorney_banks: string
+  bank_power_of_attorney_document_id: string | null
   notes: string
+}
+
+interface UploadedDocument {
+  id: string
+  title: string
+  file_path: string
 }
 
 interface FuneralWishes {
@@ -96,16 +109,20 @@ const defaultAdvanceDirectives: AdvanceDirectives = {
   has_patient_decree: false,
   patient_decree_location: '',
   patient_decree_date: '',
+  patient_decree_document_id: null,
   has_power_of_attorney: false,
   power_of_attorney_location: '',
   power_of_attorney_holder: '',
   power_of_attorney_date: '',
+  power_of_attorney_document_id: null,
   has_care_directive: false,
   care_directive_location: '',
   care_directive_date: '',
+  care_directive_document_id: null,
   has_bank_power_of_attorney: false,
   bank_power_of_attorney_holder: '',
   bank_power_of_attorney_banks: '',
+  bank_power_of_attorney_document_id: null,
   notes: '',
 }
 
@@ -156,13 +173,26 @@ export default function NotfallPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [contactForm, setContactForm] = useState({
-    name: '', phone: '', relationship: '', is_primary: false, notes: '',
+    name: '', phone: '', email: '', relationship: '', is_primary: false, notes: '',
   })
   const [medicalForm, setMedicalForm] = useState<MedicalInfo>(defaultMedicalInfo)
   const [directivesForm, setDirectivesForm] = useState<AdvanceDirectives>(defaultAdvanceDirectives)
   const [funeralForm, setFuneralForm] = useState<FuneralWishes>(defaultFuneralWishes)
 
+  // User tier and document upload
+  const [userTier, setUserTier] = useState<TierConfig>(SUBSCRIPTION_TIERS.free)
+  const [uploadedDocuments, setUploadedDocuments] = useState<Record<string, UploadedDocument | null>>({
+    patient_decree: null,
+    power_of_attorney: null,
+    care_directive: null,
+    bank_power_of_attorney: null,
+  })
+  const [isUploadingDoc, setIsUploadingDoc] = useState<string | null>(null)
+
   const supabase = createClient()
+
+  // Check if user can upload Vollmachten (Basic tier or higher)
+  const canUploadVollmachten = userTier.id !== 'free'
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
@@ -206,6 +236,50 @@ export default function NotfallPage() {
       setFuneralForm({ ...defaultFuneralWishes, ...funeral })
     }
 
+    // Fetch user tier
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('subscription_status')
+      .eq('id', user.id)
+      .single()
+    if (profile) {
+      const tier = getTierFromSubscription(profile.subscription_status, null)
+      setUserTier(tier)
+    }
+
+    // Fetch uploaded documents for Vollmachten
+    if (directives) {
+      const docIds = [
+        directives.patient_decree_document_id,
+        directives.power_of_attorney_document_id,
+        directives.care_directive_document_id,
+        directives.bank_power_of_attorney_document_id,
+      ].filter(Boolean)
+
+      if (docIds.length > 0) {
+        const { data: docs } = await supabase
+          .from('documents')
+          .select('id, title, file_path')
+          .in('id', docIds)
+
+        if (docs) {
+          const docMap: Record<string, UploadedDocument | null> = {
+            patient_decree: null,
+            power_of_attorney: null,
+            care_directive: null,
+            bank_power_of_attorney: null,
+          }
+          docs.forEach(doc => {
+            if (doc.id === directives.patient_decree_document_id) docMap.patient_decree = doc
+            if (doc.id === directives.power_of_attorney_document_id) docMap.power_of_attorney = doc
+            if (doc.id === directives.care_directive_document_id) docMap.care_directive = doc
+            if (doc.id === directives.bank_power_of_attorney_document_id) docMap.bank_power_of_attorney = doc
+          })
+          setUploadedDocuments(docMap)
+        }
+      }
+    }
+
     setIsLoading(false)
   }, [supabase])
 
@@ -215,12 +289,12 @@ export default function NotfallPage() {
     if (contact) {
       setEditingContact(contact)
       setContactForm({
-        name: contact.name, phone: contact.phone, relationship: contact.relationship,
+        name: contact.name, phone: contact.phone, email: contact.email || '', relationship: contact.relationship,
         is_primary: contact.is_primary, notes: contact.notes || '',
       })
     } else {
       setEditingContact(null)
-      setContactForm({ name: '', phone: '', relationship: '', is_primary: emergencyContacts.length === 0, notes: '' })
+      setContactForm({ name: '', phone: '', email: '', relationship: '', is_primary: emergencyContacts.length === 0, notes: '' })
     }
     setError(null)
     setIsContactDialogOpen(true)
@@ -244,13 +318,13 @@ export default function NotfallPage() {
 
       if (editingContact) {
         const { error } = await supabase.from('emergency_contacts').update({
-          name: contactForm.name, phone: contactForm.phone, relationship: contactForm.relationship,
-          is_primary: contactForm.is_primary, notes: contactForm.notes || null,
+          name: contactForm.name, phone: contactForm.phone, email: contactForm.email || null,
+          relationship: contactForm.relationship, is_primary: contactForm.is_primary, notes: contactForm.notes || null,
         }).eq('id', editingContact.id)
         if (error) throw error
       } else {
         const { error } = await supabase.from('emergency_contacts').insert({
-          user_id: user.id, name: contactForm.name, phone: contactForm.phone,
+          user_id: user.id, name: contactForm.name, phone: contactForm.phone, email: contactForm.email || null,
           relationship: contactForm.relationship, is_primary: contactForm.is_primary,
           notes: contactForm.notes || null,
         })
@@ -271,6 +345,84 @@ export default function NotfallPage() {
       await supabase.from('emergency_contacts').delete().eq('id', id)
       fetchData()
     } catch (err) { console.error('Delete error:', err) }
+  }
+
+  // Document upload for Vollmachten
+  const handleVollmachtUpload = async (docType: string, file: File) => {
+    if (!canUploadVollmachten) return
+
+    setIsUploadingDoc(docType)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Nicht angemeldet')
+
+      // Upload file to storage
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(fileName, file)
+
+      if (uploadError) throw uploadError
+
+      // Create document record
+      const docTitles: Record<string, string> = {
+        patient_decree: 'Patientenverfügung',
+        power_of_attorney: 'Vorsorgevollmacht',
+        care_directive: 'Betreuungsverfügung',
+        bank_power_of_attorney: 'Bankvollmacht',
+      }
+
+      const { data: doc, error: docError } = await supabase
+        .from('documents')
+        .insert({
+          user_id: user.id,
+          category: 'vertraege',
+          title: docTitles[docType] || file.name,
+          file_name: file.name,
+          file_path: fileName,
+          file_size: file.size,
+          file_type: file.type || 'application/octet-stream',
+        })
+        .select()
+        .single()
+
+      if (docError) throw docError
+
+      // Update advance_directives with document reference
+      const updateData: Record<string, string> = {}
+      updateData[`${docType}_document_id`] = doc.id
+
+      if (advanceDirectives.id) {
+        await supabase.from('advance_directives').update(updateData).eq('id', advanceDirectives.id)
+      } else {
+        await supabase.from('advance_directives').insert({
+          user_id: user.id,
+          ...updateData,
+        })
+      }
+
+      fetchData()
+    } catch (err) {
+      console.error('Upload error:', err)
+      alert('Fehler beim Hochladen. Bitte versuchen Sie es erneut.')
+    } finally {
+      setIsUploadingDoc(null)
+    }
+  }
+
+  const handleViewDocument = async (docId: string) => {
+    const doc = Object.values(uploadedDocuments).find(d => d?.id === docId)
+    if (!doc) return
+
+    const { data } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(doc.file_path, 60)
+
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, '_blank')
+    }
   }
 
   const handleSaveMedicalInfo = async () => {
@@ -458,6 +610,7 @@ export default function NotfallPage() {
                           </div>
                           <p className="text-sm text-warmgray-600">{contact.relationship}</p>
                           <p className="text-sm text-warmgray-500">{contact.phone}</p>
+                          {contact.email && <p className="text-sm text-warmgray-500">{contact.email}</p>}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -542,25 +695,103 @@ export default function NotfallPage() {
             <CardContent>
               <div className="space-y-4">
                 {[
-                  { label: 'Patientenverfügung', has: advanceDirectives.has_patient_decree, location: advanceDirectives.patient_decree_location, icon: FileText },
-                  { label: 'Vorsorgevollmacht', has: advanceDirectives.has_power_of_attorney, holder: advanceDirectives.power_of_attorney_holder, icon: Scale },
-                  { label: 'Betreuungsverfügung', has: advanceDirectives.has_care_directive, location: advanceDirectives.care_directive_location, icon: User },
-                  { label: 'Bankvollmacht', has: advanceDirectives.has_bank_power_of_attorney, holder: advanceDirectives.bank_power_of_attorney_holder, icon: Scale },
-                ].map((item) => (
-                  <div key={item.label} className="p-4 rounded-lg bg-cream-50 border border-cream-200">
-                    <div className="flex items-center gap-3 mb-1">
-                      <item.icon className="w-5 h-5 text-sage-600" />
-                      <p className="font-medium text-warmgray-900">{item.label}</p>
-                      <span className={`px-2 py-0.5 text-xs rounded-full ${item.has ? 'bg-green-100 text-green-700' : 'bg-warmgray-100 text-warmgray-600'}`}>
-                        {item.has ? 'Vorhanden' : 'Nicht vorhanden'}
-                      </span>
+                  { key: 'patient_decree', label: 'Patientenverfügung', has: advanceDirectives.has_patient_decree, location: advanceDirectives.patient_decree_location, icon: FileText },
+                  { key: 'power_of_attorney', label: 'Vorsorgevollmacht', has: advanceDirectives.has_power_of_attorney, holder: advanceDirectives.power_of_attorney_holder, icon: Scale },
+                  { key: 'care_directive', label: 'Betreuungsverfügung', has: advanceDirectives.has_care_directive, location: advanceDirectives.care_directive_location, icon: User },
+                  { key: 'bank_power_of_attorney', label: 'Bankvollmacht', has: advanceDirectives.has_bank_power_of_attorney, holder: advanceDirectives.bank_power_of_attorney_holder, icon: Scale },
+                ].map((item) => {
+                  const uploadedDoc = uploadedDocuments[item.key]
+                  return (
+                    <div key={item.label} className="p-4 rounded-lg bg-cream-50 border border-cream-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <item.icon className="w-5 h-5 text-sage-600" />
+                          <p className="font-medium text-warmgray-900">{item.label}</p>
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${item.has ? 'bg-green-100 text-green-700' : 'bg-warmgray-100 text-warmgray-600'}`}>
+                            {item.has ? 'Vorhanden' : 'Nicht vorhanden'}
+                          </span>
+                        </div>
+
+                        {/* Document upload/view buttons */}
+                        <div className="flex items-center gap-2">
+                          {uploadedDoc ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewDocument(uploadedDoc.id)}
+                              title="Dokument ansehen"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Ansehen
+                            </Button>
+                          ) : canUploadVollmachten ? (
+                            <label className="cursor-pointer">
+                              <input
+                                type="file"
+                                className="hidden"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0]
+                                  if (file) handleVollmachtUpload(item.key, file)
+                                  e.target.value = ''
+                                }}
+                                disabled={isUploadingDoc === item.key}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                                disabled={isUploadingDoc === item.key}
+                              >
+                                <span>
+                                  {isUploadingDoc === item.key ? (
+                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <Upload className="w-4 h-4 mr-1" />
+                                  )}
+                                  Hochladen
+                                </span>
+                              </Button>
+                            </label>
+                          ) : (
+                            <div className="flex items-center gap-1 text-xs text-warmgray-500">
+                              <Lock className="w-3 h-3" />
+                              <Link href="/abo" className="hover:underline">Basis+</Link>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {item.has && (item.location || item.holder) && (
+                        <p className="text-sm text-warmgray-600 ml-8 mt-1">{item.holder ? `Bevollmächtigte(r): ${item.holder}` : `Aufbewahrungsort: ${item.location}`}</p>
+                      )}
+                      {uploadedDoc && (
+                        <p className="text-sm text-sage-600 ml-8 mt-1 flex items-center gap-1">
+                          <FileText className="w-3 h-3" />
+                          {uploadedDoc.title}
+                        </p>
+                      )}
                     </div>
-                    {item.has && (item.location || item.holder) && (
-                      <p className="text-sm text-warmgray-600 ml-8">{item.holder ? `Bevollmächtigte(r): ${item.holder}` : `Aufbewahrungsort: ${item.location}`}</p>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
+
+              {/* Upgrade hint for free users */}
+              {!canUploadVollmachten && (
+                <div className="mt-4 p-4 rounded-lg bg-sage-50 border border-sage-200">
+                  <div className="flex items-start gap-3">
+                    <Lock className="w-5 h-5 text-sage-600 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-warmgray-900">Vollmachten hochladen</p>
+                      <p className="text-sm text-warmgray-600 mt-1">
+                        Mit dem Basis-Abo können Sie Ihre Vollmachten direkt als Dokument hochladen und sicher aufbewahren.
+                      </p>
+                      <Link href="/abo" className="text-sm text-sage-600 hover:underline mt-2 inline-block">
+                        Jetzt upgraden
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -604,6 +835,7 @@ export default function NotfallPage() {
             {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
             <div className="space-y-2"><Label htmlFor="name">Name *</Label><Input id="name" value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })} /></div>
             <div className="space-y-2"><Label htmlFor="phone">Telefonnummer *</Label><Input id="phone" type="tel" value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} /></div>
+            <div className="space-y-2"><Label htmlFor="email">E-Mail (optional)</Label><Input id="email" type="email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} placeholder="z.B. beispiel@email.de" /></div>
             <div className="space-y-2"><Label htmlFor="relationship">Beziehung *</Label><Input id="relationship" value={contactForm.relationship} onChange={(e) => setContactForm({ ...contactForm, relationship: e.target.value })} /></div>
             <div className="flex items-center gap-2"><input type="checkbox" id="is_primary" checked={contactForm.is_primary} onChange={(e) => setContactForm({ ...contactForm, is_primary: e.target.checked })} className="w-5 h-5 rounded" /><Label htmlFor="is_primary">Hauptkontakt</Label></div>
           </div>

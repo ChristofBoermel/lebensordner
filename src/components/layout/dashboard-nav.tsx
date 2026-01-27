@@ -57,6 +57,7 @@ const navigation = [
   { name: 'Export', href: '/export', icon: FileDown },
   { name: 'Abonnement', href: '/abo', icon: CreditCard },
   { name: 'Feedback', href: '/feedback', icon: MessageSquare },
+  { name: 'Einstellungen', href: '/einstellungen', icon: Settings },
 ]
 
 const adminNavigation = [
@@ -175,6 +176,17 @@ export function DashboardNav({ user }: DashboardNavProps) {
                 })}
               </>
             )}
+
+            {/* Logout Button - visible for elderly users */}
+            <div className="mt-4 pt-4 border-t border-warmgray-200">
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors text-red-600 hover:bg-red-50 hover:text-red-700"
+              >
+                <LogOut className="w-5 h-5 text-red-500" />
+                Abmelden
+              </button>
+            </div>
           </nav>
 
           {/* Accessibility Controls */}
@@ -410,6 +422,20 @@ export function DashboardNav({ user }: DashboardNavProps) {
                   </Link>
                 )
               })}
+
+              {/* Logout Button - visible for elderly users */}
+              <div className="mt-4 pt-4 border-t border-warmgray-200">
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    handleLogout()
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors text-red-600 hover:bg-red-50 hover:text-red-700"
+                >
+                  <LogOut className="w-5 h-5 text-red-500" />
+                  Abmelden
+                </button>
+              </div>
             </nav>
           </div>
         </div>
