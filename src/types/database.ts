@@ -130,6 +130,7 @@ export interface Database {
           sms_reminders_enabled: boolean
           sms_reminder_days_before: number
           phone_verified: boolean
+          profile_picture_url: string | null
         }
         Insert: {
           id: string
@@ -153,6 +154,7 @@ export interface Database {
           sms_reminders_enabled?: boolean
           sms_reminder_days_before?: number
           phone_verified?: boolean
+          profile_picture_url?: string | null
         }
         Update: {
           id?: string
@@ -176,6 +178,7 @@ export interface Database {
           sms_reminders_enabled?: boolean
           sms_reminder_days_before?: number
           phone_verified?: boolean
+          profile_picture_url?: string | null
         }
       }
       documents: {

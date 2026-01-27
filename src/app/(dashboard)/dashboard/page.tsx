@@ -71,14 +71,14 @@ export default async function DashboardPage() {
     .eq('user_id', user.id)
     .eq('is_active', true) as { data: TrustedPersonRow[] | null }
 
-  // Get upcoming reminders
+  // Get upcoming reminders (only top 3)
   const { data: reminders } = await supabase
     .from('reminders')
     .select('id, title, due_date')
     .eq('user_id', user.id)
     .eq('is_completed', false)
     .order('due_date', { ascending: true })
-    .limit(5) as { data: ReminderRow[] | null }
+    .limit(3) as { data: ReminderRow[] | null }
 
   // Calculate organization status
   const totalCategories = Object.keys(DOCUMENT_CATEGORIES).length
@@ -209,27 +209,27 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Link href="/dokumente?upload=true">
-                  <div className="category-card text-center cursor-pointer">
-                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center mx-auto mb-3">
+                <Link href="/dokumente?upload=true" className="block h-full">
+                  <div className="category-card text-center cursor-pointer h-full flex flex-col items-center justify-center py-6">
+                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center mb-3">
                       <Upload className="w-6 h-6 text-sage-600" />
                     </div>
                     <p className="font-medium text-warmgray-900">Dokument hochladen</p>
                   </div>
                 </Link>
-                
-                <Link href="/zugriff?add=true">
-                  <div className="category-card text-center cursor-pointer">
-                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center mx-auto mb-3">
+
+                <Link href="/zugriff?add=true" className="block h-full">
+                  <div className="category-card text-center cursor-pointer h-full flex flex-col items-center justify-center py-6">
+                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center mb-3">
                       <Users className="w-6 h-6 text-sage-600" />
                     </div>
                     <p className="font-medium text-warmgray-900">Person hinzufügen</p>
                   </div>
                 </Link>
-                
-                <Link href="/export">
-                  <div className="category-card text-center cursor-pointer">
-                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center mx-auto mb-3">
+
+                <Link href="/export" className="block h-full">
+                  <div className="category-card text-center cursor-pointer h-full flex flex-col items-center justify-center py-6">
+                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center mb-3">
                       <Printer className="w-6 h-6 text-sage-600" />
                     </div>
                     <p className="font-medium text-warmgray-900">Übersicht drucken</p>
@@ -299,9 +299,9 @@ export default async function DashboardPage() {
             {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
               const docCount = documents?.filter(d => d.category === key).length || 0
               return (
-                <Link key={key} href={`/dokumente?kategorie=${key}`}>
-                  <div className="text-center p-4 rounded-lg border border-warmgray-200 hover:border-sage-300 hover:bg-sage-50 transition-colors cursor-pointer">
-                    <p className="text-xs font-medium text-warmgray-900 mb-1">{category.name}</p>
+                <Link key={key} href={`/dokumente?kategorie=${key}`} className="block">
+                  <div className="text-center p-4 rounded-lg border border-warmgray-200 hover:border-sage-300 hover:bg-sage-50 transition-colors cursor-pointer h-full flex flex-col justify-center min-h-[100px]">
+                    <p className="text-xs font-medium text-warmgray-900 mb-1 line-clamp-2">{category.name}</p>
                     <p className="text-lg font-semibold text-sage-600">{docCount}</p>
                     <p className="text-xs text-warmgray-500">Dokument{docCount !== 1 ? 'e' : ''}</p>
                   </div>

@@ -92,8 +92,10 @@ export default function DocumentsPage() {
   const searchParams = useSearchParams()
   const initialCategory = searchParams.get('kategorie') as DocumentCategory | null
   const shouldOpenUpload = searchParams.get('upload') === 'true'
+  const highlightDocumentId = searchParams.get('highlight')
 
   const [documents, setDocuments] = useState<Document[]>([])
+  const [highlightedDoc, setHighlightedDoc] = useState<string | null>(highlightDocumentId)
   const [subcategories, setSubcategories] = useState<Subcategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState<DocumentCategory | null>(initialCategory)
@@ -249,6 +251,29 @@ export default function DocumentsPage() {
     fetchCustomCategories()
     fetchFamilyMembers()
   }, [fetchDocuments, fetchSubcategories, fetchCustomCategories, fetchFamilyMembers])
+
+  // Handle document highlighting from search
+  useEffect(() => {
+    if (highlightedDoc && documents.length > 0) {
+      // Scroll to the highlighted document after a short delay
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`doc-${highlightedDoc}`)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 300)
+
+      // Clear highlight after 3 seconds
+      const clearTimer = setTimeout(() => {
+        setHighlightedDoc(null)
+      }, 3000)
+
+      return () => {
+        clearTimeout(timer)
+        clearTimeout(clearTimer)
+      }
+    }
+  }, [highlightedDoc, documents])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -854,9 +879,20 @@ export default function DocumentsPage() {
       ? subcategories.find(s => s.id === doc.subcategory_id)
       : null
     const isSelected = selectedDocuments.has(doc.id)
+    const isHighlighted = highlightedDoc === doc.id
 
     return (
-      <div key={doc.id} className={`document-item group ${isSelected ? 'bg-sage-50 border-sage-300' : ''}`}>
+      <div
+        key={doc.id}
+        id={`doc-${doc.id}`}
+        className={`document-item group transition-all duration-300 ${
+          isHighlighted
+            ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300 ring-offset-2'
+            : isSelected
+            ? 'bg-sage-50 border-sage-300'
+            : ''
+        }`}
+      >
         {/* Checkbox */}
         <button
           onClick={() => toggleDocumentSelection(doc.id)}

@@ -70,6 +70,30 @@ export function FileUpload({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
   }
 
+  // Truncate filename: show start + ... + end (with extension)
+  const truncateFilename = (filename: string, maxLength: number = 30) => {
+    if (filename.length <= maxLength) return filename
+
+    const extension = filename.includes('.')
+      ? '.' + filename.split('.').pop()
+      : ''
+    const nameWithoutExt = filename.slice(0, filename.length - extension.length)
+
+    // Keep ~60% at start, ~40% at end (including extension)
+    const startLength = Math.floor((maxLength - 3 - extension.length) * 0.6)
+    const endLength = Math.floor((maxLength - 3 - extension.length) * 0.4)
+
+    if (startLength < 5 || endLength < 3) {
+      // Fallback for very short maxLength
+      return filename.slice(0, maxLength - 3) + '...'
+    }
+
+    const start = nameWithoutExt.slice(0, startLength)
+    const end = nameWithoutExt.slice(-endLength)
+
+    return `${start}...${end}${extension}`
+  }
+
   const getFileIcon = (file: File) => {
     const type = file.type
     if (type.startsWith('image/')) {
@@ -97,24 +121,26 @@ export function FileUpload({
   if (selectedFile) {
     return (
       <div className={cn('space-y-2', className)}>
-        <div className="flex items-center gap-4 p-4 rounded-lg bg-sage-50 border border-sage-200">
-          {getFileIcon(selectedFile)}
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-sage-50 border border-sage-200">
+          <div className="flex-shrink-0">
+            {getFileIcon(selectedFile)}
+          </div>
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-warmgray-900 truncate">
-              {selectedFile.name}
+            <p className="font-medium text-warmgray-900" title={selectedFile.name}>
+              {truncateFilename(selectedFile.name, 35)}
             </p>
             <p className="text-sm text-warmgray-500">
               {formatFileSize(selectedFile.size)}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-green-600" />
+          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
             <Button
               type="button"
               variant="ghost"
               size="icon"
               onClick={onClear}
-              className="text-warmgray-400 hover:text-warmgray-600"
+              className="text-warmgray-400 hover:text-warmgray-600 flex-shrink-0"
             >
               <X className="w-5 h-5" />
             </Button>
