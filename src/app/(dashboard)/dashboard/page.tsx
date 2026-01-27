@@ -71,14 +71,14 @@ export default async function DashboardPage() {
     .eq('user_id', user.id)
     .eq('is_active', true) as { data: TrustedPersonRow[] | null }
 
-  // Get upcoming reminders
+  // Get upcoming reminders (only top 3)
   const { data: reminders } = await supabase
     .from('reminders')
     .select('id, title, due_date')
     .eq('user_id', user.id)
     .eq('is_completed', false)
     .order('due_date', { ascending: true })
-    .limit(5) as { data: ReminderRow[] | null }
+    .limit(3) as { data: ReminderRow[] | null }
 
   // Calculate organization status
   const totalCategories = Object.keys(DOCUMENT_CATEGORIES).length
