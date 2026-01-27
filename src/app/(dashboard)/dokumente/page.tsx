@@ -72,6 +72,20 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   church: Church,
 }
 
+const categoryColorMap: Record<string, string> = {
+  identitaet: 'bg-blue-100 text-blue-600',
+  finanzen: 'bg-emerald-100 text-emerald-600',
+  versicherungen: 'bg-amber-100 text-amber-600',
+  wohnen: 'bg-orange-100 text-orange-600',
+  gesundheit: 'bg-red-100 text-red-600',
+  vertraege: 'bg-purple-100 text-purple-600',
+  rente: 'bg-indigo-100 text-indigo-600',
+  familie: 'bg-pink-100 text-pink-600',
+  arbeit: 'bg-cyan-100 text-cyan-600',
+  religion: 'bg-violet-100 text-violet-600',
+  sonstiges: 'bg-warmgray-100 text-warmgray-600',
+}
+
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
 
 export default function DocumentsPage() {
@@ -83,6 +97,7 @@ export default function DocumentsPage() {
   const [subcategories, setSubcategories] = useState<Subcategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState<DocumentCategory | null>(initialCategory)
+  const [activeTab, setActiveTab] = useState<string>(initialCategory || 'overview')
   const [isUploadOpen, setIsUploadOpen] = useState(shouldOpenUpload)
   const [uploadCategory, setUploadCategory] = useState<DocumentCategory | null>(initialCategory)
   const [uploadSubcategory, setUploadSubcategory] = useState<string | null>(null)
@@ -123,8 +138,17 @@ export default function DocumentsPage() {
   const [uploadExpiryDate, setUploadExpiryDate] = useState('')
   const [uploadCustomReminderDays, setUploadCustomReminderDays] = useState<number | null>(null)
   const [uploadCustomCategory, setUploadCustomCategory] = useState<string | null>(null)
+  const [uploadReminderWatcher, setUploadReminderWatcher] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  // Family members for reminder watcher
+  interface FamilyMember {
+    id: string
+    name: string
+    email: string
+  }
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
 
   const supabase = createClient()
   const { capture } = usePostHog()
@@ -199,11 +223,32 @@ export default function DocumentsPage() {
     }
   }, [supabase])
 
+  const fetchFamilyMembers = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    // Get trusted persons that are linked (have user accounts and accepted invitations)
+    const { data: trustedPersons } = await supabase
+      .from('trusted_persons')
+      .select('id, name, email, linked_user_id')
+      .eq('user_id', user.id)
+      .not('linked_user_id', 'is', null)
+
+    if (trustedPersons) {
+      setFamilyMembers(trustedPersons.map(tp => ({
+        id: tp.id,
+        name: tp.name,
+        email: tp.email
+      })))
+    }
+  }, [supabase])
+
   useEffect(() => {
     fetchDocuments()
     fetchSubcategories()
     fetchCustomCategories()
-  }, [fetchDocuments, fetchSubcategories, fetchCustomCategories])
+    fetchFamilyMembers()
+  }, [fetchDocuments, fetchSubcategories, fetchCustomCategories, fetchFamilyMembers])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -337,7 +382,7 @@ export default function DocumentsPage() {
       if (uploadError) throw uploadError
 
       // Create document record with subcategory
-      const { error: insertError } = await supabase
+      const { data: insertedDoc, error: insertError } = await supabase
         .from('documents')
         .insert({
           user_id: user.id,
@@ -352,9 +397,36 @@ export default function DocumentsPage() {
           file_type: uploadFile.type || 'application/octet-stream',
           expiry_date: uploadExpiryDate || null,
           custom_reminder_days: uploadCustomReminderDays,
+          reminder_watcher_id: uploadReminderWatcher || null,
         })
+        .select()
+        .single()
 
       if (insertError) throw insertError
+
+      // Send notification to reminder watcher if selected
+      if (uploadReminderWatcher && uploadExpiryDate && insertedDoc) {
+        const watcher = familyMembers.find(m => m.id === uploadReminderWatcher)
+        if (watcher) {
+          // Send confirmation email to watcher
+          try {
+            await fetch('/api/reminder-watcher/notify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                documentId: insertedDoc.id,
+                documentTitle: uploadTitle,
+                category: uploadCategory,
+                expiryDate: uploadExpiryDate,
+                watcherEmail: watcher.email,
+                watcherName: watcher.name,
+              })
+            })
+          } catch (err) {
+            console.error('Failed to notify watcher:', err)
+          }
+        }
+      }
 
       // Update storage used in profile
       await supabase
@@ -378,6 +450,7 @@ export default function DocumentsPage() {
       setUploadCustomReminderDays(null)
       setUploadSubcategory(null)
       setUploadCustomCategory(null)
+      setUploadReminderWatcher(null)
       setIsUploadOpen(false)
       fetchDocuments()
     } catch (error) {
@@ -1123,25 +1196,30 @@ export default function DocumentsPage() {
 
       {/* Category Tabs */}
       <Tabs
-        value={selectedCustomCategory ? `custom:${selectedCustomCategory}` : (selectedCategory || 'all')}
+        value={activeTab}
         onValueChange={(val) => {
+          setActiveTab(val)
           if (val.startsWith('custom:')) {
             const customId = val.replace('custom:', '')
             setSelectedCustomCategory(customId)
             setSelectedCategory(null)
+          } else if (val === 'overview' || val === 'all') {
+            setSelectedCustomCategory(null)
+            setSelectedCategory(null)
           } else {
             setSelectedCustomCategory(null)
-            setSelectedCategory(val === 'all' ? null : val as DocumentCategory)
+            setSelectedCategory(val as DocumentCategory)
           }
           setCurrentFolder(null) // Reset folder when changing category
         }}
       >
         <TabsList className="w-full h-auto flex-wrap justify-start bg-transparent gap-2 p-0">
+          {/* Overview Tab - First */}
           <TabsTrigger
-            value="all"
+            value="overview"
             className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700"
           >
-            Alle ({documents.length})
+            Übersicht
           </TabsTrigger>
           {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
             const count = getDocumentCountForCategory(key as DocumentCategory)
@@ -1169,8 +1247,15 @@ export default function DocumentsPage() {
               </TabsTrigger>
             )
           })}
-          {/* Add Category Button */}
-          {(userTier.limits.maxCustomCategories === -1 || customCategories.length < userTier.limits.maxCustomCategories) && userTier.limits.maxCustomCategories > 0 && (
+          {/* All Tab */}
+          <TabsTrigger
+            value="all"
+            className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700"
+          >
+            Alle ({documents.length})
+          </TabsTrigger>
+          {/* Add Category Button - Last */}
+          {userTier.limits.maxCustomCategories !== 0 && (userTier.limits.maxCustomCategories === -1 || customCategories.length < userTier.limits.maxCustomCategories) && (
             <Button
               variant="ghost"
               size="sm"
@@ -1183,7 +1268,37 @@ export default function DocumentsPage() {
           )}
         </TabsList>
 
-        {/* All categories view */}
+        {/* Overview - Shows 3 newest documents + category overview */}
+        <TabsContent value="overview" className="mt-6">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-sage-600" />
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Recent Documents */}
+              <div>
+                <h2 className="text-lg font-semibold text-warmgray-900 mb-4">Zuletzt hinzugefügt</h2>
+                {documents.length > 0 ? (
+                  <div className="space-y-3">
+                    {documents.slice(0, 3).map(renderDocumentItem)}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 border-2 border-dashed border-warmgray-200 rounded-lg">
+                    <FileText className="w-10 h-10 text-warmgray-300 mx-auto mb-3" />
+                    <p className="text-warmgray-500">Noch keine Dokumente vorhanden</p>
+                    <Button onClick={() => openUploadDialog('identitaet')} className="mt-3">
+                      <Upload className="mr-2 h-4 w-4" />
+                      Erstes Dokument hochladen
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* All documents view */}
         <TabsContent value="all" className="mt-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -1559,6 +1674,31 @@ export default function DocumentsPage() {
                 </select>
                 <p className="text-xs text-warmgray-500">
                   Überschreibt die allgemeine Erinnerungseinstellung für dieses Dokument
+                </p>
+              </div>
+            )}
+
+            {/* Reminder Watcher - only show when expiry date is set and family members exist */}
+            {uploadExpiryDate && familyMembers.length > 0 && (
+              <div className="space-y-2">
+                <Label>Soll eine weitere Person den Termin im Blick haben?</Label>
+                <select
+                  value={uploadReminderWatcher || '_none'}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setUploadReminderWatcher(value === '_none' ? null : value)
+                  }}
+                  className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
+                >
+                  <option value="_none">Nein, nur ich</option>
+                  {familyMembers.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} ({member.email})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-warmgray-500">
+                  Diese Person erhält eine Bestätigung und wird ebenfalls an den Termin erinnert
                 </p>
               </div>
             )}

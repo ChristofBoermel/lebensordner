@@ -23,15 +23,15 @@ export default async function DashboardLayout({
     .single()
 
   return (
-    <div className="min-h-screen bg-cream-50">
-      <DashboardNav 
-        user={{ 
-          email: user.email || '', 
+    <div className="min-h-screen bg-cream-50 dark:bg-warmgray-950">
+      <DashboardNav
+        user={{
+          email: user.email || '',
           full_name: profile?.full_name,
           role: profile?.role
-        }} 
+        }}
       />
-      
+
       {/* Main Content */}
       <main className="lg:pl-64">
         <div className="py-8 px-4 sm:px-6 lg:px-8">
