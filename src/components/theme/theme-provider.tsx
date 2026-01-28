@@ -11,6 +11,8 @@ interface ThemeContextType {
   resolvedTheme: 'light' | 'dark'
   fontSize: FontSize
   setFontSize: (size: FontSize) => void
+  seniorMode: boolean
+  setSeniorMode: (enabled: boolean) => void
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
@@ -19,6 +21,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('system')
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
   const [fontSize, setFontSize] = useState<FontSize>('normal')
+  const [seniorMode, setSeniorMode] = useState<boolean>(false)
 
   useEffect(() => {
     // Load saved theme
@@ -30,6 +33,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const savedFontSize = localStorage.getItem('fontSize') as FontSize | null
     if (savedFontSize) {
       setFontSize(savedFontSize)
+    }
+    // Load saved senior mode
+    const savedSeniorMode = localStorage.getItem('seniorMode')
+    if (savedSeniorMode === 'true') {
+      setSeniorMode(true)
     }
   }, [])
 
@@ -77,8 +85,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('fontSize', fontSize)
   }, [fontSize])
 
+  // Apply senior mode
+  useEffect(() => {
+    const root = window.document.documentElement
+    if (seniorMode) {
+      root.classList.add('senior-mode')
+    } else {
+      root.classList.remove('senior-mode')
+    }
+    localStorage.setItem('seniorMode', String(seniorMode))
+  }, [seniorMode])
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme, fontSize, setFontSize }}>
+    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme, fontSize, setFontSize, seniorMode, setSeniorMode }}>
       {children}
     </ThemeContext.Provider>
   )

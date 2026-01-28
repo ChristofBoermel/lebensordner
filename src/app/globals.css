@@ -331,3 +331,84 @@
   .animation-delay-300 { animation-delay: 300ms; }
   .animation-delay-400 { animation-delay: 400ms; }
 }
+
+/* =================================================================
+   SENIOREN-MODUS (Senior Mode)
+   Pure CSS approach - no re-renders, only CSS recalculation
+   Applied via .senior-mode class on <html> element
+   ================================================================= */
+
+html.senior-mode {
+  /* Larger base font size for better readability */
+  font-size: 20px;
+
+  /* Improved letter and line spacing */
+  letter-spacing: 0.01em;
+  line-height: 1.7;
+}
+
+/* Senior Mode: Enhanced typography */
+.senior-mode body {
+  line-height: 1.8;
+}
+
+.senior-mode h1,
+.senior-mode h2,
+.senior-mode h3,
+.senior-mode h4 {
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
+/* Senior Mode: Larger touch targets */
+.senior-mode button,
+.senior-mode [role="button"],
+.senior-mode input[type="submit"],
+.senior-mode input[type="button"],
+.senior-mode a {
+  min-height: 52px;
+  min-width: 52px;
+}
+
+.senior-mode input:not([type="checkbox"]):not([type="radio"]),
+.senior-mode textarea,
+.senior-mode select {
+  min-height: 56px;
+  padding-top: 0.875rem;
+  padding-bottom: 0.875rem;
+}
+
+/* Senior Mode: Enhanced focus states */
+.senior-mode *:focus-visible {
+  @apply ring-[3px] ring-offset-4;
+}
+
+/* Senior Mode: Larger icons in navigation and buttons */
+.senior-mode nav svg,
+.senior-mode button svg,
+.senior-mode [role="button"] svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* Senior Mode: Enhanced card spacing */
+.senior-mode .card-elevated {
+  @apply p-6;
+}
+
+.senior-mode .category-card {
+  @apply p-8;
+}
+
+/* Senior Mode: Enhanced button padding */
+.senior-mode button,
+.senior-mode [role="button"] {
+  @apply px-6 py-4;
+}
+
+/* Senior Mode: Larger checkbox and radio inputs */
+.senior-mode input[type="checkbox"],
+.senior-mode input[type="radio"] {
+  width: 1.5rem;
+  height: 1.5rem;
+}

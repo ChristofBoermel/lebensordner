@@ -40,6 +40,7 @@ import {
   X
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
+import { useTheme } from '@/components/theme/theme-provider'
 import { TwoFactorSetup } from '@/components/auth/two-factor-setup'
 import { SUBSCRIPTION_TIERS, getTierFromSubscription, type TierConfig } from '@/lib/subscription-tiers'
 import type { Profile } from '@/types/database'
@@ -73,6 +74,7 @@ export default function EinstellungenPage() {
 
   const router = useRouter()
   const supabase = createClient()
+  const { seniorMode, setSeniorMode } = useTheme()
 
   const handlePasswordChange = async () => {
     setPasswordError(null)
@@ -740,7 +742,7 @@ export default function EinstellungenPage() {
             Passen Sie das Design der Anwendung an
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex items-center justify-between py-3">
             <div>
               <p className="font-medium text-warmgray-900">Design</p>
@@ -749,6 +751,26 @@ export default function EinstellungenPage() {
               </p>
             </div>
             <ThemeToggle />
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Senioren-Modus</p>
+              <p className="text-sm text-warmgray-500">
+                Größere Schrift und Buttons für bessere Lesbarkeit
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={seniorMode}
+                onChange={(e) => setSeniorMode(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sage-600"></div>
+            </label>
           </div>
         </CardContent>
       </Card>
