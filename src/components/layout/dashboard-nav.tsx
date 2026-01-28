@@ -33,7 +33,8 @@ import {
   MessageSquare,
   Sun,
   Moon,
-  Type
+  Type,
+  Eye
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { GlobalSearch } from '@/components/search/global-search'
@@ -76,7 +77,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
   const supabase = createClient()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const { theme, setTheme, resolvedTheme, fontSize, setFontSize } = useTheme()
+  const { theme, setTheme, resolvedTheme, fontSize, setFontSize, seniorMode, setSeniorMode } = useTheme()
 
   // Keyboard shortcut for search (Cmd/Ctrl + K)
   useEffect(() => {
@@ -191,6 +192,30 @@ export function DashboardNav({ user }: DashboardNavProps) {
 
           {/* Accessibility Controls */}
           <div className="border-t border-warmgray-200 px-4 py-4">
+            {/* Einfache Ansicht Toggle - prominent placement */}
+            <button
+              onClick={() => setSeniorMode(!seniorMode)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors mb-3",
+                seniorMode
+                  ? "bg-sage-100 text-sage-700 dark:bg-sage-900/30 dark:text-sage-400"
+                  : "bg-warmgray-50 text-warmgray-600 hover:bg-warmgray-100 dark:bg-warmgray-800 dark:text-warmgray-400 dark:hover:bg-warmgray-700"
+              )}
+              title="Größere Schrift und Bedienelemente"
+            >
+              <Eye className={cn("w-5 h-5", seniorMode ? "text-sage-600 dark:text-sage-400" : "text-warmgray-400")} />
+              <span className="flex-1 text-left">Einfache Ansicht</span>
+              <div className={cn(
+                "w-10 h-6 rounded-full transition-colors relative",
+                seniorMode ? "bg-sage-600" : "bg-warmgray-300 dark:bg-warmgray-600"
+              )}>
+                <div className={cn(
+                  "absolute top-1 w-4 h-4 rounded-full bg-white transition-transform",
+                  seniorMode ? "translate-x-5" : "translate-x-1"
+                )} />
+              </div>
+            </button>
+
             <div className="flex items-center justify-between gap-4">
               {/* Dark Mode Toggle */}
               <button
@@ -312,6 +337,19 @@ export function DashboardNav({ user }: DashboardNavProps) {
         </div>
 
         {/* Mobile Accessibility Controls */}
+        <button
+          onClick={() => setSeniorMode(!seniorMode)}
+          className={cn(
+            "p-2 rounded-lg transition-colors",
+            seniorMode
+              ? "bg-sage-100 text-sage-600 dark:bg-sage-900/30 dark:text-sage-400"
+              : "hover:bg-warmgray-100 dark:hover:bg-warmgray-800"
+          )}
+          title={seniorMode ? 'Einfache Ansicht aus' : 'Einfache Ansicht an'}
+        >
+          <Eye className={cn("w-5 h-5", seniorMode ? "text-sage-600 dark:text-sage-400" : "text-warmgray-600 dark:text-warmgray-400")} />
+        </button>
+
         <button
           onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
           className="p-2 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"

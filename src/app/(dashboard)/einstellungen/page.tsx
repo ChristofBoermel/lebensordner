@@ -757,9 +757,9 @@ export default function EinstellungenPage() {
 
           <div className="flex items-center justify-between py-3">
             <div>
-              <p className="font-medium text-warmgray-900">Senioren-Modus</p>
+              <p className="font-medium text-warmgray-900">Einfache Ansicht</p>
               <p className="text-sm text-warmgray-500">
-                Größere Schrift und Buttons für bessere Lesbarkeit
+                Größere Schrift und Bedienelemente
               </p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
