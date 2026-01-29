@@ -96,7 +96,18 @@ export const ANALYTICS_EVENTS = {
   SUBSCRIPTION_STARTED: 'subscription_started',
   SUBSCRIPTION_CANCELED: 'subscription_canceled',
   TRIAL_STARTED: 'trial_started',
-  
+
+  // Upgrade nudge events
+  UPGRADE_NUDGE_SHOWN: 'upgrade_nudge_shown',
+  UPGRADE_NUDGE_DISMISSED: 'upgrade_nudge_dismissed',
+  UPGRADE_NUDGE_CLICKED: 'upgrade_nudge_clicked',
+  UPGRADE_MODAL_SHOWN: 'upgrade_modal_shown',
+  UPGRADE_MODAL_DISMISSED: 'upgrade_modal_dismissed',
+  UPGRADE_MODAL_CLICKED: 'upgrade_modal_clicked',
+  PRICING_PAGE_VIEWED: 'pricing_page_viewed',
+  CHECKOUT_STARTED: 'checkout_started',
+  CHECKOUT_COMPLETED: 'checkout_completed',
+
   // Errors
   ERROR_OCCURRED: 'error_occurred',
   API_ERROR: 'api_error',

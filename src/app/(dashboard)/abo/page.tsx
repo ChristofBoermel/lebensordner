@@ -6,11 +6,13 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  CreditCard, Check, Loader2, AlertTriangle, CheckCircle2, 
-  Calendar, Shield, FileText, Users, HardDrive, Crown, Sparkles
+import {
+  CreditCard, Check, X, Loader2, AlertTriangle, CheckCircle2,
+  Calendar, Shield, FileText, Users, HardDrive, Crown, Sparkles, Star
 } from 'lucide-react'
 import { SUBSCRIPTION_TIERS, getActiveTiers, type SubscriptionTier, type TierConfig } from '@/lib/subscription-tiers'
+import { TrustBadges } from '@/components/upgrade/TrustBadges'
+import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
 
 interface SubscriptionInfo {
   status: string | null
@@ -38,6 +40,12 @@ export default function AboPage() {
   const [priceIds, setPriceIds] = useState<StripePriceIds | null>(null)
   
   const supabase = createClient()
+  const { capture } = usePostHog()
+
+  // Track page view
+  useEffect(() => {
+    capture(ANALYTICS_EVENTS.PRICING_PAGE_VIEWED)
+  }, [capture])
 
   // Fetch Stripe price IDs from API
   useEffect(() => {
@@ -187,13 +195,28 @@ export default function AboPage() {
     )
   }
 
+  // Feature comparison data
+  const featureComparison = [
+    { name: 'Dokumente', free: '10', basic: '50', premium: 'Unbegrenzt' },
+    { name: 'Speicherplatz', free: '100 MB', basic: '500 MB', premium: '10 GB' },
+    { name: 'Vertrauenspersonen', free: '1', basic: '3', premium: '10' },
+    { name: 'Ordner', free: '3', basic: '10', premium: 'Unbegrenzt' },
+    { name: 'E-Mail-Erinnerungen', free: false, basic: true, premium: true },
+    { name: 'Dokument-Ablaufdatum', free: false, basic: true, premium: true },
+    { name: 'Eigene Kategorien', free: false, basic: '5', premium: 'Unbegrenzt' },
+    { name: 'Zwei-Faktor-Auth', free: false, basic: false, premium: true },
+    { name: 'Prioritäts-Support', free: false, basic: false, premium: true },
+  ]
+
   return (
     <div className="max-w-5xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="text-center">
-        <h1 className="text-3xl font-serif font-semibold text-warmgray-900">Abonnement wählen</h1>
-        <p className="text-lg text-warmgray-600 mt-2">
-          Wählen Sie den Plan, der am besten zu Ihnen passt
+      {/* Header - Senior friendly */}
+      <div className="text-center space-y-4">
+        <h1 className="text-3xl md:text-4xl font-serif font-semibold text-warmgray-900">
+          Welcher Tarif passt zu Ihnen?
+        </h1>
+        <p className="text-xl text-warmgray-600 max-w-2xl mx-auto">
+          Alle Tarife sind transparent und fair. Sie können jederzeit wechseln oder kündigen.
         </p>
       </div>
 
@@ -263,79 +286,123 @@ export default function AboPage() {
         </Tabs>
       </div>
 
-      {/* Pricing Cards */}
+      {/* Pricing Cards - Senior friendly with larger text */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {getActiveTiers().map((tier) => {
           const isCurrent = tier.id === currentTier
           const savings = getSavings(tier)
-          
+          const tierFeatures = featureComparison.map(f => ({
+            name: f.name,
+            value: tier.id === 'free' ? f.free : tier.id === 'basic' ? f.basic : f.premium,
+          }))
+
           return (
-            <Card 
+            <Card
               key={tier.id}
-              className={`relative ${
-                tier.highlighted 
-                  ? 'border-2 border-sage-500 shadow-lg' 
+              className={`relative flex flex-col ${
+                tier.highlighted
+                  ? 'border-2 border-sage-500 shadow-xl scale-[1.02]'
                   : 'border-warmgray-200'
               } ${isCurrent ? 'ring-2 ring-sage-300' : ''}`}
             >
-              {tier.badge && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span className="px-3 py-1 text-xs font-semibold rounded-full bg-sage-600 text-white">
-                    {tier.badge}
+              {/* Badges */}
+              {tier.highlighted && (
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                  <span className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full bg-sage-600 text-white shadow-lg">
+                    <Star className="w-4 h-4 fill-current" />
+                    Empfohlen
                   </span>
                 </div>
               )}
-              
+
               {isCurrent && (
                 <div className="absolute -top-3 right-4">
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-warmgray-800 text-white">
-                    Aktuell
+                  <span className="px-3 py-1 text-sm font-semibold rounded-full bg-warmgray-800 text-white">
+                    Ihr aktueller Tarif
                   </span>
                 </div>
               )}
 
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg">{tier.name}</CardTitle>
-                <CardDescription>{tier.description}</CardDescription>
+              <CardHeader className="pb-4 pt-8">
+                <CardTitle className="text-2xl">{tier.name}</CardTitle>
+                <CardDescription className="text-base">
+                  {tier.id === 'free' && 'Für den Start'}
+                  {tier.id === 'basic' && 'Für Einzelpersonen'}
+                  {tier.id === 'premium' && 'Für umfassenden Schutz'}
+                </CardDescription>
               </CardHeader>
 
-              <CardContent className="space-y-4">
-                <div>
-                  <span className="text-3xl font-bold text-warmgray-900">{getPrice(tier)}</span>
-                  {tier.priceMonthly > 0 && (
-                    <span className="text-warmgray-500 text-sm"> / Monat</span>
-                  )}
-                  {billingPeriod === 'yearly' && savings && savings > 0 && (
-                    <p className="text-sm text-green-600 font-medium mt-1">
-                      {savings}% sparen (jährlich abgerechnet)
-                    </p>
+              <CardContent className="flex-1 flex flex-col space-y-5">
+                {/* Price Display */}
+                <div className="pb-4 border-b border-warmgray-200">
+                  {tier.priceMonthly === 0 ? (
+                    <span className="text-4xl font-bold text-warmgray-900">Kostenlos</span>
+                  ) : (
+                    <>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-4xl font-bold text-warmgray-900">{getPrice(tier)}</span>
+                        <span className="text-lg text-warmgray-500">/ Monat</span>
+                      </div>
+                      {billingPeriod === 'yearly' && (
+                        <p className="text-base text-warmgray-600 mt-1">
+                          {tier.priceYearly.toFixed(0).replace('.', ',')} € pro Jahr
+                        </p>
+                      )}
+                      {billingPeriod === 'yearly' && savings && savings > 0 && (
+                        <p className="text-base text-green-600 font-medium mt-1">
+                          Sie sparen {savings}% gegenüber monatlich
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
 
-                <ul className="space-y-2">
-                  {tier.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-start gap-2 text-sm">
-                      <Check className="w-4 h-4 text-sage-600 mt-0.5 flex-shrink-0" />
-                      <span className="text-warmgray-600">{feature}</span>
-                    </li>
-                  ))}
+                {/* Features List with Check/X */}
+                <ul className="space-y-3 flex-1">
+                  {tierFeatures.map((feature, idx) => {
+                    const hasFeature = feature.value !== false
+                    return (
+                      <li key={idx} className="flex items-start gap-3">
+                        {hasFeature ? (
+                          <Check className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                        ) : (
+                          <X className="w-5 h-5 text-warmgray-300 mt-0.5 flex-shrink-0" />
+                        )}
+                        <span className={`text-base ${hasFeature ? 'text-warmgray-700' : 'text-warmgray-400'}`}>
+                          {feature.name}
+                          {typeof feature.value === 'string' && hasFeature && (
+                            <span className="font-medium text-warmgray-900"> ({feature.value})</span>
+                          )}
+                        </span>
+                      </li>
+                    )
+                  })}
                 </ul>
 
+                {/* CTA Button */}
                 <Button
-                  className="w-full"
+                  className={`w-full text-lg py-6 ${tier.highlighted ? 'shadow-md' : ''}`}
+                  size="lg"
                   variant={tier.highlighted ? 'default' : 'outline'}
                   disabled={
-                    isCurrent || 
-                    tier.id === 'free' || 
+                    isCurrent ||
+                    tier.id === 'free' ||
                     isProcessing === tier.id ||
                     (!['free'].includes(tier.id) && !getPriceId(tier.id as Exclude<SubscriptionTier, 'free'>, billingPeriod))
                   }
-                  onClick={() => handleSubscribe(tier)}
+                  onClick={() => {
+                    capture(ANALYTICS_EVENTS.CHECKOUT_STARTED, { tier: tier.id, billing_period: billingPeriod })
+                    handleSubscribe(tier)
+                  }}
                 >
                   {isProcessing === tier.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
                   ) : null}
-                  {isCurrent ? 'Aktueller Plan' : tier.id === 'free' ? 'Kostenlos nutzen' : 'Auswählen'}
+                  {isCurrent
+                    ? 'Ihr aktueller Tarif'
+                    : tier.id === 'free'
+                    ? 'Kostenlos starten'
+                    : '30 Tage kostenlos testen'}
                 </Button>
               </CardContent>
             </Card>
@@ -343,38 +410,55 @@ export default function AboPage() {
         })}
       </div>
 
-      {/* FAQ Section */}
+      {/* Trust Badges */}
+      <TrustBadges className="max-w-2xl mx-auto" />
+
+      {/* FAQ Section - Senior friendly with larger text */}
       <Card>
         <CardHeader>
-          <CardTitle>Häufige Fragen</CardTitle>
+          <CardTitle className="text-2xl">Häufige Fragen</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
           <div>
-            <h4 className="font-medium text-warmgray-900">Kann ich jederzeit kündigen?</h4>
-            <p className="text-sm text-warmgray-600 mt-1">
-              Ja, Sie können Ihr Abonnement jederzeit kündigen. Sie behalten den Zugang bis zum Ende des aktuellen Abrechnungszeitraums.
+            <h4 className="text-lg font-medium text-warmgray-900">Kann ich jederzeit kündigen?</h4>
+            <p className="text-base text-warmgray-600 mt-2">
+              Ja, Sie können Ihr Abonnement jederzeit kündigen. Sie behalten den Zugang bis zum Ende des aktuellen Abrechnungszeitraums. Es gibt keine versteckten Kosten oder Mindestlaufzeiten.
             </p>
           </div>
           <div>
-            <h4 className="font-medium text-warmgray-900">Was passiert mit meinen Daten nach der Kündigung?</h4>
-            <p className="text-sm text-warmgray-600 mt-1">
-              Ihre Daten bleiben 30 Tage nach der Kündigung erhalten. Danach werden sie gemäß unserer Datenschutzrichtlinie gelöscht.
+            <h4 className="text-lg font-medium text-warmgray-900">Was passiert mit meinen Daten nach der Kündigung?</h4>
+            <p className="text-base text-warmgray-600 mt-2">
+              Ihre Daten bleiben 30 Tage nach der Kündigung erhalten, sodass Sie genug Zeit haben, alles herunterzuladen. Danach werden sie sicher gelöscht.
             </p>
           </div>
           <div>
-            <h4 className="font-medium text-warmgray-900">Kann ich zwischen Plänen wechseln?</h4>
-            <p className="text-sm text-warmgray-600 mt-1">
-              Ja, Sie können jederzeit upgraden oder downgraden. Bei einem Upgrade wird der anteilige Betrag sofort berechnet.
+            <h4 className="text-lg font-medium text-warmgray-900">Kann ich zwischen Tarifen wechseln?</h4>
+            <p className="text-base text-warmgray-600 mt-2">
+              Ja, Sie können jederzeit upgraden oder zu einem günstigeren Tarif wechseln. Beim Upgrade wird nur der anteilige Betrag berechnet.
             </p>
           </div>
           <div>
-            <h4 className="font-medium text-warmgray-900">Welche Zahlungsmethoden werden akzeptiert?</h4>
-            <p className="text-sm text-warmgray-600 mt-1">
-              Wir akzeptieren alle gängigen Kreditkarten sowie SEPA-Lastschrift.
+            <h4 className="text-lg font-medium text-warmgray-900">Welche Zahlungsmethoden werden akzeptiert?</h4>
+            <p className="text-base text-warmgray-600 mt-2">
+              Wir akzeptieren alle gängigen Kreditkarten (Visa, Mastercard, American Express) sowie SEPA-Lastschrift für bequeme Abbuchung von Ihrem Bankkonto.
+            </p>
+          </div>
+          <div>
+            <h4 className="text-lg font-medium text-warmgray-900">Wie funktioniert die 30-Tage-Testphase?</h4>
+            <p className="text-base text-warmgray-600 mt-2">
+              Sie können jeden kostenpflichtigen Tarif 30 Tage lang kostenlos testen. Wenn Sie nicht zufrieden sind, kündigen Sie einfach vor Ablauf der Testphase – es entstehen keine Kosten.
             </p>
           </div>
         </CardContent>
       </Card>
+
+      {/* Final reassurance */}
+      <div className="text-center py-6 border-t border-warmgray-200">
+        <p className="text-lg text-warmgray-600 flex items-center justify-center gap-2">
+          <Sparkles className="w-5 h-5 text-sage-500" />
+          Sie können jederzeit wechseln oder kündigen. Keine versteckten Kosten.
+        </p>
+      </div>
     </div>
   )
 }
