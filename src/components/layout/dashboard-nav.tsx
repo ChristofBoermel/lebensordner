@@ -297,7 +297,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Mein Konto</DropdownMenuLabel>
+                <DropdownMenuLabel>Mein Profil</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/einstellungen" className="cursor-pointer">
