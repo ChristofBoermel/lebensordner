@@ -37,12 +37,20 @@ import {
   RotateCcw,
   Sparkles,
   Camera,
-  X
+  X,
+  ChevronLeft,
+  CreditCard,
+  Settings,
+  ArrowRight
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
+import { useTheme } from '@/components/theme/theme-provider'
 import { TwoFactorSetup } from '@/components/auth/two-factor-setup'
 import { SUBSCRIPTION_TIERS, getTierFromSubscription, type TierConfig } from '@/lib/subscription-tiers'
 import type { Profile } from '@/types/database'
+import Link from 'next/link'
+
+type SeniorSection = 'profil' | 'sicherheit' | 'zahlung' | 'weitere' | null
 
 export default function EinstellungenPage() {
   const [profile, setProfile] = useState<Partial<Profile>>({})
@@ -51,6 +59,9 @@ export default function EinstellungenPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Senior mode section navigation
+  const [seniorActiveSection, setSeniorActiveSection] = useState<SeniorSection>(null)
   
   // 2FA state
   const [is2FADialogOpen, setIs2FADialogOpen] = useState(false)
@@ -73,6 +84,7 @@ export default function EinstellungenPage() {
 
   const router = useRouter()
   const supabase = createClient()
+  const { seniorMode, setSeniorMode } = useTheme()
 
   const handlePasswordChange = async () => {
     setPasswordError(null)
@@ -375,6 +387,344 @@ export default function EinstellungenPage() {
     )
   }
 
+  // Senior Mode Card Navigation
+  const renderSeniorCards = () => (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="page-header">
+        <h1 className="text-3xl font-serif font-semibold text-warmgray-900">
+          Einstellungen
+        </h1>
+      </div>
+
+      {/* Success/Error Messages */}
+      {saveSuccess && (
+        <div className="p-4 rounded-lg bg-sage-50 border border-sage-200 text-sage-700 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5" />
+          Ihre Änderungen wurden gespeichert.
+        </div>
+      )}
+      {error && (
+        <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5" />
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Card
+          className="cursor-pointer hover:border-sage-400 hover:shadow-md transition-all"
+          onClick={() => setSeniorActiveSection('profil')}
+        >
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-lg bg-sage-100 flex items-center justify-center">
+                <User className="w-7 h-7 text-sage-600" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-lg text-warmgray-900">Meine Daten</p>
+                <p className="text-sm text-warmgray-500">Name, Adresse, Telefon</p>
+              </div>
+              <ArrowRight className="w-5 h-5 text-warmgray-400" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:border-sage-400 hover:shadow-md transition-all"
+          onClick={() => setSeniorActiveSection('sicherheit')}
+        >
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-lg bg-sage-100 flex items-center justify-center">
+                <Lock className="w-7 h-7 text-sage-600" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-lg text-warmgray-900">Sicherheit</p>
+                <p className="text-sm text-warmgray-500">Passwort, 2FA</p>
+              </div>
+              <ArrowRight className="w-5 h-5 text-warmgray-400" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Link href="/abo" className="block">
+          <Card className="cursor-pointer hover:border-sage-400 hover:shadow-md transition-all h-full">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-lg bg-sage-100 flex items-center justify-center">
+                  <CreditCard className="w-7 h-7 text-sage-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-lg text-warmgray-900">Zahlung & Tarif</p>
+                  <p className="text-sm text-warmgray-500">{userTier.name}</p>
+                </div>
+                <ArrowRight className="w-5 h-5 text-warmgray-400" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Card
+          className="cursor-pointer hover:border-sage-400 hover:shadow-md transition-all"
+          onClick={() => setSeniorActiveSection('weitere')}
+        >
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-lg bg-sage-100 flex items-center justify-center">
+                <Settings className="w-7 h-7 text-sage-600" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-lg text-warmgray-900">Weitere Einstellungen</p>
+                <p className="text-sm text-warmgray-500">Benachrichtigungen, Design</p>
+              </div>
+              <ArrowRight className="w-5 h-5 text-warmgray-400" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+
+  // Senior Mode Section Header with Back Button
+  const renderSeniorSectionHeader = (title: string) => (
+    <div className="flex items-center gap-4 mb-6">
+      <Button
+        variant="ghost"
+        size="lg"
+        onClick={() => setSeniorActiveSection(null)}
+        className="gap-2"
+      >
+        <ChevronLeft className="w-5 h-5" />
+        Zurück
+      </Button>
+      <h1 className="text-2xl font-serif font-semibold text-warmgray-900">{title}</h1>
+    </div>
+  )
+
+  // Senior Mode: Show cards or specific section
+  if (seniorMode) {
+    // Show section navigation cards
+    if (seniorActiveSection === null) {
+      return renderSeniorCards()
+    }
+
+    // Show specific section
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Success/Error Messages */}
+        {saveSuccess && (
+          <div className="p-4 rounded-lg bg-sage-50 border border-sage-200 text-sage-700 flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5" />
+            Ihre Änderungen wurden gespeichert.
+          </div>
+        )}
+        {error && (
+          <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5" />
+            {error}
+          </div>
+        )}
+
+        {seniorActiveSection === 'profil' && (
+          <>
+            {renderSeniorSectionHeader('Meine Daten')}
+            {/* Profile Card - same as below */}
+            <Card>
+              <CardContent className="pt-6 space-y-6">
+                {/* Profile Picture */}
+                <div className="space-y-2">
+                  <Label>Profilbild</Label>
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      {profile.profile_picture_url ? (
+                        <img src={profile.profile_picture_url} alt="Profilbild" className="w-20 h-20 rounded-full object-cover border-2 border-warmgray-200" />
+                      ) : (
+                        <div className="w-20 h-20 rounded-full bg-sage-100 flex items-center justify-center border-2 border-warmgray-200">
+                          <User className="w-8 h-8 text-sage-600" />
+                        </div>
+                      )}
+                      {isUploadingPicture && (
+                        <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+                          <Loader2 className="w-6 h-6 text-white animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="cursor-pointer">
+                        <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleProfilePictureUpload} className="hidden" disabled={isUploadingPicture} />
+                        <Button variant="outline" size="sm" asChild disabled={isUploadingPicture}>
+                          <span><Camera className="w-4 h-4 mr-2" />{profile.profile_picture_url ? 'Ändern' : 'Hochladen'}</span>
+                        </Button>
+                      </label>
+                      {profile.profile_picture_url && (
+                        <Button variant="ghost" size="sm" onClick={handleRemoveProfilePicture} disabled={isUploadingPicture} className="text-red-600 hover:bg-red-50">
+                          <X className="w-4 h-4 mr-2" />Entfernen
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <Separator />
+                <div className="space-y-2">
+                  <Label htmlFor="full_name">Vollständiger Name</Label>
+                  <Input id="full_name" value={profile.full_name || ''} onChange={(e) => setProfile({ ...profile, full_name: e.target.value })} placeholder="Max Mustermann" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">E-Mail-Adresse</Label>
+                  <Input id="email" type="email" value={profile.email || ''} disabled className="bg-warmgray-50" />
+                  <p className="text-xs text-warmgray-500">Die E-Mail-Adresse kann nicht geändert werden</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Telefonnummer</Label>
+                  <Input id="phone" type="tel" value={profile.phone || ''} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} placeholder="+49 123 456789" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="date_of_birth">Geburtsdatum</Label>
+                  <Input id="date_of_birth" type="date" value={profile.date_of_birth || ''} onChange={(e) => setProfile({ ...profile, date_of_birth: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address">Adresse</Label>
+                  <textarea id="address" value={profile.address || ''} onChange={(e) => setProfile({ ...profile, address: e.target.value })} placeholder="Musterstraße 1&#10;12345 Musterstadt" className="w-full min-h-[100px] rounded-md border-2 border-warmgray-400 bg-white px-4 py-3 text-base" />
+                </div>
+                <Button onClick={handleSave} disabled={isSaving} size="lg" className="w-full">
+                  {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Speichern...</> : <><Save className="mr-2 h-4 w-4" />Änderungen speichern</>}
+                </Button>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {seniorActiveSection === 'sicherheit' && (
+          <>
+            {renderSeniorSectionHeader('Sicherheit')}
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="font-medium text-warmgray-900">Passwort ändern</p>
+                    <p className="text-sm text-warmgray-500">Ändern Sie Ihr Anmeldepasswort</p>
+                  </div>
+                  <Button variant="outline" size="lg" onClick={() => setIsPasswordDialogOpen(true)}>
+                    <Key className="mr-2 h-4 w-4" />Ändern
+                  </Button>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-warmgray-900">Zwei-Faktor-Authentifizierung</p>
+                      {is2FAEnabled && <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">Aktiv</span>}
+                    </div>
+                    <p className="text-sm text-warmgray-500">{is2FAEnabled ? 'Ihr Konto ist durch 2FA geschützt' : 'Zusätzliche Sicherheit'}</p>
+                  </div>
+                  <Button variant={is2FAEnabled ? "outline" : "default"} size="lg" onClick={() => setIs2FADialogOpen(true)}>
+                    <Smartphone className="mr-2 h-4 w-4" />{is2FAEnabled ? 'Verwalten' : 'Aktivieren'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {seniorActiveSection === 'weitere' && (
+          <>
+            {renderSeniorSectionHeader('Weitere Einstellungen')}
+            {/* Notifications */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Bell className="w-5 h-5 text-sage-600" />Benachrichtigungen</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="font-medium text-warmgray-900">Erinnerungs-E-Mails</p>
+                    <p className="text-sm text-warmgray-500">E-Mails vor Fälligkeitsdaten</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked={profile.email_reminders_enabled ?? true} onChange={(e) => setProfile({ ...profile, email_reminders_enabled: e.target.checked })} className="sr-only peer" />
+                    <div className="w-11 h-6 bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sage-600"></div>
+                  </label>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Appearance */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Erscheinungsbild</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="font-medium text-warmgray-900">Design</p>
+                    <p className="text-sm text-warmgray-500">Hell, Dunkel oder System</p>
+                  </div>
+                  <ThemeToggle />
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="font-medium text-warmgray-900">Einfache Ansicht</p>
+                    <p className="text-sm text-warmgray-500">Größere Schrift und Bedienelemente</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked={seniorMode} onChange={(e) => setSeniorMode(e.target.checked)} className="sr-only peer" />
+                    <div className="w-11 h-6 bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sage-600"></div>
+                  </label>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Account */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Konto</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="font-medium text-warmgray-900">Abmelden</p>
+                    <p className="text-sm text-warmgray-500">Von diesem Gerät abmelden</p>
+                  </div>
+                  <Button variant="outline" size="lg" onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />Abmelden
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            <Button onClick={handleSave} disabled={isSaving} size="lg" className="w-full">
+              {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Speichern...</> : <><Save className="mr-2 h-4 w-4" />Änderungen speichern</>}
+            </Button>
+          </>
+        )}
+
+        {/* Dialogs - must be included */}
+        <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Passwort ändern</DialogTitle>
+              <DialogDescription>Geben Sie zuerst Ihr aktuelles Passwort ein, dann das neue Passwort.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {passwordError && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{passwordError}</div>}
+              {passwordSuccess && <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4" />Passwort erfolgreich geändert!</div>}
+              <div className="space-y-2"><Label htmlFor="current_password">Aktuelles Passwort *</Label><Input id="current_password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} /></div>
+              <Separator />
+              <div className="space-y-2"><Label htmlFor="new_password">Neues Passwort *</Label><Input id="new_password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mindestens 8 Zeichen" /></div>
+              <div className="space-y-2"><Label htmlFor="confirm_new_password">Neues Passwort bestätigen *</Label><Input id="confirm_new_password" type="password" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsPasswordDialogOpen(false)}>Abbrechen</Button>
+              <Button onClick={handlePasswordChange} disabled={isChangingPassword || !currentPassword || !newPassword || !confirmNewPassword}>
+                {isChangingPassword ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Überprüfen...</> : 'Passwort ändern'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <TwoFactorSetup isOpen={is2FADialogOpen} onClose={() => setIs2FADialogOpen(false)} isEnabled={is2FAEnabled} onStatusChange={setIs2FAEnabled} />
+      </div>
+    )
+  }
+
+  // Normal View (unchanged)
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       {/* Header */}
@@ -740,7 +1090,7 @@ export default function EinstellungenPage() {
             Passen Sie das Design der Anwendung an
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex items-center justify-between py-3">
             <div>
               <p className="font-medium text-warmgray-900">Design</p>
@@ -749,6 +1099,26 @@ export default function EinstellungenPage() {
               </p>
             </div>
             <ThemeToggle />
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Einfache Ansicht</p>
+              <p className="text-sm text-warmgray-500">
+                Größere Schrift und Bedienelemente
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={seniorMode}
+                onChange={(e) => setSeniorMode(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sage-600"></div>
+            </label>
           </div>
         </CardContent>
       </Card>

@@ -981,7 +981,7 @@ export default function DocumentsPage() {
         <div className="flex justify-end">
           <Button onClick={() => openUploadDialog(category)}>
             <Upload className="mr-2 h-4 w-4" />
-            Dokument hochladen
+            Dokument hinzufügen
           </Button>
         </div>
 
@@ -1132,7 +1132,7 @@ export default function DocumentsPage() {
             }}
           >
             <Upload className="mr-2 h-4 w-4" />
-            In "{folder.name}" hochladen
+            In "{folder.name}" ablegen
           </Button>
         </div>
 
@@ -1146,7 +1146,7 @@ export default function DocumentsPage() {
             <Folder className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
             <h3 className="text-warmgray-700 font-medium mb-2">Dieser Ordner ist leer</h3>
             <p className="text-warmgray-500 text-sm mb-4">
-              Laden Sie ein Dokument hoch, um es hier zu speichern
+              Legen Sie ein Dokument ab, um es hier zu speichern
             </p>
             <Button
               onClick={() => {
@@ -1156,7 +1156,7 @@ export default function DocumentsPage() {
               }}
             >
               <Upload className="mr-2 h-4 w-4" />
-              Dokument hochladen
+              Dokument hinzufügen
             </Button>
           </div>
         )}
@@ -1226,7 +1226,7 @@ export default function DocumentsPage() {
         </div>
         <Button onClick={() => openUploadDialog(selectedCategory || 'identitaet')}>
           <Upload className="mr-2 h-5 w-5" />
-          Dokument hochladen
+          Dokument hinzufügen
         </Button>
       </div>
 
@@ -1325,7 +1325,7 @@ export default function DocumentsPage() {
                     <p className="text-warmgray-500">Noch keine Dokumente vorhanden</p>
                     <Button onClick={() => openUploadDialog('identitaet')} className="mt-3">
                       <Upload className="mr-2 h-4 w-4" />
-                      Erstes Dokument hochladen
+                      Erstes Dokument hinzufügen
                     </Button>
                   </div>
                 )}
@@ -1355,12 +1355,12 @@ export default function DocumentsPage() {
               <p className="text-warmgray-500 mb-4">
                 {searchQuery
                   ? 'Versuchen Sie eine andere Suche'
-                  : 'Laden Sie Ihr erstes Dokument hoch, um zu beginnen'}
+                  : 'Fügen Sie Ihr erstes Dokument hinzu, um zu beginnen'}
               </p>
               {!searchQuery && (
                 <Button onClick={() => openUploadDialog('identitaet')}>
                   <Upload className="mr-2 h-5 w-5" />
-                  Dokument hochladen
+                  Dokument hinzufügen
                 </Button>
               )}
             </div>
@@ -1426,7 +1426,7 @@ export default function DocumentsPage() {
                     </Button>
                     <Button onClick={() => openUploadDialog(null, cat.id)}>
                       <Upload className="mr-2 h-4 w-4" />
-                      Dokument hochladen
+                      Dokument hinzufügen
                     </Button>
                   </div>
                 </div>
@@ -1441,11 +1441,11 @@ export default function DocumentsPage() {
                     <Tag className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
                     <h3 className="text-warmgray-700 font-medium mb-2">Keine Dokumente in dieser Kategorie</h3>
                     <p className="text-warmgray-500 text-sm mb-4">
-                      Laden Sie ein Dokument hoch, um es hier zu speichern
+                      Legen Sie ein Dokument ab, um es hier zu speichern
                     </p>
                     <Button onClick={() => openUploadDialog(null, cat.id)}>
                       <Upload className="mr-2 h-4 w-4" />
-                      Dokument hochladen
+                      Dokument hinzufügen
                     </Button>
                   </div>
                 )}
@@ -1511,7 +1511,7 @@ export default function DocumentsPage() {
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Dokument hochladen</DialogTitle>
+            <DialogTitle>Dokument hinzufügen</DialogTitle>
             <DialogDescription>
               Wählen Sie eine Kategorie, optional einen Unterordner, und laden Sie Ihre Datei hoch.
             </DialogDescription>
@@ -1751,10 +1751,10 @@ export default function DocumentsPage() {
               {isUploading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Hochladen...
+                  Hinzufügen...
                 </>
               ) : (
-                'Hochladen'
+                'Hinzufügen'
               )}
             </Button>
           </DialogFooter>

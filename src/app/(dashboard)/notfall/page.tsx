@@ -560,6 +560,25 @@ export default function NotfallPage() {
         <p className="text-lg text-warmgray-600 mt-2">Wichtige Informationen für den Notfall und Vorsorgedokumente</p>
       </div>
 
+      {/* Beruhigende Erklärung */}
+      <Card className="border-sage-200 bg-white">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
+              <Info className="w-5 h-5 text-sage-600" />
+            </div>
+            <div>
+              <p className="text-warmgray-700">
+                Diese Informationen helfen anderen, Ihnen im Ernstfall schnell zu helfen.
+              </p>
+              <p className="text-warmgray-600 text-sm mt-1">
+                Sie entscheiden jederzeit, was hier steht.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="border-sage-200 bg-sage-50">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
@@ -749,7 +768,7 @@ export default function NotfallPage() {
                                   ) : (
                                     <Upload className="w-4 h-4 mr-1" />
                                   )}
-                                  Hochladen
+                                  Hinzufügen
                                 </span>
                               </Button>
                             </label>
@@ -781,7 +800,7 @@ export default function NotfallPage() {
                   <div className="flex items-start gap-3">
                     <Lock className="w-5 h-5 text-sage-600 mt-0.5" />
                     <div>
-                      <p className="font-medium text-warmgray-900">Vollmachten hochladen</p>
+                      <p className="font-medium text-warmgray-900">Vollmachten hinzufügen</p>
                       <p className="text-sm text-warmgray-600 mt-1">
                         Mit dem Basis-Abo können Sie Ihre Vollmachten direkt als Dokument hochladen und sicher aufbewahren.
                       </p>
