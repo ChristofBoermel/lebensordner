@@ -681,6 +681,16 @@ export default function EinstellungenPage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between py-3">
                   <div>
+                    <p className="font-medium text-warmgray-900">Einführung wiederholen</p>
+                    <p className="text-sm text-warmgray-500">Die Ersteinrichtung erneut durchlaufen</p>
+                  </div>
+                  <Button variant="outline" size="lg" onClick={handleRestartOnboarding}>
+                    <Sparkles className="mr-2 h-4 w-4" />Wiederholen
+                  </Button>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between py-3">
+                  <div>
                     <p className="font-medium text-warmgray-900">Abmelden</p>
                     <p className="text-sm text-warmgray-500">Von diesem Gerät abmelden</p>
                   </div>
