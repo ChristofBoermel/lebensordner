@@ -118,6 +118,7 @@ export interface Database {
           date_of_birth: string | null
           address: string | null
           onboarding_completed: boolean
+          onboarding_progress: string | null
           storage_used: number
           email_reminders_enabled: boolean
           email_reminder_days_before: number
@@ -142,6 +143,7 @@ export interface Database {
           date_of_birth?: string | null
           address?: string | null
           onboarding_completed?: boolean
+          onboarding_progress?: string | null
           storage_used?: number
           email_reminders_enabled?: boolean
           email_reminder_days_before?: number
@@ -166,6 +168,7 @@ export interface Database {
           date_of_birth?: string | null
           address?: string | null
           onboarding_completed?: boolean
+          onboarding_progress?: string | null
           storage_used?: number
           email_reminders_enabled?: boolean
           email_reminder_days_before?: number

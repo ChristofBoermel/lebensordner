@@ -63,7 +63,8 @@ function getDefaultProgress(): OnboardingProgress {
   }
 }
 
-function loadProgress(): OnboardingProgress | null {
+// localStorage functions (fallback)
+function loadLocalProgress(): OnboardingProgress | null {
   if (typeof window === 'undefined') return null
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -76,7 +77,7 @@ function loadProgress(): OnboardingProgress | null {
   return null
 }
 
-function saveProgress(progress: OnboardingProgress) {
+function saveLocalProgress(progress: OnboardingProgress) {
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
@@ -85,12 +86,46 @@ function saveProgress(progress: OnboardingProgress) {
   }
 }
 
-function clearProgress() {
+function clearLocalProgress() {
   if (typeof window === 'undefined') return
   try {
     localStorage.removeItem(STORAGE_KEY)
   } catch {
     // Ignore storage errors
+  }
+}
+
+// Server functions
+async function loadServerProgress(): Promise<OnboardingProgress | null> {
+  try {
+    const response = await fetch('/api/onboarding/progress')
+    if (!response.ok) return null
+    const data = await response.json()
+    return data.progress || null
+  } catch {
+    return null
+  }
+}
+
+async function saveServerProgress(progress: OnboardingProgress): Promise<boolean> {
+  try {
+    const response = await fetch('/api/onboarding/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ progress }),
+    })
+    const data = await response.json()
+    return data.success === true
+  } catch {
+    return false
+  }
+}
+
+async function clearServerProgress(): Promise<void> {
+  try {
+    await fetch('/api/onboarding/progress', { method: 'DELETE' })
+  } catch {
+    // Ignore errors
   }
 }
 
@@ -121,8 +156,8 @@ export default function OnboardingPage() {
   const [welcomeNote, setWelcomeNote] = useState('')
   const [showQrCode, setShowQrCode] = useState(false)
 
-  // Auto-save progress
-  const autoSave = useCallback(() => {
+  // Auto-save progress (both server and localStorage)
+  const autoSave = useCallback(async () => {
     const progress: OnboardingProgress = {
       currentStep,
       profileForm,
@@ -130,7 +165,10 @@ export default function OnboardingPage() {
       skippedEmergency,
       welcomeNote,
     }
-    saveProgress(progress)
+    // Always save to localStorage (fast, reliable fallback)
+    saveLocalProgress(progress)
+    // Also save to server (async, may fail silently)
+    saveServerProgress(progress)
   }, [currentStep, profileForm, emergencyForm, skippedEmergency, welcomeNote])
 
   // Auto-save on changes (debounced effect)
@@ -157,7 +195,8 @@ export default function OnboardingPage() {
 
         // If profile exists and onboarding is completed, go to dashboard
         if (profile?.onboarding_completed) {
-          clearProgress()
+          clearLocalProgress()
+          clearServerProgress()
           router.replace('/dashboard')
           return
         }
@@ -172,8 +211,11 @@ export default function OnboardingPage() {
           }
         }
 
-        // Check for saved progress
-        const saved = loadProgress()
+        // Check for saved progress - server has priority, localStorage as fallback
+        const serverProgress = await loadServerProgress()
+        const localProgress = loadLocalProgress()
+        const saved = serverProgress || localProgress
+
         if (saved && saved.currentStep !== 'welcome') {
           // User has progress - show resume dialog
           setSavedProgress(saved)
@@ -209,7 +251,8 @@ export default function OnboardingPage() {
   }
 
   const startFresh = () => {
-    clearProgress()
+    clearLocalProgress()
+    clearServerProgress()
     setCurrentStep('welcome')
     setProfileForm(getDefaultProgress().profileForm)
     setEmergencyForm(getDefaultProgress().emergencyForm)
@@ -310,7 +353,8 @@ export default function OnboardingPage() {
       }
 
       // Clear saved progress on successful completion
-      clearProgress()
+      clearLocalProgress()
+      clearServerProgress()
 
       router.push('/dashboard')
       router.refresh()
