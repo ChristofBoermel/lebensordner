@@ -1,36 +1,105 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Progress } from '@/components/ui/progress'
 import {
-  User, Phone, MapPin, Calendar, Heart, Users, FileText,
+  User, Phone, MapPin, FileText,
   ArrowRight, ArrowLeft, Check, Loader2, Sparkles, Shield,
-  Upload, UserPlus, HeartPulse, Wallet, Home, Landmark,
-  Briefcase, Church, FolderOpen
+  Upload, HeartPulse, Wallet, Home, Landmark,
+  Users, Briefcase, Church, FolderOpen, Smartphone, X
 } from 'lucide-react'
 import { DOCUMENT_CATEGORIES, type DocumentCategory } from '@/types/database'
 
-type Step = 'welcome' | 'profile' | 'emergency' | 'trusted' | 'documents' | 'complete'
+type Step = 'welcome' | 'profile' | 'documents' | 'emergency' | 'complete'
 
 const STEPS: { id: Step; title: string; description: string }[] = [
   { id: 'welcome', title: 'Willkommen', description: 'Einführung in Lebensordner' },
   { id: 'profile', title: 'Ihr Profil', description: 'Persönliche Daten' },
+  { id: 'documents', title: 'Dokumente', description: 'Übersicht der Kategorien' },
   { id: 'emergency', title: 'Notfall-Kontakt', description: 'Erster Ansprechpartner' },
-  { id: 'trusted', title: 'Vertrauensperson', description: 'Zugriff im Notfall' },
-  { id: 'documents', title: 'Erstes Dokument', description: 'Dokument hochladen' },
   { id: 'complete', title: 'Fertig!', description: 'Einrichtung abgeschlossen' },
 ]
+
+const STORAGE_KEY = 'onboarding_progress'
+
+interface OnboardingProgress {
+  currentStep: Step
+  profileForm: {
+    full_name: string
+    phone: string
+    date_of_birth: string
+    address: string
+  }
+  emergencyForm: {
+    name: string
+    phone: string
+    relationship: string
+  }
+  skippedEmergency: boolean
+  welcomeNote: string
+}
+
+function getDefaultProgress(): OnboardingProgress {
+  return {
+    currentStep: 'welcome',
+    profileForm: {
+      full_name: '',
+      phone: '',
+      date_of_birth: '',
+      address: '',
+    },
+    emergencyForm: {
+      name: '',
+      phone: '',
+      relationship: '',
+    },
+    skippedEmergency: false,
+    welcomeNote: '',
+  }
+}
+
+function loadProgress(): OnboardingProgress | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null
+}
+
+function saveProgress(progress: OnboardingProgress) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function clearProgress() {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState<Step>('welcome')
   const [isInitializing, setIsInitializing] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [showResumeDialog, setShowResumeDialog] = useState(false)
+  const [savedProgress, setSavedProgress] = useState<OnboardingProgress | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -48,17 +117,28 @@ export default function OnboardingPage() {
     relationship: '',
   })
 
-  const [trustedForm, setTrustedForm] = useState({
-    name: '',
-    email: '',
-    relationship: '',
-  })
+  const [skippedEmergency, setSkippedEmergency] = useState(false)
+  const [welcomeNote, setWelcomeNote] = useState('')
+  const [showQrCode, setShowQrCode] = useState(false)
 
-  const [skipSteps, setSkipSteps] = useState({
-    emergency: false,
-    trusted: false,
-    documents: false,
-  })
+  // Auto-save progress
+  const autoSave = useCallback(() => {
+    const progress: OnboardingProgress = {
+      currentStep,
+      profileForm,
+      emergencyForm,
+      skippedEmergency,
+      welcomeNote,
+    }
+    saveProgress(progress)
+  }, [currentStep, profileForm, emergencyForm, skippedEmergency, welcomeNote])
+
+  // Auto-save on changes (debounced effect)
+  useEffect(() => {
+    if (isInitializing) return
+    const timer = setTimeout(autoSave, 500)
+    return () => clearTimeout(timer)
+  }, [autoSave, isInitializing])
 
   useEffect(() => {
     const checkOnboarding = async () => {
@@ -77,6 +157,7 @@ export default function OnboardingPage() {
 
         // If profile exists and onboarding is completed, go to dashboard
         if (profile?.onboarding_completed) {
+          clearProgress()
           router.replace('/dashboard')
           return
         }
@@ -91,14 +172,22 @@ export default function OnboardingPage() {
           }
         }
 
-        // Pre-fill profile form if data exists
+        // Check for saved progress
+        const saved = loadProgress()
+        if (saved && saved.currentStep !== 'welcome') {
+          // User has progress - show resume dialog
+          setSavedProgress(saved)
+          setShowResumeDialog(true)
+        }
+
+        // Pre-fill profile form if data exists in database
         if (profile) {
-          setProfileForm({
-            full_name: profile.full_name || '',
-            phone: profile.phone || '',
-            date_of_birth: profile.date_of_birth || '',
-            address: profile.address || '',
-          })
+          setProfileForm(prev => ({
+            full_name: profile.full_name || prev.full_name || '',
+            phone: profile.phone || prev.phone || '',
+            date_of_birth: profile.date_of_birth || prev.date_of_birth || '',
+            address: profile.address || prev.address || '',
+          }))
         }
       } finally {
         setIsInitializing(false)
@@ -108,8 +197,28 @@ export default function OnboardingPage() {
     checkOnboarding()
   }, [supabase, router])
 
+  const resumeProgress = () => {
+    if (savedProgress) {
+      setCurrentStep(savedProgress.currentStep)
+      setProfileForm(savedProgress.profileForm)
+      setEmergencyForm(savedProgress.emergencyForm)
+      setSkippedEmergency(savedProgress.skippedEmergency)
+      setWelcomeNote(savedProgress.welcomeNote)
+    }
+    setShowResumeDialog(false)
+  }
+
+  const startFresh = () => {
+    clearProgress()
+    setCurrentStep('welcome')
+    setProfileForm(getDefaultProgress().profileForm)
+    setEmergencyForm(getDefaultProgress().emergencyForm)
+    setSkippedEmergency(false)
+    setWelcomeNote('')
+    setShowResumeDialog(false)
+  }
+
   const currentStepIndex = STEPS.findIndex(s => s.id === currentStep)
-  const progress = ((currentStepIndex) / (STEPS.length - 1)) * 100
 
   const goToNextStep = () => {
     const nextIndex = currentStepIndex + 1
@@ -122,6 +231,16 @@ export default function OnboardingPage() {
     const prevIndex = currentStepIndex - 1
     if (prevIndex >= 0) {
       setCurrentStep(STEPS[prevIndex].id)
+    }
+  }
+
+  const skipStep = () => {
+    // Can skip any step except welcome (step 1)
+    if (currentStep !== 'welcome') {
+      if (currentStep === 'emergency') {
+        setSkippedEmergency(true)
+      }
+      goToNextStep()
     }
   }
 
@@ -147,7 +266,7 @@ export default function OnboardingPage() {
   }
 
   const saveEmergencyContact = async () => {
-    if (skipSteps.emergency) {
+    if (skippedEmergency) {
       goToNextStep()
       return
     }
@@ -173,65 +292,41 @@ export default function OnboardingPage() {
     }
   }
 
-  const saveTrustedPerson = async () => {
-    if (skipSteps.trusted) {
-      goToNextStep()
-      return
-    }
-
-    setIsSaving(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Nicht angemeldet')
-
-      await supabase.from('trusted_persons').insert({
-        user_id: user.id,
-        name: trustedForm.name,
-        email: trustedForm.email,
-        relationship: trustedForm.relationship,
-        access_level: 'emergency',
-        access_delay_hours: 48,
-      })
-
-      goToNextStep()
-    } catch (err) {
-      console.error('Save error:', err)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
   const completeOnboarding = async () => {
-    console.log('=== COMPLETE ONBOARDING CALLED ===')
     setIsSaving(true)
     try {
-      // Use API route to bypass RLS issues
-      console.log('Calling /api/onboarding/complete...')
       const response = await fetch('/api/onboarding/complete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
       })
-      
-      console.log('Response status:', response.status)
+
       const data = await response.json()
-      console.log('Response data:', data)
-      
+
       if (!response.ok || data.error) {
         console.error('API returned error:', data.error)
         throw new Error(data.error || 'Fehler beim Abschließen')
       }
 
-      console.log('Success! Redirecting to dashboard...')
+      // Clear saved progress on successful completion
+      clearProgress()
+
       router.push('/dashboard')
       router.refresh()
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Complete error:', err)
-      alert('Fehler beim Speichern: ' + (err.message || 'Bitte versuchen Sie es erneut.'))
+      const message = err instanceof Error ? err.message : 'Bitte versuchen Sie es erneut.'
+      alert('Fehler beim Speichern: ' + message)
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const postponeOnboarding = () => {
+    // Save current progress and go to dashboard
+    autoSave()
+    router.push('/dashboard')
   }
 
   const renderStep = () => {
@@ -247,7 +342,7 @@ export default function OnboardingPage() {
                 Willkommen bei Lebensordner Digital
               </h2>
               <p className="text-warmgray-600 max-w-md mx-auto">
-                In wenigen Schritten richten wir gemeinsam Ihren persönlichen Lebensordner ein. 
+                In wenigen Schritten richten wir gemeinsam Ihren persönlichen Lebensordner ein.
                 So haben Sie alle wichtigen Unterlagen an einem sicheren Ort.
               </p>
             </div>
@@ -270,10 +365,19 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            <Button onClick={goToNextStep} size="lg" className="mt-6">
-              Einrichtung starten
-              <ArrowRight className="ml-2 w-4 h-4" />
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
+              <Button onClick={goToNextStep} size="lg">
+                In Ruhe beginnen
+                <ArrowRight className="ml-2 w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={postponeOnboarding}
+              >
+                Später weiterlesen
+              </Button>
+            </div>
           </div>
         )
 
@@ -353,196 +457,20 @@ export default function OnboardingPage() {
                 <ArrowLeft className="mr-2 w-4 h-4" />
                 Zurück
               </Button>
-              <Button onClick={saveProfile} disabled={isSaving}>
-                {isSaving ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}
-                Weiter
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )
-
-      case 'emergency':
-        return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-4">
-                <HeartPulse className="w-8 h-8 text-sage-600" />
-              </div>
-              <h2 className="text-2xl font-serif font-semibold text-warmgray-900 mb-2">
-                Ihr erster Notfall-Kontakt
-              </h2>
-              <p className="text-warmgray-600">
-                Wer soll im Notfall als erstes kontaktiert werden?
-              </p>
-            </div>
-
-            {!skipSteps.emergency ? (
-              <div className="space-y-4 max-w-md mx-auto">
-                <div className="space-y-2">
-                  <Label htmlFor="emergency_name">Name *</Label>
-                  <Input
-                    id="emergency_name"
-                    value={emergencyForm.name}
-                    onChange={(e) => setEmergencyForm({ ...emergencyForm, name: e.target.value })}
-                    placeholder="Name der Person"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="emergency_phone">Telefonnummer *</Label>
-                  <Input
-                    id="emergency_phone"
-                    type="tel"
-                    value={emergencyForm.phone}
-                    onChange={(e) => setEmergencyForm({ ...emergencyForm, phone: e.target.value })}
-                    placeholder="+49 123 456789"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="emergency_relationship">Beziehung *</Label>
-                  <Input
-                    id="emergency_relationship"
-                    value={emergencyForm.relationship}
-                    onChange={(e) => setEmergencyForm({ ...emergencyForm, relationship: e.target.value })}
-                    placeholder="z.B. Ehepartner, Sohn, Tochter"
-                  />
-                </div>
-
+              <div className="flex gap-2">
                 <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSkipSteps({ ...skipSteps, emergency: true })}
-                  className="w-full border-2 border-warmgray-800 text-warmgray-800 font-semibold hover:bg-warmgray-100"
+                  variant="ghost"
+                  onClick={skipStep}
+                  className="text-warmgray-500"
                 >
-                  Später hinzufügen
+                  Überspringen
+                </Button>
+                <Button onClick={saveProfile} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}
+                  Weiter
+                  <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </div>
-            ) : (
-              <div className="text-center py-8 max-w-md mx-auto">
-                <p className="text-warmgray-600 mb-4">
-                  Sie können Notfall-Kontakte später unter "Notfall & Vorsorge" hinzufügen.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setSkipSteps({ ...skipSteps, emergency: false })}
-                  className="text-sage-600 hover:text-sage-700 underline"
-                >
-                  Doch jetzt hinzufügen
-                </button>
-              </div>
-            )}
-
-            <div className="flex justify-between max-w-md mx-auto pt-4">
-              <Button variant="outline" onClick={goToPrevStep}>
-                <ArrowLeft className="mr-2 w-4 h-4" />
-                Zurück
-              </Button>
-              <Button 
-                onClick={saveEmergencyContact} 
-                disabled={isSaving || (!skipSteps.emergency && (!emergencyForm.name || !emergencyForm.phone || !emergencyForm.relationship))}
-              >
-                {isSaving ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}
-                Weiter
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )
-
-      case 'trusted':
-        return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-4">
-                <UserPlus className="w-8 h-8 text-sage-600" />
-              </div>
-              <h2 className="text-2xl font-serif font-semibold text-warmgray-900 mb-2">
-                Eine Vertrauensperson hinzufügen
-              </h2>
-              <p className="text-warmgray-600">
-                Diese Person kann im Notfall auf Ihre Dokumente zugreifen.
-              </p>
-            </div>
-
-            {!skipSteps.trusted ? (
-              <div className="space-y-4 max-w-md mx-auto">
-                <div className="space-y-2">
-                  <Label htmlFor="trusted_name">Name *</Label>
-                  <Input
-                    id="trusted_name"
-                    value={trustedForm.name}
-                    onChange={(e) => setTrustedForm({ ...trustedForm, name: e.target.value })}
-                    placeholder="Name der Person"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="trusted_email">E-Mail-Adresse *</Label>
-                  <Input
-                    id="trusted_email"
-                    type="email"
-                    value={trustedForm.email}
-                    onChange={(e) => setTrustedForm({ ...trustedForm, email: e.target.value })}
-                    placeholder="email@beispiel.de"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="trusted_relationship">Beziehung *</Label>
-                  <Input
-                    id="trusted_relationship"
-                    value={trustedForm.relationship}
-                    onChange={(e) => setTrustedForm({ ...trustedForm, relationship: e.target.value })}
-                    placeholder="z.B. Sohn, Tochter, Ehepartner"
-                  />
-                </div>
-
-                <div className="p-4 rounded-lg bg-sage-50 border border-sage-200">
-                  <p className="text-sm text-warmgray-600">
-                    <strong>Zugriffsart:</strong> Notfall-Zugriff mit 48 Stunden Wartezeit. 
-                    Sie können dies später anpassen.
-                  </p>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSkipSteps({ ...skipSteps, trusted: true })}
-                  className="w-full border-2 border-warmgray-800 text-warmgray-800 font-semibold hover:bg-warmgray-100"
-                >
-                  Später hinzufügen
-                </Button>
-              </div>
-            ) : (
-              <div className="text-center py-8 max-w-md mx-auto">
-                <p className="text-warmgray-600 mb-4">
-                  Sie können Vertrauenspersonen später unter "Zugriff & Familie" hinzufügen.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setSkipSteps({ ...skipSteps, trusted: false })}
-                  className="text-sage-600 hover:text-sage-700 underline"
-                >
-                  Doch jetzt hinzufügen
-                </button>
-              </div>
-            )}
-
-            <div className="flex justify-between max-w-md mx-auto pt-4">
-              <Button variant="outline" onClick={goToPrevStep}>
-                <ArrowLeft className="mr-2 w-4 h-4" />
-                Zurück
-              </Button>
-              <Button 
-                onClick={saveTrustedPerson} 
-                disabled={isSaving || (!skipSteps.trusted && (!trustedForm.name || !trustedForm.email || !trustedForm.relationship))}
-              >
-                {isSaving ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}
-                Weiter
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
             </div>
           </div>
         )
@@ -600,6 +528,53 @@ export default function OnboardingPage() {
               <p className="text-center text-sm text-warmgray-500 mt-4">
                 + weitere Kategorien wie Familie, Arbeit, Religion und Sonstige
               </p>
+
+              {/* QR Code Section */}
+              <div className="mt-6 pt-6 border-t border-warmgray-200">
+                {!showQrCode ? (
+                  <button
+                    onClick={() => setShowQrCode(true)}
+                    className="w-full flex items-center justify-center gap-2 p-4 rounded-lg border-2 border-dashed border-warmgray-300 hover:border-sage-400 hover:bg-sage-50 transition-colors text-warmgray-600 hover:text-sage-700"
+                  >
+                    <Smartphone className="w-5 h-5" />
+                    <span>Oder mit dem Handy fotografieren</span>
+                  </button>
+                ) : (
+                  <div className="p-4 rounded-lg bg-sage-50 border border-sage-200">
+                    <div className="flex justify-between items-start mb-3">
+                      <p className="text-sm font-medium text-warmgray-900">
+                        QR-Code scannen
+                      </p>
+                      <button
+                        onClick={() => setShowQrCode(false)}
+                        className="text-warmgray-400 hover:text-warmgray-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="bg-white p-4 rounded-md flex items-center justify-center">
+                      {/* Simple QR Code placeholder - in production use a QR library */}
+                      <div className="w-32 h-32 bg-warmgray-100 rounded flex items-center justify-center">
+                        <div className="grid grid-cols-5 gap-1">
+                          {Array.from({ length: 25 }).map((_, i) => (
+                            <div
+                              key={i}
+                              className={`w-4 h-4 ${
+                                [0,1,2,4,5,6,10,12,14,18,19,20,22,23,24].includes(i)
+                                  ? 'bg-warmgray-900'
+                                  : 'bg-white'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-warmgray-500 mt-2 text-center">
+                      Scannen Sie diesen Code mit Ihrer Handy-Kamera
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-between max-w-md mx-auto pt-4">
@@ -607,10 +582,113 @@ export default function OnboardingPage() {
                 <ArrowLeft className="mr-2 w-4 h-4" />
                 Zurück
               </Button>
-              <Button onClick={goToNextStep}>
-                Weiter
-                <ArrowRight className="ml-2 w-4 h-4" />
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={skipStep}
+                  className="text-warmgray-500"
+                >
+                  Überspringen
+                </Button>
+                <Button onClick={goToNextStep}>
+                  Weiter
+                  <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'emergency':
+        return (
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-4">
+                <HeartPulse className="w-8 h-8 text-sage-600" />
+              </div>
+              <h2 className="text-2xl font-serif font-semibold text-warmgray-900 mb-2">
+                Ihr erster Notfall-Kontakt
+              </h2>
+              <p className="text-warmgray-600">
+                Wer soll im Notfall als erstes kontaktiert werden?
+              </p>
+            </div>
+
+            {!skippedEmergency ? (
+              <div className="space-y-4 max-w-md mx-auto">
+                <div className="space-y-2">
+                  <Label htmlFor="emergency_name">Name *</Label>
+                  <Input
+                    id="emergency_name"
+                    value={emergencyForm.name}
+                    onChange={(e) => setEmergencyForm({ ...emergencyForm, name: e.target.value })}
+                    placeholder="Name der Person"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="emergency_phone">Telefonnummer *</Label>
+                  <Input
+                    id="emergency_phone"
+                    type="tel"
+                    value={emergencyForm.phone}
+                    onChange={(e) => setEmergencyForm({ ...emergencyForm, phone: e.target.value })}
+                    placeholder="+49 123 456789"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="emergency_relationship">Beziehung *</Label>
+                  <Input
+                    id="emergency_relationship"
+                    value={emergencyForm.relationship}
+                    onChange={(e) => setEmergencyForm({ ...emergencyForm, relationship: e.target.value })}
+                    placeholder="z.B. Ehepartner, Sohn, Tochter"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 max-w-md mx-auto">
+                <p className="text-warmgray-600 mb-4">
+                  Sie können Notfall-Kontakte später unter &quot;Notfall &amp; Vorsorge&quot; hinzufügen.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSkippedEmergency(false)}
+                  className="text-sage-600 hover:text-sage-700 underline"
+                >
+                  Doch jetzt hinzufügen
+                </button>
+              </div>
+            )}
+
+            <div className="flex justify-between max-w-md mx-auto pt-4">
+              <Button variant="outline" onClick={goToPrevStep}>
+                <ArrowLeft className="mr-2 w-4 h-4" />
+                Zurück
               </Button>
+              <div className="flex gap-2">
+                {!skippedEmergency && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setSkippedEmergency(true)
+                      goToNextStep()
+                    }}
+                    className="text-warmgray-500"
+                  >
+                    Überspringen
+                  </Button>
+                )}
+                <Button
+                  onClick={saveEmergencyContact}
+                  disabled={isSaving || (!skippedEmergency && (!emergencyForm.name || !emergencyForm.phone || !emergencyForm.relationship))}
+                >
+                  {isSaving ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}
+                  Weiter
+                  <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
         )
@@ -623,32 +701,57 @@ export default function OnboardingPage() {
             </div>
             <div>
               <h2 className="text-2xl font-serif font-semibold text-warmgray-900 mb-2">
-                Geschafft! 🎉
+                Geschafft!
               </h2>
               <p className="text-warmgray-600 max-w-md mx-auto">
-                Ihr Lebensordner ist eingerichtet. Sie können jetzt weitere Dokumente 
+                Ihr Lebensordner ist eingerichtet. Sie können jetzt weitere Dokumente
                 hochladen, Erinnerungen erstellen und Ihre Informationen vervollständigen.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto mt-8">
+            {/* Optional welcome note */}
+            <div className="max-w-md mx-auto text-left">
+              <div className="p-4 rounded-lg bg-cream-50 border border-cream-200">
+                <Label htmlFor="welcome_note" className="text-warmgray-700">
+                  Persönliche Notiz für Ihre Angehörigen
+                </Label>
+                <p className="text-sm text-warmgray-500 mb-3">
+                  Das ist optional – Sie können hier eine kurze Nachricht hinterlassen.
+                </p>
+                <textarea
+                  id="welcome_note"
+                  value={welcomeNote}
+                  onChange={(e) => setWelcomeNote(e.target.value)}
+                  placeholder="z.B. Liebe Familie, hier findet ihr alle wichtigen Unterlagen..."
+                  className="w-full min-h-[100px] rounded-md border-2 border-warmgray-300 bg-white px-4 py-3 text-base text-gray-900 transition-colors placeholder:text-warmgray-400 focus-visible:outline-none focus-visible:border-sage-400"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto mt-4">
               <div className="p-4 rounded-lg bg-cream-50 border border-cream-200 text-left">
                 <FileText className="w-6 h-6 text-sage-600 mb-2" />
                 <p className="font-medium text-warmgray-900">Dokumente</p>
                 <p className="text-sm text-warmgray-500">Laden Sie weitere wichtige Unterlagen hoch</p>
               </div>
               <div className="p-4 rounded-lg bg-cream-50 border border-cream-200 text-left">
-                <Heart className="w-6 h-6 text-sage-600 mb-2" />
+                <HeartPulse className="w-6 h-6 text-sage-600 mb-2" />
                 <p className="font-medium text-warmgray-900">Notfall-Infos</p>
                 <p className="text-sm text-warmgray-500">Ergänzen Sie medizinische Daten</p>
               </div>
             </div>
 
-            <Button onClick={completeOnboarding} size="lg" className="mt-6" disabled={isSaving}>
-              {isSaving ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}
-              Zum Dashboard
-              <ArrowRight className="ml-2 w-4 h-4" />
-            </Button>
+            <div className="flex justify-between max-w-md mx-auto pt-4">
+              <Button variant="outline" onClick={goToPrevStep}>
+                <ArrowLeft className="mr-2 w-4 h-4" />
+                Zurück
+              </Button>
+              <Button onClick={completeOnboarding} size="lg" disabled={isSaving}>
+                {isSaving ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}
+                Zum Dashboard
+                <ArrowRight className="ml-2 w-4 h-4" />
+              </Button>
+            </div>
           </div>
         )
     }
@@ -668,14 +771,58 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-cream-50 py-8 px-4">
+      {/* Resume Dialog */}
+      {showResumeDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-md w-full">
+            <CardContent className="pt-6">
+              <div className="text-center space-y-4">
+                <div className="w-12 h-12 rounded-full bg-sage-100 flex items-center justify-center mx-auto">
+                  <ArrowRight className="w-6 h-6 text-sage-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-warmgray-900">
+                  Einrichtung fortsetzen?
+                </h3>
+                <p className="text-warmgray-600">
+                  Sie haben die Einrichtung beim letzten Mal nicht abgeschlossen.
+                  Möchten Sie dort weitermachen, wo Sie aufgehört haben?
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <Button onClick={resumeProgress} className="flex-1">
+                    Fortsetzen
+                  </Button>
+                  <Button variant="outline" onClick={startFresh} className="flex-1">
+                    Neu beginnen
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <div className="max-w-2xl mx-auto">
         {/* Progress */}
         <div className="mb-8">
-          <div className="flex justify-between text-sm text-warmgray-500 mb-2">
-            <span>Schritt {currentStepIndex + 1} von {STEPS.length}</span>
+          <div className="flex justify-between text-sm text-warmgray-500 mb-3">
+            <span className="font-medium">Schritt {currentStepIndex + 1} von {STEPS.length}</span>
             <span>{STEPS[currentStepIndex].title}</span>
           </div>
-          <Progress value={progress} className="h-2" />
+          {/* Step Indicators as dots */}
+          <div className="flex justify-center gap-2">
+            {STEPS.map((step, index) => (
+              <div
+                key={step.id}
+                className={`w-3 h-3 rounded-full transition-colors ${
+                  index === currentStepIndex
+                    ? 'bg-sage-600'
+                    : index < currentStepIndex
+                    ? 'bg-sage-300'
+                    : 'bg-warmgray-300'
+                }`}
+              />
+            ))}
+          </div>
         </div>
 
         {/* Step Content */}
@@ -684,22 +831,6 @@ export default function OnboardingPage() {
             {renderStep()}
           </CardContent>
         </Card>
-
-        {/* Step Indicators */}
-        <div className="flex justify-center gap-2 mt-6">
-          {STEPS.map((step, index) => (
-            <div
-              key={step.id}
-              className={`w-2 h-2 rounded-full transition-colors ${
-                index === currentStepIndex
-                  ? 'bg-sage-600'
-                  : index < currentStepIndex
-                  ? 'bg-sage-300'
-                  : 'bg-warmgray-300'
-              }`}
-            />
-          ))}
-        </div>
       </div>
     </div>
   )
