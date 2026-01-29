@@ -132,6 +132,8 @@ export interface Database {
           sms_reminder_days_before: number
           phone_verified: boolean
           profile_picture_url: string | null
+          upgrade_email_7d_sent_at: string | null
+          upgrade_email_30d_sent_at: string | null
         }
         Insert: {
           id: string
@@ -157,6 +159,8 @@ export interface Database {
           sms_reminder_days_before?: number
           phone_verified?: boolean
           profile_picture_url?: string | null
+          upgrade_email_7d_sent_at?: string | null
+          upgrade_email_30d_sent_at?: string | null
         }
         Update: {
           id?: string
@@ -182,6 +186,8 @@ export interface Database {
           sms_reminder_days_before?: number
           phone_verified?: boolean
           profile_picture_url?: string | null
+          upgrade_email_7d_sent_at?: string | null
+          upgrade_email_30d_sent_at?: string | null
         }
       }
       documents: {
