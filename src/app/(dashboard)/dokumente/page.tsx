@@ -56,6 +56,7 @@ import { DOCUMENT_CATEGORIES, type DocumentCategory, type Document, type Subcate
 import { formatFileSize, formatDate } from '@/lib/utils'
 import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
 import { SUBSCRIPTION_TIERS, getTierFromSubscription, canUploadFile, canPerformAction, type TierConfig } from '@/lib/subscription-tiers'
+import { UpgradeNudge, UpgradeModal } from '@/components/upgrade'
 import Link from 'next/link'
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -118,6 +119,10 @@ export default function DocumentsPage() {
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '' })
   const [isSavingCategory, setIsSavingCategory] = useState(false)
   const [categoryError, setCategoryError] = useState<string | null>(null)
+
+  // Upgrade Modal state
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
+  const [upgradeModalFeature, setUpgradeModalFeature] = useState<'document' | 'folder' | 'trusted_person' | 'storage' | 'custom_category'>('folder')
 
   // New subcategory creation
   const [isCreatingSubcategory, setIsCreatingSubcategory] = useState(false)
@@ -351,7 +356,11 @@ export default function DocumentsPage() {
 
     // Check subcategory limit
     if (!canPerformAction(userTier, 'addSubcategory', subcategories.length)) {
-      alert(`Unterordner-Limit erreicht. Ihr Plan erlaubt maximal ${userTier.limits.maxSubcategories} Unterordner.`)
+      setUpgradeModalFeature('folder')
+      setUpgradeModalOpen(true)
+      setIsCreatingFolderInGrid(false)
+      setNewFolderCategory(null)
+      setNewSubcategoryName('')
       return
     }
 
@@ -1212,6 +1221,15 @@ export default function DocumentsPage() {
         </CardContent>
       </Card>
 
+      {/* Upgrade Nudge - shows when approaching document limit */}
+      {userTier.limits.maxDocuments !== -1 && (
+        <UpgradeNudge
+          type="document"
+          currentCount={documents.length}
+          maxCount={userTier.limits.maxDocuments}
+        />
+      )}
+
       {/* Search and View Toggle */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
@@ -1966,6 +1984,31 @@ export default function DocumentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Upgrade Modal - friendly limit notification */}
+      <UpgradeModal
+        isOpen={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        feature={upgradeModalFeature}
+        currentLimit={
+          upgradeModalFeature === 'folder' ? userTier.limits.maxSubcategories :
+          upgradeModalFeature === 'document' ? userTier.limits.maxDocuments :
+          upgradeModalFeature === 'custom_category' ? userTier.limits.maxCustomCategories :
+          undefined
+        }
+        basicLimit={
+          upgradeModalFeature === 'folder' ? SUBSCRIPTION_TIERS.basic.limits.maxSubcategories :
+          upgradeModalFeature === 'document' ? SUBSCRIPTION_TIERS.basic.limits.maxDocuments :
+          upgradeModalFeature === 'custom_category' ? SUBSCRIPTION_TIERS.basic.limits.maxCustomCategories :
+          undefined
+        }
+        premiumLimit={
+          upgradeModalFeature === 'folder' ? 'Unbegrenzt' :
+          upgradeModalFeature === 'document' ? 'Unbegrenzt' :
+          upgradeModalFeature === 'custom_category' ? 'Unbegrenzt' :
+          undefined
+        }
+      />
     </div>
   )
 }
