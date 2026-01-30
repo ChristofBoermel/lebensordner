@@ -280,10 +280,7 @@ export default function DocumentsPage() {
     }
   }, [highlightedDoc, documents])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  const validateAndSetFile = (file: File) => {
     if (file.size > MAX_FILE_SIZE) {
       setUploadError('Die Datei ist zu groß. Maximale Größe: 25 MB')
       return
@@ -308,6 +305,12 @@ export default function DocumentsPage() {
     setUploadFile(file)
     setUploadTitle(file.name.replace(/\.[^/.]+$/, ''))
     setUploadError(null)
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    validateAndSetFile(file)
   }
 
   const handleCreateSubcategory = async () => {
@@ -397,6 +400,12 @@ export default function DocumentsPage() {
 
   const handleUpload = async () => {
     if (!uploadFile || !uploadCategory || !uploadTitle) return
+
+    // Final client-side limit check before attempting upload
+    if (userTier.limits.maxDocuments !== -1 && documents.length >= userTier.limits.maxDocuments) {
+      setUploadError(`Dokumentenlimit erreicht. Ihr Plan erlaubt maximal ${userTier.limits.maxDocuments} Dokumente. Upgraden Sie für mehr Dokumente.`)
+      return
+    }
 
     setIsUploading(true)
     setUploadError(null)
@@ -894,22 +903,20 @@ export default function DocumentsPage() {
       <div
         key={doc.id}
         id={`doc-${doc.id}`}
-        className={`document-item group transition-all duration-300 ${
-          isHighlighted
+        className={`document-item group transition-all duration-300 ${isHighlighted
             ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300 ring-offset-2'
             : isSelected
-            ? 'bg-sage-50 border-sage-300'
-            : ''
-        }`}
+              ? 'bg-sage-50 border-sage-300'
+              : ''
+          }`}
       >
         {/* Checkbox */}
         <button
           onClick={() => toggleDocumentSelection(doc.id)}
-          className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-            isSelected
+          className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected
               ? 'bg-sage-500 border-sage-500 text-white'
               : 'border-warmgray-300 hover:border-sage-400'
-          }`}
+            }`}
         >
           {isSelected && <Check className="w-4 h-4" />}
         </button>
@@ -1556,11 +1563,10 @@ export default function DocumentsPage() {
                       setUploadSubcategory(null)
                       setIsCreatingSubcategory(false)
                     }}
-                    className={`p-3 text-left rounded-lg border-2 transition-colors ${
-                      uploadCategory === key && !uploadCustomCategory
+                    className={`p-3 text-left rounded-lg border-2 transition-colors ${uploadCategory === key && !uploadCustomCategory
                         ? 'border-sage-500 bg-sage-50 text-sage-800'
                         : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
-                    }`}
+                      }`}
                   >
                     <span className="text-sm font-medium">{category.name}</span>
                   </button>
@@ -1576,11 +1582,10 @@ export default function DocumentsPage() {
                       setUploadSubcategory(null)
                       setIsCreatingSubcategory(false)
                     }}
-                    className={`p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-2 ${
-                      uploadCustomCategory === cat.id
+                    className={`p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-2 ${uploadCustomCategory === cat.id
                         ? 'border-sage-500 bg-sage-50 text-sage-800'
                         : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
-                    }`}
+                      }`}
                   >
                     <Tag className="w-4 h-4 flex-shrink-0" />
                     <span className="text-sm font-medium">{cat.name}</span>
@@ -1659,7 +1664,7 @@ export default function DocumentsPage() {
               <Label>Datei</Label>
               <FileUpload
                 selectedFile={uploadFile}
-                onFileSelect={(file) => setUploadFile(file)}
+                onFileSelect={validateAndSetFile}
                 onClear={() => setUploadFile(null)}
               />
             </div>
@@ -1809,11 +1814,10 @@ export default function DocumentsPage() {
                     setMoveTargetFolder(null)
                     setIsCreatingFolderInMove(false)
                   }}
-                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${
-                    moveTargetFolder === null && !isCreatingFolderInMove
+                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${moveTargetFolder === null && !isCreatingFolderInMove
                       ? 'border-sage-500 bg-sage-50'
                       : 'border-warmgray-200 hover:border-warmgray-400'
-                  }`}
+                    }`}
                 >
                   <X className="w-5 h-5 text-warmgray-500" />
                   <span className="text-sm">Kein Ordner (aus Ordner entfernen)</span>
@@ -1827,11 +1831,10 @@ export default function DocumentsPage() {
                       setMoveTargetFolder(folder.id)
                       setIsCreatingFolderInMove(false)
                     }}
-                    className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${
-                      moveTargetFolder === folder.id
+                    className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${moveTargetFolder === folder.id
                         ? 'border-sage-500 bg-sage-50'
                         : 'border-warmgray-200 hover:border-warmgray-400'
-                    }`}
+                      }`}
                   >
                     <Folder className="w-5 h-5 text-sage-500" />
                     <span className="text-sm font-medium">{folder.name}</span>
@@ -1844,11 +1847,10 @@ export default function DocumentsPage() {
                     setIsCreatingFolderInMove(true)
                     setMoveTargetFolder(null)
                   }}
-                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${
-                    isCreatingFolderInMove
+                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${isCreatingFolderInMove
                       ? 'border-sage-500 bg-sage-50'
                       : 'border-dashed border-warmgray-300 hover:border-sage-400'
-                  }`}
+                    }`}
                 >
                   <FolderPlus className="w-5 h-5 text-warmgray-400" />
                   <span className="text-sm">Neuen Ordner erstellen...</span>
@@ -1992,21 +1994,21 @@ export default function DocumentsPage() {
         feature={upgradeModalFeature}
         currentLimit={
           upgradeModalFeature === 'folder' ? userTier.limits.maxSubcategories :
-          upgradeModalFeature === 'document' ? userTier.limits.maxDocuments :
-          upgradeModalFeature === 'custom_category' ? userTier.limits.maxCustomCategories :
-          undefined
+            upgradeModalFeature === 'document' ? userTier.limits.maxDocuments :
+              upgradeModalFeature === 'custom_category' ? userTier.limits.maxCustomCategories :
+                undefined
         }
         basicLimit={
           upgradeModalFeature === 'folder' ? SUBSCRIPTION_TIERS.basic.limits.maxSubcategories :
-          upgradeModalFeature === 'document' ? SUBSCRIPTION_TIERS.basic.limits.maxDocuments :
-          upgradeModalFeature === 'custom_category' ? SUBSCRIPTION_TIERS.basic.limits.maxCustomCategories :
-          undefined
+            upgradeModalFeature === 'document' ? SUBSCRIPTION_TIERS.basic.limits.maxDocuments :
+              upgradeModalFeature === 'custom_category' ? SUBSCRIPTION_TIERS.basic.limits.maxCustomCategories :
+                undefined
         }
         premiumLimit={
           upgradeModalFeature === 'folder' ? 'Unbegrenzt' :
-          upgradeModalFeature === 'document' ? 'Unbegrenzt' :
-          upgradeModalFeature === 'custom_category' ? 'Unbegrenzt' :
-          undefined
+            upgradeModalFeature === 'document' ? 'Unbegrenzt' :
+              upgradeModalFeature === 'custom_category' ? 'Unbegrenzt' :
+                undefined
         }
       />
     </div>
