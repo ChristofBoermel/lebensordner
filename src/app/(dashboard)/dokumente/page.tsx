@@ -409,7 +409,7 @@ export default function DocumentsPage() {
   }
 
   const handleUpload = async () => {
-    if (!uploadFile || !uploadCategory || !uploadTitle) return
+    if (!uploadFile || !uploadCategory || !uploadTitle.trim()) return
 
     // Final client-side limit check before attempting upload
     if (userTier.limits.maxDocuments !== -1 && documents.length >= userTier.limits.maxDocuments) {
@@ -454,7 +454,7 @@ export default function DocumentsPage() {
           category: uploadCategory,
           subcategory_id: uploadSubcategory || null,
           custom_category_id: uploadCustomCategory || null,
-          title: uploadTitle,
+          title: uploadTitle.trim(),
           notes: uploadNotes || null,
           file_name: uploadFile.name,
           file_path: filePath,
@@ -1277,7 +1277,7 @@ export default function DocumentsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <Button onClick={() => openUploadDialog(selectedCategory || 'identitaet')}>
+        <Button onClick={() => openUploadDialog(selectedCategory || 'identitaet')} className="w-full sm:w-auto">
           <Upload className="mr-2 h-5 w-5" />
           Dokument hinzufügen
         </Button>
@@ -1824,7 +1824,7 @@ export default function DocumentsPage() {
             </Button>
             <Button
               onClick={handleUpload}
-              disabled={!uploadFile || !uploadCategory || !uploadTitle || isUploading}
+              disabled={!uploadFile || !uploadCategory || !uploadTitle.trim() || isUploading}
             >
               {isUploading ? (
                 <>

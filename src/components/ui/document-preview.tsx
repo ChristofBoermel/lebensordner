@@ -48,7 +48,7 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
   const [error, setError] = useState<string | null>(null)
   const [zoom, setZoom] = useState(100)
   const [rotation, setRotation] = useState(0)
-  
+
   const supabase = createClient()
 
   useEffect(() => {
@@ -148,11 +148,11 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
 
     if (isImage) {
       return (
-        <div className="relative overflow-auto max-h-[70vh] flex items-center justify-center bg-warmgray-100 rounded-lg">
+        <div className="relative overflow-auto max-h-[calc(100vh-12rem)] flex items-center justify-center bg-warmgray-100 rounded-lg">
           <img
             src={previewUrl}
             alt={document?.title || 'Dokument'}
-            className="max-w-full transition-transform duration-200"
+            className="max-w-full max-h-[calc(100vh-14rem)] object-contain transition-transform duration-200"
             style={{
               transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
             }}
@@ -166,7 +166,8 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
         <div className="relative overflow-hidden rounded-lg bg-warmgray-100">
           <iframe
             src={`${previewUrl}#toolbar=0`}
-            className="w-full h-[70vh] border-0"
+            className="w-full max-h-[calc(100vh-12rem)] border-0"
+            style={{ height: 'calc(100vh - 12rem)' }}
             title={document?.title || 'PDF Vorschau'}
           />
         </div>
@@ -185,7 +186,7 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[95vh] overflow-hidden">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-4xl max-h-[95vh] overflow-hidden">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
@@ -277,13 +278,12 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
               <Calendar className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" />
               <div>
                 <p className="text-sm font-medium text-warmgray-700">Ablaufdatum</p>
-                <p className={`text-sm ${
-                  new Date(document.expiry_date) < new Date()
+                <p className={`text-sm ${new Date(document.expiry_date) < new Date()
                     ? 'text-red-600 font-medium'
                     : new Date(document.expiry_date) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-                    ? 'text-amber-600'
-                    : 'text-warmgray-600'
-                }`}>
+                      ? 'text-amber-600'
+                      : 'text-warmgray-600'
+                  }`}>
                   {new Date(document.expiry_date).toLocaleDateString('de-DE', {
                     weekday: 'long',
                     year: 'numeric',
