@@ -689,8 +689,8 @@ export default function DocumentsPage() {
   }
 
   // Delete folder handler
-  const handleDeleteFolder = async (folder: Subcategory, e: React.MouseEvent) => {
-    e.stopPropagation() // Prevent folder click
+  const handleDeleteFolder = async (folder: Subcategory, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation() // Prevent folder click
 
     const docsInFolder = documents.filter(d => d.subcategory_id === folder.id)
     const confirmMessage = docsInFolder.length > 0
@@ -1051,15 +1051,31 @@ export default function DocumentsPage() {
                   className="relative p-4 rounded-lg border-2 border-warmgray-200 hover:border-sage-400 hover:bg-sage-50 transition-all text-left group cursor-pointer"
                   onClick={() => setCurrentFolder(subcategory)}
                 >
-                  {/* Delete button - appears on hover */}
-                  {/* Delete button - only on desktop hover */}
-                  <button
-                    onClick={(e) => handleDeleteFolder(subcategory, e)}
-                    className="absolute top-2 right-2 p-1 rounded-full bg-white/90 hover:bg-red-100 text-warmgray-400 hover:text-red-600 opacity-0 lg:group-hover:opacity-100 transition-all z-10 hidden lg:block"
-                    title="Ordner löschen"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {/* Folder Actions Menu */}
+                  <div className="absolute top-2 right-2 z-10" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full bg-white/50 hover:bg-white text-warmgray-400 hover:text-warmgray-900 border border-warmgray-100"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Ordner-Optionen</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => handleDeleteFolder(subcategory)}
+                          className="text-red-600 focus:text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Ordner löschen
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                   <div className="flex items-center justify-center mb-3">
                     <Folder className="w-12 h-12 text-sage-500 group-hover:text-sage-600 transition-colors" />
                   </div>
@@ -1173,10 +1189,29 @@ export default function DocumentsPage() {
               {categoryInfo.name}
             </Button>
             <ChevronRight className="w-4 h-4 text-warmgray-400 flex-shrink-0" />
-            <span className="flex items-center gap-2 text-warmgray-800 font-medium senior-mode:text-lg">
-              <FolderOpen className="w-4 h-4 text-sage-600 flex-shrink-0" />
-              <span className="truncate max-w-[150px] sm:max-w-none">{folder.name}</span>
-            </span>
+            <div className="flex items-center gap-1 senior-mode:gap-2">
+              <span className="flex items-center gap-2 text-warmgray-800 font-medium senior-mode:text-lg">
+                <FolderOpen className="w-4 h-4 text-sage-600 flex-shrink-0" />
+                <span className="truncate max-w-[120px] xs:max-w-[150px] sm:max-w-none">{folder.name}</span>
+              </span>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-warmgray-400">
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem
+                    onClick={() => handleDeleteFolder(folder)}
+                    className="text-red-600 focus:text-red-600"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Ordner löschen
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
           <Button
