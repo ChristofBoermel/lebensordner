@@ -280,7 +280,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
           </div>
 
           {/* User Menu */}
-          <div className="border-t border-warmgray-200 p-4">
+          <div className="flex-shrink-0 border-t border-warmgray-200 p-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex w-full items-center gap-3 rounded-lg px-3 py-3 hover:bg-warmgray-50 dark:hover:bg-warmgray-800 transition-colors">

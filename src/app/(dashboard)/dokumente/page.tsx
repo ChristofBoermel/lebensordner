@@ -879,7 +879,20 @@ export default function DocumentsPage() {
     })
   }
 
-  const filteredDocuments = documents.filter(doc => {
+  // Pre-process documents for validation and deduplication (as per random_empty_documents.md)
+  const validatedDocuments = (() => {
+    const seenIds = new Set()
+    return documents.filter(doc => {
+      // 1. Mandatory title validation
+      if (!doc.title || doc.title.trim().length === 0) return false
+      // 2. ID deduplication
+      if (seenIds.has(doc.id)) return false
+      seenIds.add(doc.id)
+      return true
+    })
+  })()
+
+  const filteredDocuments = validatedDocuments.filter(doc => {
     // Check if viewing a custom category
     if (selectedCustomCategory) {
       const matchesCustomCategory = doc.custom_category_id === selectedCustomCategory
@@ -888,6 +901,7 @@ export default function DocumentsPage() {
         doc.notes?.toLowerCase().includes(searchQuery.toLowerCase())
       return matchesCustomCategory && matchesSearch
     }
+
     // Check standard category
     const matchesCategory = !selectedCategory || doc.category === selectedCategory
     // Also filter out documents that have a custom category when viewing standard categories
@@ -899,11 +913,11 @@ export default function DocumentsPage() {
   })
 
   const getDocumentCountForCategory = (category: DocumentCategory) => {
-    return documents.filter(d => d.category === category && !d.custom_category_id).length
+    return validatedDocuments.filter(d => d.category === category && !d.custom_category_id).length
   }
 
   const getDocumentCountForCustomCategory = (categoryId: string) => {
-    return documents.filter(d => d.custom_category_id === categoryId).length
+    return validatedDocuments.filter(d => d.custom_category_id === categoryId).length
   }
 
   const getSubcategoriesForCategory = (category: DocumentCategory) => {
@@ -1341,7 +1355,7 @@ export default function DocumentsPage() {
             value="all"
             className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700"
           >
-            Alle ({documents.length})
+            Alle ({validatedDocuments.length})
           </TabsTrigger>
           {/* Add Category Button - Last */}
           {userTier.limits.maxCustomCategories !== 0 && (userTier.limits.maxCustomCategories === -1 || customCategories.length < userTier.limits.maxCustomCategories) && (
@@ -1368,9 +1382,9 @@ export default function DocumentsPage() {
               {/* Recent Documents */}
               <div>
                 <h2 className="text-lg font-semibold text-warmgray-900 mb-4">Zuletzt hinzugefügt</h2>
-                {documents.length > 0 ? (
+                {validatedDocuments.length > 0 ? (
                   <div className="space-y-3">
-                    {documents.slice(0, 3).map(renderDocumentItem)}
+                    {validatedDocuments.slice(0, 3).map(renderDocumentItem)}
                   </div>
                 ) : (
                   <div className="text-center py-8 border-2 border-dashed border-warmgray-200 rounded-lg">
@@ -1434,48 +1448,7 @@ export default function DocumentsPage() {
               // Show folder grid for the category
               renderFolderGrid(key as DocumentCategory)
             )}
-            {/* Documents Grid */}
-            {view === 'grid' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-                {filteredDocuments.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="bg-white dark:bg-warmgray-900 rounded-xl border border-warmgray-200 dark:border-warmgray-800 p-4 hover:shadow-md transition-all group"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="w-10 h-10 rounded-lg bg-sage-50 dark:bg-sage-900/30 flex items-center justify-center text-sage-600 dark:text-sage-400">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-10 w-10 -mr-2"> {/* Improved touch target */}
-                            <MoreVertical className="w-5 h-5 text-warmgray-400" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setPreviewDocument(doc)} className="py-2.5"> {/* Taller item */}
-                            <Eye className="w-4 h-4 mr-2" />
-                            Ansehen
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDownload(doc)} className="py-2.5">
-                            <Download className="w-4 h-4 mr-2" />
-                            Herunterladen
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => handleDelete(doc)}
-                            className="text-red-600 py-2.5"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Löschen
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
+
           </TabsContent>
         ))}
 
