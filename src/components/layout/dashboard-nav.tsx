@@ -139,7 +139,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-1">
+          <nav className="overflow-y-auto px-4 py-6 space-y-1 flex-1">
             {navigation.map((item) => {
               // Feature check
               if (item.feature && !hasFeatureAccess(tier, item.feature as any)) {

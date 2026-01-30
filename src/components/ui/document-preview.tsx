@@ -207,8 +207,8 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
 
         {/* Toolbar */}
         {canPreview && previewUrl && !isLoading && (
-          <div className="flex items-center justify-between py-2 px-1 border-b border-warmgray-200">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 py-2 px-1 border-b border-warmgray-200">
+            <div className="flex items-center gap-1 sm:gap-2">
               {isImage && (
                 <>
                   <Button
@@ -217,10 +217,11 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
                     onClick={handleZoomOut}
                     disabled={zoom <= 50}
                     title="Verkleinern"
+                    className="h-8 w-8 sm:h-10 sm:w-10"
                   >
                     <ZoomOut className="w-4 h-4" />
                   </Button>
-                  <span className="text-sm text-warmgray-600 min-w-[4rem] text-center">
+                  <span className="text-xs sm:text-sm text-warmgray-600 min-w-[3rem] sm:min-w-[4rem] text-center">
                     {zoom}%
                   </span>
                   <Button
@@ -229,27 +230,30 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
                     onClick={handleZoomIn}
                     disabled={zoom >= 200}
                     title="Vergrößern"
+                    className="h-8 w-8 sm:h-10 sm:w-10"
                   >
                     <ZoomIn className="w-4 h-4" />
                   </Button>
-                  <div className="w-px h-6 bg-warmgray-200 mx-2" />
+                  <div className="w-px h-6 bg-warmgray-200 mx-1 sm:mx-2" />
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={handleRotate}
                     title="Drehen"
+                    className="h-8 w-8 sm:h-10 sm:w-10"
                   >
                     <RotateCw className="w-4 h-4" />
                   </Button>
                 </>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleFullscreen}
                 title="In neuem Tab öffnen"
+                className="h-8 w-8 sm:h-10 sm:w-10"
               >
                 <Maximize2 className="w-4 h-4" />
               </Button>
@@ -257,9 +261,10 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
                 variant="outline"
                 size="sm"
                 onClick={handleDownload}
+                className="h-8 sm:h-9"
               >
-                <Download className="w-4 h-4 mr-2" />
-                Herunterladen
+                <Download className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Herunterladen</span>
               </Button>
             </div>
           </div>
@@ -279,10 +284,10 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
               <div>
                 <p className="text-sm font-medium text-warmgray-700">Ablaufdatum</p>
                 <p className={`text-sm ${new Date(document.expiry_date) < new Date()
-                    ? 'text-red-600 font-medium'
-                    : new Date(document.expiry_date) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-                      ? 'text-amber-600'
-                      : 'text-warmgray-600'
+                  ? 'text-red-600 font-medium'
+                  : new Date(document.expiry_date) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                    ? 'text-amber-600'
+                    : 'text-warmgray-600'
                   }`}>
                   {new Date(document.expiry_date).toLocaleDateString('de-DE', {
                     weekday: 'long',

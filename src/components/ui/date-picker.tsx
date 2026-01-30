@@ -199,11 +199,11 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
           </div>
 
           {/* Quick actions */}
-          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-warmgray-200">
+          <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-4 border-t border-warmgray-200">
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 min-w-[calc(33%-0.5rem)] text-xs h-9"
+              className="flex-1 text-xs h-9 whitespace-nowrap px-2"
               onClick={() => {
                 const today = new Date()
                 today.setFullYear(today.getFullYear() + 1)
@@ -211,12 +211,12 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
                 setIsOpen(false)
               }}
             >
-              In 1 Jahr
+              +1 Jahr
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 min-w-[calc(33%-0.5rem)] text-xs h-9"
+              className="flex-1 text-xs h-9 whitespace-nowrap px-2"
               onClick={() => {
                 const today = new Date()
                 today.setFullYear(today.getFullYear() + 5)
@@ -224,12 +224,12 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
                 setIsOpen(false)
               }}
             >
-              In 5 Jahren
+              +5 Jahre
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 min-w-[calc(33%-0.5rem)] text-xs h-9"
+              className="flex-1 text-xs h-9 whitespace-nowrap px-2"
               onClick={() => {
                 const today = new Date()
                 today.setFullYear(today.getFullYear() + 10)
@@ -237,7 +237,7 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
                 setIsOpen(false)
               }}
             >
-              In 10 Jahren
+              +10 Jahre
             </Button>
           </div>
         </div>
