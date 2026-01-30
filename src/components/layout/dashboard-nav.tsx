@@ -40,12 +40,15 @@ import { useState, useEffect } from 'react'
 import { GlobalSearch } from '@/components/search/global-search'
 import { useTheme } from '@/components/theme/theme-provider'
 
+import { TierConfig, hasFeatureAccess } from '@/lib/subscription-tiers'
+
 interface DashboardNavProps {
   user: {
     email: string
     full_name?: string | null
     role?: string | null
   }
+  tier: TierConfig
 }
 
 const navigation = [
@@ -53,7 +56,7 @@ const navigation = [
   { name: 'Dokumente', href: '/dokumente', icon: FileText },
   { name: 'Notfall & Vorsorge', href: '/notfall', icon: Heart },
   { name: 'Zugriff & Familie', href: '/zugriff', icon: Users },
-  { name: 'Familien-Übersicht', href: '/vp-dashboard', icon: Users },
+  { name: 'Familien-Übersicht', href: '/vp-dashboard', icon: Users, feature: 'familyDashboard' },
   { name: 'Erinnerungen', href: '/erinnerungen', icon: Bell },
   { name: 'Export', href: '/export', icon: FileDown },
   { name: 'Abonnement', href: '/abo', icon: CreditCard },
@@ -71,15 +74,18 @@ const fontSizeLabels = {
   xlarge: 'Sehr Groß'
 }
 
-export function DashboardNav({ user }: DashboardNavProps) {
+export function DashboardNav({ user, tier }: DashboardNavProps) {
+  // ... (hooks)
   const pathname = usePathname()
   const router = useRouter()
+  // ... (rest of hooks)
+
   const supabase = createClient()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { theme, setTheme, resolvedTheme, fontSize, setFontSize, seniorMode, setSeniorMode } = useTheme()
 
-  // Keyboard shortcut for search (Cmd/Ctrl + K)
+  // ... (useEffect for shortcut)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -87,7 +93,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
         setIsSearchOpen(true)
       }
     }
-    
+
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
@@ -104,13 +110,13 @@ export function DashboardNav({ user }: DashboardNavProps) {
 
   return (
     <>
-      {/* Global Search */}
+      {/* ... (Global Search) */}
       <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
 
       {/* Desktop Sidebar */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-1 flex-col border-r border-warmgray-200 dark:border-warmgray-800 bg-white dark:bg-warmgray-900">
-          {/* Logo */}
+          {/* ... (Logo and Search Button) */}
           <div className="flex h-20 items-center px-6 border-b border-warmgray-200 dark:border-warmgray-800">
             <Link href="/dashboard" className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-lg bg-sage-600 flex items-center justify-center">
@@ -135,6 +141,11 @@ export function DashboardNav({ user }: DashboardNavProps) {
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1">
             {navigation.map((item) => {
+              // Feature check
+              if (item.feature && !hasFeatureAccess(tier, item.feature as any)) {
+                return null
+              }
+
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
               return (
                 <Link
@@ -152,7 +163,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
                 </Link>
               )
             })}
-            
+
             {/* Admin Navigation - only show for admins */}
             {user.role === 'admin' && (
               <>
@@ -280,7 +291,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
                     <p className="text-sm font-medium text-warmgray-900 truncate">
                       {user.full_name || 'Benutzer'}
                     </p>
-                    <p 
+                    <p
                       className="text-xs text-warmgray-500 truncate cursor-pointer hover:text-warmgray-700"
                       onClick={(e) => {
                         e.stopPropagation()
@@ -288,8 +299,8 @@ export function DashboardNav({ user }: DashboardNavProps) {
                       }}
                       title={`${user.email} - Klicken zum Kopieren`}
                     >
-                      {user.email.length > 20 
-                        ? user.email.slice(0, 17) + '...' 
+                      {user.email.length > 20
+                        ? user.email.slice(0, 17) + '...'
                         : user.email}
                     </p>
                   </div>

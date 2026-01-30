@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { DashboardNav } from '@/components/layout/dashboard-nav'
+import { getUserTier } from '@/lib/auth/tier-guard'
 
 export default async function DashboardLayout({
   children,
@@ -8,7 +9,7 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   const supabase = await createServerSupabaseClient()
-  
+
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
@@ -22,6 +23,8 @@ export default async function DashboardLayout({
     .eq('id', user.id)
     .single()
 
+  const tier = await getUserTier()
+
   return (
     <div className="min-h-screen bg-cream-50 dark:bg-warmgray-950">
       <DashboardNav
@@ -30,6 +33,7 @@ export default async function DashboardLayout({
           full_name: profile?.full_name,
           role: profile?.role
         }}
+        tier={tier}
       />
 
       {/* Main Content */}
