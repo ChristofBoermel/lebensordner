@@ -951,11 +951,11 @@ export default function DocumentsPage() {
       <div
         key={doc.id}
         id={`doc-${doc.id}`}
-        className={`document-item group transition-all duration-300 ${isHighlighted
+        className={`document-item flex items-center gap-3 p-3 rounded-xl border border-warmgray-200 dark:border-warmgray-800 group transition-all duration-300 ${isHighlighted
           ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300 ring-offset-2'
           : isSelected
             ? 'bg-sage-50 border-sage-300'
-            : ''
+            : 'bg-white dark:bg-warmgray-900'
           }`}
       >
         {/* Checkbox */}
@@ -969,13 +969,13 @@ export default function DocumentsPage() {
           {isSelected && <Check className="w-4 h-4" />}
         </button>
 
-        <div className="flex items-start gap-4 flex-1 min-w-0 py-2">
-          <div className="w-12 h-12 rounded-lg bg-sage-50 flex items-center justify-center flex-shrink-0">
-            <Icon className="w-6 h-6 text-sage-600" />
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="w-10 h-10 rounded-lg bg-sage-50 dark:bg-sage-900/30 flex items-center justify-center flex-shrink-0">
+            <Icon className="w-5 h-5 text-sage-600 dark:text-sage-400" />
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-warmgray-900 truncate">{doc.title}</p>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-warmgray-500">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <p className="font-medium text-warmgray-900 truncate leading-tight">{doc.title}</p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-warmgray-500 mt-0.5">
               <span className="truncate">{category.name}</span>
               {subcategory && (
                 <>
@@ -985,19 +985,15 @@ export default function DocumentsPage() {
               )}
               <span className="flex-shrink-0">•</span>
               <span className="flex-shrink-0">{formatFileSize(doc.file_size)}</span>
-              <span className="flex-shrink-0">•</span>
-              <span className="flex-shrink-0">{formatDate(doc.created_at)}</span>
+              <span className="flex-shrink-0 hidden xs:inline">•</span>
+              <span className="flex-shrink-0 hidden xs:inline">{formatDate(doc.created_at)}</span>
             </div>
-            {doc.notes && (
-              <p className="text-sm text-warmgray-500 truncate mt-1">{doc.notes}</p>
-            )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Mobile/Compact Action Menu */}
+        <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-warmgray-400">
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-warmgray-400 !p-0 flex-shrink-0">
                 <MoreVertical className="w-5 h-5" />
               </Button>
             </DropdownMenuTrigger>
@@ -1223,7 +1219,7 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8 overflow-x-hidden px-0.5">
       {/* Header */}
       <div className="page-header">
         <h1 className="text-3xl font-serif font-semibold text-warmgray-900">
@@ -1927,30 +1923,31 @@ export default function DocumentsPage() {
       {/* Bulk Action Bar - Fixed at bottom when documents selected */}
       {
         selectedDocuments.size > 0 && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-warmgray-900 text-white rounded-lg shadow-xl px-6 py-4 flex items-center gap-6 z-50">
-            <div className="flex items-center gap-2">
+          <div className="fixed bottom-4 inset-x-4 sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 sm:w-auto bg-warmgray-900 text-white rounded-lg shadow-xl px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between sm:justify-start gap-2 sm:gap-6 z-50 overflow-hidden">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Check className="w-5 h-5 text-sage-400" />
-              <span className="font-medium">{selectedDocuments.size} ausgewählt</span>
+              <span className="font-medium whitespace-nowrap text-sm sm:text-base">{selectedDocuments.size} <span className="hidden xs:inline">ausgewählt</span></span>
             </div>
-            <div className="h-6 w-px bg-warmgray-700" />
-            <div className="flex items-center gap-2">
+            <div className="h-6 w-px bg-warmgray-700 hidden sm:block" />
+            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar">
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-white hover:bg-warmgray-800"
+                className="text-white hover:bg-warmgray-800 h-9 px-2 sm:px-3 flex-shrink-0"
                 onClick={() => openMoveDialog()}
               >
-                <MoveRight className="mr-2 h-4 w-4" />
-                Verschieben
+                <MoveRight className="sm:mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">Verschieben</span>
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-white hover:bg-warmgray-800"
+                className="text-white hover:bg-warmgray-800 h-9 px-2 sm:px-3 flex-shrink-0"
                 onClick={clearSelection}
               >
-                <X className="mr-2 h-4 w-4" />
-                Auswahl aufheben
+                <X className="sm:mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">Auswahl aufheben</span>
+                <span className="sm:hidden">Abbrechen</span>
               </Button>
             </div>
           </div>
