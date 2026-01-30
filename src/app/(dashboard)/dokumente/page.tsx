@@ -54,12 +54,12 @@ import {
   Briefcase,
   Church,
   MoveRight,
+  MoreVertical,
   Check,
   X,
   Pencil,
   PlusCircle,
   Tag,
-  MoreVertical
 } from 'lucide-react'
 import { DOCUMENT_CATEGORIES, type DocumentCategory, type Document, type Subcategory, type CustomCategory } from '@/types/database'
 import { formatFileSize, formatDate } from '@/lib/utils'
@@ -955,7 +955,7 @@ export default function DocumentsPage() {
           {isSelected && <Check className="w-4 h-4" />}
         </button>
 
-        <div className="flex items-center gap-4 flex-1 min-w-0">
+        <div className="flex items-start gap-4 flex-1 min-w-0 py-2">
           <div className="w-12 h-12 rounded-lg bg-sage-50 flex items-center justify-center flex-shrink-0">
             <Icon className="w-6 h-6 text-sage-600" />
           </div>
@@ -979,40 +979,34 @@ export default function DocumentsPage() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => openMoveDialog([doc.id])}
-            title="Verschieben"
-          >
-            <MoveRight className="w-5 h-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setPreviewDocument(doc)}
-            title="Vorschau"
-          >
-            <Eye className="w-5 h-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleDownload(doc)}
-            title="Herunterladen"
-          >
-            <Download className="w-5 h-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleDelete(doc)}
-            title="Löschen"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          >
-            <Trash2 className="w-5 h-5" />
-          </Button>
+        <div className="flex items-center gap-2">
+          {/* Mobile/Compact Action Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-warmgray-400">
+                <MoreVertical className="w-5 h-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setPreviewDocument(doc)} className="py-3">
+                <Eye className="w-4 h-4 mr-2" />
+                Ansehen
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownload(doc)} className="py-3">
+                <Download className="w-4 h-4 mr-2" />
+                Herunterladen
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openMoveDialog([doc.id])} className="py-3">
+                <MoveRight className="w-4 h-4 mr-2" />
+                Verschieben
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleDelete(doc)} className="text-red-600 py-3">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Löschen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     )
@@ -1614,7 +1608,7 @@ export default function DocumentsPage() {
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => (
                 <button
                   key={key}
