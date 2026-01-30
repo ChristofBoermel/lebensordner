@@ -361,55 +361,10 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
           <Eye className={cn("w-5 h-5", seniorMode ? "text-sage-600 dark:text-sage-400" : "text-warmgray-600 dark:text-warmgray-400")} />
         </button>
 
-        <button
-          onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-          className="p-2 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
-          title={resolvedTheme === 'dark' ? 'Hellmodus' : 'Dunkelmodus'}
-        >
-          {resolvedTheme === 'dark' ? (
-            <Sun className="w-5 h-5 text-warmgray-600 dark:text-warmgray-400" />
-          ) : (
-            <Moon className="w-5 h-5 text-warmgray-600" />
-          )}
-        </button>
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
-              className="p-2 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
-              title="Schriftgröße"
-            >
-              <Type className="w-5 h-5 text-warmgray-600 dark:text-warmgray-400" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuLabel>Schriftgröße</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => setFontSize('normal')}
-              className={cn("cursor-pointer", fontSize === 'normal' && "bg-sage-50 text-sage-700")}
-            >
-              Normal
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => setFontSize('large')}
-              className={cn("cursor-pointer", fontSize === 'large' && "bg-sage-50 text-sage-700")}
-            >
-              Groß
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => setFontSize('xlarge')}
-              className={cn("cursor-pointer", fontSize === 'xlarge' && "bg-sage-50 text-sage-700")}
-            >
-              Sehr Groß
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="p-1">
-              <Avatar className="h-9 w-9">
+            <button className="p-1 flex-shrink-0">
+              <Avatar className="h-8 w-8">
                 <AvatarFallback className="text-sm">{initials}</AvatarFallback>
               </Avatar>
             </button>
@@ -486,6 +441,43 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
                 </button>
               </div>
             </nav>
+
+            {/* Mobile Menu Footer with Controls */}
+            <div className="border-t border-warmgray-200 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-warmgray-600">Ansicht</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+                    className="p-2 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
+                    title={resolvedTheme === 'dark' ? 'Hellmodus' : 'Dunkelmodus'}
+                  >
+                    {resolvedTheme === 'dark' ? (
+                      <Sun className="w-5 h-5 text-warmgray-600 dark:text-warmgray-400" />
+                    ) : (
+                      <Moon className="w-5 h-5 text-warmgray-600" />
+                    )}
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="p-2 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
+                        title="Schriftgröße"
+                      >
+                        <Type className="w-5 h-5 text-warmgray-600 dark:text-warmgray-400" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuLabel>Schriftgröße</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => setFontSize('normal')}>Normal</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFontSize('large')}>Groß</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFontSize('xlarge')}>Sehr Groß</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

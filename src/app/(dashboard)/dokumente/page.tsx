@@ -961,18 +961,18 @@ export default function DocumentsPage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-medium text-warmgray-900 truncate">{doc.title}</p>
-            <div className="flex items-center gap-2 text-sm text-warmgray-500">
-              <span>{category.name}</span>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-warmgray-500">
+              <span className="truncate">{category.name}</span>
               {subcategory && (
                 <>
-                  <ChevronRight className="w-3 h-3" />
-                  <span>{subcategory.name}</span>
+                  <ChevronRight className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{subcategory.name}</span>
                 </>
               )}
-              <span>•</span>
-              <span>{formatFileSize(doc.file_size)}</span>
-              <span>•</span>
-              <span>{formatDate(doc.created_at)}</span>
+              <span className="flex-shrink-0">•</span>
+              <span className="flex-shrink-0">{formatFileSize(doc.file_size)}</span>
+              <span className="flex-shrink-0">•</span>
+              <span className="flex-shrink-0">{formatDate(doc.created_at)}</span>
             </div>
             {doc.notes && (
               <p className="text-sm text-warmgray-500 truncate mt-1">{doc.notes}</p>
