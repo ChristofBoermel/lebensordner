@@ -666,10 +666,19 @@ export default function NotfallPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <Phone className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
-                  <p className="text-warmgray-600 mb-4">Noch keine Notfall-Kontakte</p>
-                  <Button variant="outline" onClick={() => handleOpenContactDialog()}><Plus className="w-4 h-4 mr-2" />Ersten Kontakt hinzufügen</Button>
+                <div className="text-center py-10">
+                  <Phone className="w-16 h-16 text-warmgray-300 mx-auto mb-4" />
+                  <p className="text-warmgray-600 mb-6 text-lg senior-mode:text-xl font-medium px-4">Noch keine Notfall-Kontakte</p>
+                  <div className="px-4 w-full flex justify-center">
+                    <Button
+                      variant="outline"
+                      onClick={() => handleOpenContactDialog()}
+                      className="w-full sm:w-auto px-4 sm:px-8 min-h-[3.5rem] h-auto py-3 senior-mode:min-h-[4.5rem] senior-mode:text-xl border-2 whitespace-normal flex items-center justify-center"
+                    >
+                      <Plus className="w-5 h-5 mr-2 flex-shrink-0" />
+                      <span>Ersten Kontakt hinzufügen</span>
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>

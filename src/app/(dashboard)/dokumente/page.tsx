@@ -1052,9 +1052,10 @@ export default function DocumentsPage() {
                   onClick={() => setCurrentFolder(subcategory)}
                 >
                   {/* Delete button - appears on hover */}
+                  {/* Delete button - only on desktop hover */}
                   <button
                     onClick={(e) => handleDeleteFolder(subcategory, e)}
-                    className="absolute top-2 right-2 p-1 rounded-full bg-white/80 hover:bg-red-100 text-warmgray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all"
+                    className="absolute top-2 right-2 p-1 rounded-full bg-white/90 hover:bg-red-100 text-warmgray-400 hover:text-red-600 opacity-0 lg:group-hover:opacity-100 transition-all z-10 hidden lg:block"
                     title="Ordner löschen"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -1071,9 +1072,9 @@ export default function DocumentsPage() {
             })}
             {/* Add new folder - inline input or button */}
             {isCreatingFolderInGrid && newFolderCategory === category ? (
-              <div className="p-4 rounded-lg border-2 border-sage-400 bg-sage-50">
-                <div className="flex items-center justify-center mb-3">
-                  <FolderPlus className="w-10 h-10 text-sage-500" />
+              <div className="p-3 rounded-lg border-2 border-sage-400 bg-sage-50 flex flex-col items-center">
+                <div className="flex items-center justify-center mb-2">
+                  <FolderPlus className="w-8 h-8 text-sage-500" />
                 </div>
                 <Input
                   placeholder="Ordnername"
@@ -1090,22 +1091,23 @@ export default function DocumentsPage() {
                     }
                   }}
                   autoFocus
-                  className="text-center mb-2"
+                  className="text-center mb-3 h-10 senior-mode:h-12"
                 />
-                <div className="flex gap-1">
-                  <Button size="sm" className="flex-1" onClick={handleCreateFolderInGrid} disabled={!newSubcategoryName.trim()}>
+                <div className="flex flex-col w-full gap-2">
+                  <Button size="sm" className="w-full h-9 senior-mode:h-11" onClick={handleCreateFolderInGrid} disabled={!newSubcategoryName.trim()}>
                     Erstellen
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
+                    className="w-full h-8 senior-mode:h-10 text-warmgray-500"
                     onClick={() => {
                       setIsCreatingFolderInGrid(false)
                       setNewFolderCategory(null)
                       setNewSubcategoryName('')
                     }}
                   >
-                    <ChevronRight className="w-4 h-4 rotate-45" />
+                    Abbrechen
                   </Button>
                 </div>
               </div>
@@ -1158,25 +1160,25 @@ export default function DocumentsPage() {
     return (
       <div className="space-y-4">
         {/* Breadcrumb navigation */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm">
+        {/* Breadcrumb navigation and Upload button */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center flex-wrap gap-2 text-sm sm:text-base">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setCurrentFolder(null)}
-              className="text-sage-600 hover:text-sage-700 -ml-2"
+              className="text-sage-600 hover:text-sage-700 -ml-2 h-auto py-1 senior-mode:text-lg"
             >
-              <ChevronRight className="w-4 h-4 rotate-180 mr-1" />
+              <ChevronRight className="w-4 h-4 rotate-180 mr-1 flex-shrink-0" />
               {categoryInfo.name}
             </Button>
-            <ChevronRight className="w-4 h-4 text-warmgray-400" />
-            <span className="flex items-center gap-2 text-warmgray-800 font-medium">
-              <FolderOpen className="w-4 h-4 text-sage-600" />
-              {folder.name}
+            <ChevronRight className="w-4 h-4 text-warmgray-400 flex-shrink-0" />
+            <span className="flex items-center gap-2 text-warmgray-800 font-medium senior-mode:text-lg">
+              <FolderOpen className="w-4 h-4 text-sage-600 flex-shrink-0" />
+              <span className="truncate max-w-[150px] sm:max-w-none">{folder.name}</span>
             </span>
           </div>
 
-          {/* Upload button for this folder */}
           <Button
             size="sm"
             onClick={() => {
@@ -1184,6 +1186,7 @@ export default function DocumentsPage() {
               setUploadSubcategory(folder.id)
               setIsUploadOpen(true)
             }}
+            className="w-full sm:w-auto h-10 senior-mode:h-12 flex-shrink-0"
           >
             <Upload className="mr-2 h-4 w-4" />
             In "{folder.name}" ablegen
