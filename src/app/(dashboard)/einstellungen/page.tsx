@@ -62,11 +62,11 @@ export default function EinstellungenPage() {
 
   // Senior mode section navigation
   const [seniorActiveSection, setSeniorActiveSection] = useState<SeniorSection>(null)
-  
+
   // 2FA state
   const [is2FADialogOpen, setIs2FADialogOpen] = useState(false)
   const [is2FAEnabled, setIs2FAEnabled] = useState(false)
-  
+
   // Password change state
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
@@ -153,7 +153,7 @@ export default function EinstellungenPage() {
   const fetchProfile = useCallback(async () => {
     setIsLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
-    
+
     if (!user) {
       router.push('/anmelden')
       return
@@ -302,30 +302,36 @@ export default function EinstellungenPage() {
     setIsUploadingPicture(true)
     setError(null)
 
+    setIsUploadingPicture(true)
+    setError(null)
+
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
 
-      // Delete old picture if exists
-      if (profile.profile_picture_url) {
-        const oldPath = profile.profile_picture_url.split('/').slice(-2).join('/')
-        await supabase.storage.from('avatars').remove([oldPath])
+      // 1. Upload via Server-Side API
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('path', 'profile')
+      formData.append('bucket', 'avatars')
+
+      const uploadRes = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json()
+        throw new Error(errorData.error || 'Upload fehlgeschlagen')
       }
 
-      // Upload new picture
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`
+      const uploadData = await uploadRes.json()
+      const { path: filePath } = uploadData
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file)
-
-      if (uploadError) throw uploadError
-
-      // Get public URL
+      // Get public URL from the returned path
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
-        .getPublicUrl(fileName)
+        .getPublicUrl(filePath)
 
       // Update profile
       const { error: updateError } = await supabase
@@ -339,7 +345,7 @@ export default function EinstellungenPage() {
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err: any) {
-      setError('Fehler beim Hochladen des Bildes')
+      setError(err.message || 'Fehler beim Hochladen des Bildes')
       console.error('Upload error:', err)
     } finally {
       setIsUploadingPicture(false)
@@ -534,7 +540,7 @@ export default function EinstellungenPage() {
                 {/* Profile Picture */}
                 <div className="space-y-2">
                   <Label>Profilbild</Label>
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
                     <div className="relative">
                       {profile.profile_picture_url ? (
                         <img src={profile.profile_picture_url} alt="Profilbild" className="w-20 h-20 rounded-full object-cover border-2 border-warmgray-200" />
@@ -778,7 +784,7 @@ export default function EinstellungenPage() {
           {/* Profile Picture */}
           <div className="space-y-2">
             <Label>Profilbild</Label>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
               <div className="relative">
                 {profile.profile_picture_url ? (
                   <img
@@ -1075,13 +1081,13 @@ export default function EinstellungenPage() {
                 )}
               </div>
               <p className="text-sm text-warmgray-500">
-                {is2FAEnabled 
+                {is2FAEnabled
                   ? 'Ihr Konto ist durch 2FA geschützt'
                   : 'Zusätzliche Sicherheit mit Authenticator-App'
                 }
               </p>
             </div>
-            <Button 
+            <Button
               variant={is2FAEnabled ? "outline" : "default"}
               onClick={() => setIs2FADialogOpen(true)}
             >

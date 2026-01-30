@@ -1,8 +1,7 @@
 // Subscription tier configuration
-// Note: 'family' tier is deprecated but kept for legacy subscribers
-export type SubscriptionTier = 'free' | 'basic' | 'premium' | 'family'
+export type SubscriptionTier = 'free' | 'basic' | 'premium'
 
-// Active tiers shown in the UI (excludes deprecated family)
+// Active tiers shown in the UI
 export const ACTIVE_TIERS: SubscriptionTier[] = ['free', 'basic', 'premium']
 
 export interface TierConfig {
@@ -43,11 +42,6 @@ export function getStripePriceIds() {
     premium: {
       monthly: process.env.STRIPE_PRICE_PREMIUM_MONTHLY || process.env.STRIPE_PRICE_ID || '',
       yearly: process.env.STRIPE_PRICE_PREMIUM_YEARLY || '',
-    },
-    // Legacy family prices - kept for existing subscribers
-    family: {
-      monthly: process.env.STRIPE_PRICE_FAMILY_MONTHLY || '',
-      yearly: process.env.STRIPE_PRICE_FAMILY_YEARLY || '',
     },
   }
 }
@@ -96,6 +90,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       '5 Eigene Kategorien',
       'E-Mail-Erinnerungen',
       'Dokument-Ablaufdatum',
+      'Familien-Dashboard', // Added
     ],
     limits: {
       maxDocuments: 50,
@@ -109,7 +104,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       prioritySupport: false,
       familyMembers: 0,
       smsNotifications: false,
-      familyDashboard: false,
+      familyDashboard: true, // Changed to true
       customCategories: true,
     },
   },
@@ -117,25 +112,25 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     id: 'premium',
     name: 'Premium',
     description: 'Voller Schutz',
-    priceMonthly: 11.90, // Changed from 9.90 to 11.90
-    priceYearly: 119, // Changed from 99 to 119
+    priceMonthly: 11.90,
+    priceYearly: 119,
     features: [
       'Unbegrenzte Dokumente',
-      '10 GB Speicherplatz', // Changed from 2 GB to 10 GB
-      '5 Vertrauenspersonen', // Updated count in text
+      '4 GB Speicherplatz', // Changed from 10 GB to 4 GB
+      '5 Vertrauenspersonen',
       'Unbegrenzte Unterordner',
       'Unbegrenzte Kategorien',
       'E-Mail-Erinnerungen',
       'Dokument-Ablaufdatum',
       'Zwei-Faktor-Auth',
       'Prioritäts-Support',
-      'Familien-Dashboard', // Added to text
-      'SMS-Benachrichtigungen', // Added to text
+      'Familien-Dashboard',
+      'SMS-Benachrichtigungen',
     ],
     limits: {
       maxDocuments: -1, // unlimited
-      maxStorageMB: 10240, // Changed from 2048 (2GB) to 10240 (10GB)
-      maxTrustedPersons: 5, // Changed from 10 to 5
+      maxStorageMB: 4096, // Changed from 10240 (10GB) to 4096 (4GB)
+      maxTrustedPersons: 5,
       maxSubcategories: -1, // unlimited
       maxCustomCategories: -1, // unlimited
       emailReminders: true,
@@ -149,39 +144,6 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     },
     highlighted: true,
     badge: 'Beliebt',
-  },
-  // DEPRECATED: Family tier kept for legacy subscribers only
-  // Do not show in UI for new subscriptions
-  family: {
-    id: 'family',
-    name: 'Familie (Legacy)',
-    description: 'Für bestehende Familien-Abonnenten',
-    priceMonthly: 14.90,
-    priceYearly: 149,
-    features: [
-      'Alles aus Premium',
-      '5 GB Speicherplatz',
-      'Bis zu 5 Familienmitglieder',
-      'Unbegrenzte Unterordner',
-      'Gemeinsame Dokumente',
-      'Familien-Dashboard',
-    ],
-    limits: {
-      maxDocuments: -1,
-      maxStorageMB: 5120,
-      maxTrustedPersons: 20,
-      maxSubcategories: -1,
-      maxCustomCategories: -1,
-      emailReminders: true,
-      documentExpiry: true,
-      twoFactorAuth: true,
-      prioritySupport: true,
-      familyMembers: 5,
-      smsNotifications: true,
-      familyDashboard: true,
-      customCategories: true,
-    },
-    deprecated: true, // Mark as deprecated
   },
 }
 
@@ -203,12 +165,9 @@ export function getTierFromSubscription(
   if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) {
     return SUBSCRIPTION_TIERS.premium
   }
-  // Legacy family subscribers still get family tier
-  if (priceId === priceIds.family.monthly || priceId === priceIds.family.yearly) {
-    return SUBSCRIPTION_TIERS.family
-  }
 
   // Default to premium for legacy subscriptions with active status
+  // Note: We map unknown active subs to premium (safe default)
   if (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') {
     return SUBSCRIPTION_TIERS.premium
   }

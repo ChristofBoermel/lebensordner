@@ -18,6 +18,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DocumentPreview } from '@/components/ui/document-preview'
 import {
@@ -50,7 +58,8 @@ import {
   X,
   Pencil,
   PlusCircle,
-  Tag
+  Tag,
+  MoreVertical
 } from 'lucide-react'
 import { DOCUMENT_CATEGORIES, type DocumentCategory, type Document, type Subcategory, type CustomCategory } from '@/types/database'
 import { formatFileSize, formatDate } from '@/lib/utils'
@@ -101,6 +110,7 @@ export default function DocumentsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState<DocumentCategory | null>(initialCategory)
   const [activeTab, setActiveTab] = useState<string>(initialCategory || 'overview')
+  const [view, setView] = useState<'grid' | 'list'>('grid')
   const [isUploadOpen, setIsUploadOpen] = useState(shouldOpenUpload)
   const [uploadCategory, setUploadCategory] = useState<DocumentCategory | null>(initialCategory)
   const [uploadSubcategory, setUploadSubcategory] = useState<string | null>(null)
@@ -410,21 +420,33 @@ export default function DocumentsPage() {
     setIsUploading(true)
     setUploadError(null)
 
+    setIsUploading(true)
+    setUploadError(null)
+
     try {
+      // 1. Upload via Server-Side API
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      formData.append('path', uploadCategory || 'sonstige') // Use category as path folder
+      formData.append('bucket', 'documents')
+
+      const uploadRes = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json()
+        throw new Error(errorData.error || 'Upload fehlgeschlagen')
+      }
+
+      const uploadData = await uploadRes.json()
+      const { path: filePath, size: fileSize } = uploadData
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
 
-      // Upload file to storage
-      const fileExt = uploadFile.name.split('.').pop()
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(fileName, uploadFile)
-
-      if (uploadError) throw uploadError
-
-      // Create document record with subcategory
+      // 2. Create document record
       const { data: insertedDoc, error: insertError } = await supabase
         .from('documents')
         .insert({
@@ -435,8 +457,8 @@ export default function DocumentsPage() {
           title: uploadTitle,
           notes: uploadNotes || null,
           file_name: uploadFile.name,
-          file_path: fileName,
-          file_size: uploadFile.size,
+          file_path: filePath,
+          file_size: fileSize,
           file_type: uploadFile.type || 'application/octet-stream',
           expiry_date: uploadExpiryDate || null,
           custom_reminder_days: uploadCustomReminderDays,
@@ -451,7 +473,6 @@ export default function DocumentsPage() {
       if (uploadReminderWatcher && uploadExpiryDate && insertedDoc) {
         const watcher = familyMembers.find(m => m.id === uploadReminderWatcher)
         if (watcher) {
-          // Send confirmation email to watcher
           try {
             await fetch('/api/reminder-watcher/notify', {
               method: 'POST',
@@ -471,18 +492,29 @@ export default function DocumentsPage() {
         }
       }
 
-      // Update storage used in profile
-      await supabase
-        .from('profiles')
-        .update({ storage_used: storageUsed + uploadFile.size })
-        .eq('id', user.id)
+      // No need to update profiles storage manually - API handled it.
+      // But we should update local state to reflect new usage immediately
+      setStorageUsed(prev => prev + fileSize)
+
+      // Optimistic UI Update: Add document to list immediately
+      // We need to fetch the subcategory/category details if needed for full display,
+      // but simpler is to use what we have and let fetchDocuments catch up.
+      // Or just insert it with basic data.
+      if (insertedDoc) {
+        const optimisticDoc: any = {
+          ...insertedDoc,
+          subcategory: { name: 'Lade...' }, // Placeholder until refetch
+          custom_category: null
+        }
+        setDocuments(prev => [optimisticDoc, ...prev])
+      }
 
       // Track successful upload
       capture(ANALYTICS_EVENTS.DOCUMENT_UPLOADED, {
         category: uploadCategory,
         has_subcategory: !!uploadSubcategory,
         file_type: uploadFile.type,
-        file_size_kb: Math.round(uploadFile.size / 1024),
+        file_size_kb: Math.round(fileSize / 1024),
       })
 
       // Reset and refresh
@@ -495,13 +527,15 @@ export default function DocumentsPage() {
       setUploadCustomCategory(null)
       setUploadReminderWatcher(null)
       setIsUploadOpen(false)
+
+      // Fetch in background to ensure consistency
       fetchDocuments()
-    } catch (error) {
+    } catch (error: any) {
       capture(ANALYTICS_EVENTS.ERROR_OCCURRED, {
         error_type: 'document_upload_failed',
         category: uploadCategory,
       })
-      setUploadError('Fehler beim Hochladen. Bitte versuchen Sie es erneut.')
+      setUploadError(error.message || 'Fehler beim Hochladen. Bitte versuchen Sie es erneut.')
       console.error('Upload error:', error)
     } finally {
       setIsUploading(false)
@@ -904,18 +938,18 @@ export default function DocumentsPage() {
         key={doc.id}
         id={`doc-${doc.id}`}
         className={`document-item group transition-all duration-300 ${isHighlighted
-            ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300 ring-offset-2'
-            : isSelected
-              ? 'bg-sage-50 border-sage-300'
-              : ''
+          ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300 ring-offset-2'
+          : isSelected
+            ? 'bg-sage-50 border-sage-300'
+            : ''
           }`}
       >
         {/* Checkbox */}
         <button
           onClick={() => toggleDocumentSelection(doc.id)}
           className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected
-              ? 'bg-sage-500 border-sage-500 text-white'
-              : 'border-warmgray-300 hover:border-sage-400'
+            ? 'bg-sage-500 border-sage-500 text-white'
+            : 'border-warmgray-300 hover:border-sage-400'
             }`}
         >
           {isSelected && <Check className="w-4 h-4" />}
@@ -1406,6 +1440,48 @@ export default function DocumentsPage() {
               // Show folder grid for the category
               renderFolderGrid(key as DocumentCategory)
             )}
+            {/* Documents Grid */}
+            {view === 'grid' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+                {filteredDocuments.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="bg-white dark:bg-warmgray-900 rounded-xl border border-warmgray-200 dark:border-warmgray-800 p-4 hover:shadow-md transition-all group"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-sage-50 dark:bg-sage-900/30 flex items-center justify-center text-sage-600 dark:text-sage-400">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-10 w-10 -mr-2"> {/* Improved touch target */}
+                            <MoreVertical className="w-5 h-5 text-warmgray-400" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setPreviewDocument(doc)} className="py-2.5"> {/* Taller item */}
+                            <Eye className="w-4 h-4 mr-2" />
+                            Ansehen
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownload(doc)} className="py-2.5">
+                            <Download className="w-4 h-4 mr-2" />
+                            Herunterladen
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(doc)}
+                            className="text-red-600 py-2.5"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Löschen
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </TabsContent>
         ))}
 
@@ -1529,29 +1605,13 @@ export default function DocumentsPage() {
               </Card>
             )
           })}
-        </div>
-      )}
-
       {/* Upload Dialog */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Dokument hinzufügen</DialogTitle>
-            <DialogDescription>
-              Wählen Sie eine Kategorie, optional einen Unterordner, und laden Sie Ihre Datei hoch.
-            </DialogDescription>
+        <DialogContent className="w-full h-[100dvh] sm:h-auto sm:max-w-lg p-0 overflow-hidden flex flex-col">
+          <DialogHeader className="p-6 pb-2">
+            <DialogTitle>Neues Dokument</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            {uploadError && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-                {uploadError}
-              </div>
-            )}
-
-            {/* Category Selection */}
-            <div className="space-y-2">
-              <Label>Kategorie</Label>
               <div className="grid grid-cols-2 gap-2">
                 {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => (
                   <button
@@ -1564,8 +1624,8 @@ export default function DocumentsPage() {
                       setIsCreatingSubcategory(false)
                     }}
                     className={`p-3 text-left rounded-lg border-2 transition-colors ${uploadCategory === key && !uploadCustomCategory
-                        ? 'border-sage-500 bg-sage-50 text-sage-800'
-                        : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
+                      ? 'border-sage-500 bg-sage-50 text-sage-800'
+                      : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
                       }`}
                   >
                     <span className="text-sm font-medium">{category.name}</span>
@@ -1583,8 +1643,8 @@ export default function DocumentsPage() {
                       setIsCreatingSubcategory(false)
                     }}
                     className={`p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-2 ${uploadCustomCategory === cat.id
-                        ? 'border-sage-500 bg-sage-50 text-sage-800'
-                        : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
+                      ? 'border-sage-500 bg-sage-50 text-sage-800'
+                      : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
                       }`}
                   >
                     <Tag className="w-4 h-4 flex-shrink-0" />
@@ -1782,235 +1842,238 @@ export default function DocumentsPage() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
-      {/* Document Preview */}
-      <DocumentPreview
-        isOpen={!!previewDocument}
-        onClose={() => setPreviewDocument(null)}
-        document={previewDocument}
-      />
+    {/* Document Preview */ }
+    < DocumentPreview
+  isOpen = {!!previewDocument
+}
+onClose = {() => setPreviewDocument(null)}
+document = { previewDocument }
+  />
 
-      {/* Move Dialog */}
-      <Dialog open={isMoveDialogOpen} onOpenChange={setIsMoveDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {selectedDocuments.size === 1 ? 'Dokument verschieben' : `${selectedDocuments.size} Dokumente verschieben`}
-            </DialogTitle>
-            <DialogDescription>
-              Wählen Sie einen Zielordner oder erstellen Sie einen neuen.
-            </DialogDescription>
-          </DialogHeader>
+  {/* Move Dialog */ }
+  < Dialog open = { isMoveDialogOpen } onOpenChange = { setIsMoveDialogOpen } >
+    <DialogContent className="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>
+          {selectedDocuments.size === 1 ? 'Dokument verschieben' : `${selectedDocuments.size} Dokumente verschieben`}
+        </DialogTitle>
+        <DialogDescription>
+          Wählen Sie einen Zielordner oder erstellen Sie einen neuen.
+        </DialogDescription>
+      </DialogHeader>
 
-          <div className="space-y-4">
-            {/* Existing folders */}
-            <div className="space-y-2">
-              <Label>Zielordner</Label>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {/* Remove from folder option */}
-                <button
-                  onClick={() => {
-                    setMoveTargetFolder(null)
-                    setIsCreatingFolderInMove(false)
-                  }}
-                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${moveTargetFolder === null && !isCreatingFolderInMove
-                      ? 'border-sage-500 bg-sage-50'
-                      : 'border-warmgray-200 hover:border-warmgray-400'
-                    }`}
-                >
-                  <X className="w-5 h-5 text-warmgray-500" />
-                  <span className="text-sm">Kein Ordner (aus Ordner entfernen)</span>
-                </button>
-
-                {/* Existing folders for this category */}
-                {getAvailableFoldersForMove().map(folder => (
-                  <button
-                    key={folder.id}
-                    onClick={() => {
-                      setMoveTargetFolder(folder.id)
-                      setIsCreatingFolderInMove(false)
-                    }}
-                    className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${moveTargetFolder === folder.id
-                        ? 'border-sage-500 bg-sage-50'
-                        : 'border-warmgray-200 hover:border-warmgray-400'
-                      }`}
-                  >
-                    <Folder className="w-5 h-5 text-sage-500" />
-                    <span className="text-sm font-medium">{folder.name}</span>
-                  </button>
-                ))}
-
-                {/* Create new folder option */}
-                <button
-                  onClick={() => {
-                    setIsCreatingFolderInMove(true)
-                    setMoveTargetFolder(null)
-                  }}
-                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${isCreatingFolderInMove
-                      ? 'border-sage-500 bg-sage-50'
-                      : 'border-dashed border-warmgray-300 hover:border-sage-400'
-                    }`}
-                >
-                  <FolderPlus className="w-5 h-5 text-warmgray-400" />
-                  <span className="text-sm">Neuen Ordner erstellen...</span>
-                </button>
-              </div>
-            </div>
-
-            {/* New folder name input */}
-            {isCreatingFolderInMove && (
-              <div className="space-y-2">
-                <Label>Name des neuen Ordners</Label>
-                <Input
-                  placeholder="Ordnername eingeben"
-                  value={newFolderNameInMove}
-                  onChange={(e) => setNewFolderNameInMove(e.target.value)}
-                  autoFocus
-                />
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsMoveDialogOpen(false)}>
-              Abbrechen
-            </Button>
-            <Button
-              onClick={handleMoveDocuments}
-              disabled={isMoving || (isCreatingFolderInMove && !newFolderNameInMove.trim())}
+      <div className="space-y-4">
+        {/* Existing folders */}
+        <div className="space-y-2">
+          <Label>Zielordner</Label>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {/* Remove from folder option */}
+            <button
+              onClick={() => {
+                setMoveTargetFolder(null)
+                setIsCreatingFolderInMove(false)
+              }}
+              className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${moveTargetFolder === null && !isCreatingFolderInMove
+                ? 'border-sage-500 bg-sage-50'
+                : 'border-warmgray-200 hover:border-warmgray-400'
+                }`}
             >
-              {isMoving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Verschieben...
-                </>
-              ) : (
-                <>
-                  <MoveRight className="mr-2 h-4 w-4" />
-                  Verschieben
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              <X className="w-5 h-5 text-warmgray-500" />
+              <span className="text-sm">Kein Ordner (aus Ordner entfernen)</span>
+            </button>
 
-      {/* Bulk Action Bar - Fixed at bottom when documents selected */}
-      {selectedDocuments.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-warmgray-900 text-white rounded-lg shadow-xl px-6 py-4 flex items-center gap-6 z-50">
-          <div className="flex items-center gap-2">
-            <Check className="w-5 h-5 text-sage-400" />
-            <span className="font-medium">{selectedDocuments.size} ausgewählt</span>
-          </div>
-          <div className="h-6 w-px bg-warmgray-700" />
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-white hover:bg-warmgray-800"
-              onClick={() => openMoveDialog()}
+            {/* Existing folders for this category */}
+            {getAvailableFoldersForMove().map(folder => (
+              <button
+                key={folder.id}
+                onClick={() => {
+                  setMoveTargetFolder(folder.id)
+                  setIsCreatingFolderInMove(false)
+                }}
+                className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${moveTargetFolder === folder.id
+                  ? 'border-sage-500 bg-sage-50'
+                  : 'border-warmgray-200 hover:border-warmgray-400'
+                  }`}
+              >
+                <Folder className="w-5 h-5 text-sage-500" />
+                <span className="text-sm font-medium">{folder.name}</span>
+              </button>
+            ))}
+
+            {/* Create new folder option */}
+            <button
+              onClick={() => {
+                setIsCreatingFolderInMove(true)
+                setMoveTargetFolder(null)
+              }}
+              className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${isCreatingFolderInMove
+                ? 'border-sage-500 bg-sage-50'
+                : 'border-dashed border-warmgray-300 hover:border-sage-400'
+                }`}
             >
+              <FolderPlus className="w-5 h-5 text-warmgray-400" />
+              <span className="text-sm">Neuen Ordner erstellen...</span>
+            </button>
+          </div>
+        </div>
+
+        {/* New folder name input */}
+        {isCreatingFolderInMove && (
+          <div className="space-y-2">
+            <Label>Name des neuen Ordners</Label>
+            <Input
+              placeholder="Ordnername eingeben"
+              value={newFolderNameInMove}
+              onChange={(e) => setNewFolderNameInMove(e.target.value)}
+              autoFocus
+            />
+          </div>
+        )}
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" onClick={() => setIsMoveDialogOpen(false)}>
+          Abbrechen
+        </Button>
+        <Button
+          onClick={handleMoveDocuments}
+          disabled={isMoving || (isCreatingFolderInMove && !newFolderNameInMove.trim())}
+        >
+          {isMoving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Verschieben...
+            </>
+          ) : (
+            <>
               <MoveRight className="mr-2 h-4 w-4" />
               Verschieben
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-white hover:bg-warmgray-800"
-              onClick={clearSelection}
-            >
-              <X className="mr-2 h-4 w-4" />
-              Auswahl aufheben
-            </Button>
-          </div>
+            </>
+          )}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+      </Dialog >
+
+  {/* Bulk Action Bar - Fixed at bottom when documents selected */ }
+{
+  selectedDocuments.size > 0 && (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-warmgray-900 text-white rounded-lg shadow-xl px-6 py-4 flex items-center gap-6 z-50">
+      <div className="flex items-center gap-2">
+        <Check className="w-5 h-5 text-sage-400" />
+        <span className="font-medium">{selectedDocuments.size} ausgewählt</span>
+      </div>
+      <div className="h-6 w-px bg-warmgray-700" />
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-white hover:bg-warmgray-800"
+          onClick={() => openMoveDialog()}
+        >
+          <MoveRight className="mr-2 h-4 w-4" />
+          Verschieben
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-white hover:bg-warmgray-800"
+          onClick={clearSelection}
+        >
+          <X className="mr-2 h-4 w-4" />
+          Auswahl aufheben
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+{/* Category Dialog */ }
+<Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+  <DialogContent className="sm:max-w-md">
+    <DialogHeader>
+      <DialogTitle>
+        {editingCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie erstellen'}
+      </DialogTitle>
+      <DialogDescription>
+        {editingCategory
+          ? 'Ändern Sie den Namen oder die Beschreibung der Kategorie.'
+          : 'Erstellen Sie eine eigene Kategorie für Ihre Dokumente.'}
+      </DialogDescription>
+    </DialogHeader>
+
+    <div className="space-y-4">
+      {categoryError && (
+        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+          {categoryError}
         </div>
       )}
 
-      {/* Category Dialog */}
-      <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {editingCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie erstellen'}
-            </DialogTitle>
-            <DialogDescription>
-              {editingCategory
-                ? 'Ändern Sie den Namen oder die Beschreibung der Kategorie.'
-                : 'Erstellen Sie eine eigene Kategorie für Ihre Dokumente.'}
-            </DialogDescription>
-          </DialogHeader>
+      <div className="space-y-2">
+        <Label htmlFor="category-name">Name *</Label>
+        <Input
+          id="category-name"
+          value={categoryForm.name}
+          onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+          placeholder="z.B. Fahrzeuge, Haustiere, Hobbys"
+        />
+      </div>
 
-          <div className="space-y-4">
-            {categoryError && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-                {categoryError}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="category-name">Name *</Label>
-              <Input
-                id="category-name"
-                value={categoryForm.name}
-                onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                placeholder="z.B. Fahrzeuge, Haustiere, Hobbys"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="category-description">Beschreibung (optional)</Label>
-              <Input
-                id="category-description"
-                value={categoryForm.description}
-                onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
-                placeholder="Kurze Beschreibung der Kategorie"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>
-              Abbrechen
-            </Button>
-            <Button onClick={handleSaveCategory} disabled={isSavingCategory || !categoryForm.name.trim()}>
-              {isSavingCategory ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Speichern...
-                </>
-              ) : (
-                'Speichern'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Upgrade Modal - friendly limit notification */}
-      <UpgradeModal
-        isOpen={upgradeModalOpen}
-        onClose={() => setUpgradeModalOpen(false)}
-        feature={upgradeModalFeature}
-        currentLimit={
-          upgradeModalFeature === 'folder' ? userTier.limits.maxSubcategories :
-            upgradeModalFeature === 'document' ? userTier.limits.maxDocuments :
-              upgradeModalFeature === 'custom_category' ? userTier.limits.maxCustomCategories :
-                undefined
-        }
-        basicLimit={
-          upgradeModalFeature === 'folder' ? SUBSCRIPTION_TIERS.basic.limits.maxSubcategories :
-            upgradeModalFeature === 'document' ? SUBSCRIPTION_TIERS.basic.limits.maxDocuments :
-              upgradeModalFeature === 'custom_category' ? SUBSCRIPTION_TIERS.basic.limits.maxCustomCategories :
-                undefined
-        }
-        premiumLimit={
-          upgradeModalFeature === 'folder' ? 'Unbegrenzt' :
-            upgradeModalFeature === 'document' ? 'Unbegrenzt' :
-              upgradeModalFeature === 'custom_category' ? 'Unbegrenzt' :
-                undefined
-        }
-      />
+      <div className="space-y-2">
+        <Label htmlFor="category-description">Beschreibung (optional)</Label>
+        <Input
+          id="category-description"
+          value={categoryForm.description}
+          onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+          placeholder="Kurze Beschreibung der Kategorie"
+        />
+      </div>
     </div>
+
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>
+        Abbrechen
+      </Button>
+      <Button onClick={handleSaveCategory} disabled={isSavingCategory || !categoryForm.name.trim()}>
+        {isSavingCategory ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Speichern...
+          </>
+        ) : (
+          'Speichern'
+        )}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
+{/* Upgrade Modal - friendly limit notification */ }
+<UpgradeModal
+  isOpen={upgradeModalOpen}
+  onClose={() => setUpgradeModalOpen(false)}
+  feature={upgradeModalFeature}
+  currentLimit={
+    upgradeModalFeature === 'folder' ? userTier.limits.maxSubcategories :
+      upgradeModalFeature === 'document' ? userTier.limits.maxDocuments :
+        upgradeModalFeature === 'custom_category' ? userTier.limits.maxCustomCategories :
+          undefined
+  }
+  basicLimit={
+    upgradeModalFeature === 'folder' ? SUBSCRIPTION_TIERS.basic.limits.maxSubcategories :
+      upgradeModalFeature === 'document' ? SUBSCRIPTION_TIERS.basic.limits.maxDocuments :
+        upgradeModalFeature === 'custom_category' ? SUBSCRIPTION_TIERS.basic.limits.maxCustomCategories :
+          undefined
+  }
+  premiumLimit={
+    upgradeModalFeature === 'folder' ? 'Unbegrenzt' :
+      upgradeModalFeature === 'document' ? 'Unbegrenzt' :
+        upgradeModalFeature === 'custom_category' ? 'Unbegrenzt' :
+          undefined
+  }
+/>
+    </div >
   )
 }

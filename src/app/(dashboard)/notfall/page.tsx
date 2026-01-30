@@ -353,18 +353,27 @@ export default function NotfallPage() {
 
     setIsUploadingDoc(docType)
     try {
+      // 1. Upload via Server-Side API
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('path', 'vertraege/notfall') // Use 'vertraege' or 'notfall' path
+      formData.append('bucket', 'documents')
+
+      const uploadRes = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json()
+        throw new Error(errorData.error || 'Upload fehlgeschlagen')
+      }
+
+      const uploadData = await uploadRes.json()
+      const { path: filePath, size: fileSize } = uploadData
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
-
-      // Upload file to storage
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(fileName, file)
-
-      if (uploadError) throw uploadError
 
       // Create document record
       const docTitles: Record<string, string> = {
@@ -378,11 +387,11 @@ export default function NotfallPage() {
         .from('documents')
         .insert({
           user_id: user.id,
-          category: 'vertraege',
+          category: 'vertraege', // Map to Verträge category
           title: docTitles[docType] || file.name,
           file_name: file.name,
-          file_path: fileName,
-          file_size: file.size,
+          file_path: filePath,
+          file_size: fileSize,
           file_type: file.type || 'application/octet-stream',
         })
         .select()
@@ -404,9 +413,9 @@ export default function NotfallPage() {
       }
 
       fetchData()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Upload error:', err)
-      alert('Fehler beim Hochladen. Bitte versuchen Sie es erneut.')
+      alert(err.message || 'Fehler beim Hochladen. Bitte versuchen Sie es erneut.')
     } finally {
       setIsUploadingDoc(null)
     }
@@ -597,7 +606,7 @@ export default function NotfallPage() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
           <TabsTrigger value="notfall">Notfall</TabsTrigger>
           <TabsTrigger value="gesundheit">Gesundheit</TabsTrigger>
           <TabsTrigger value="vorsorge">Vollmachten</TabsTrigger>
