@@ -24,21 +24,20 @@ interface SubscriptionInfo {
 interface StripePriceIds {
   basic: { monthly: string; yearly: string }
   premium: { monthly: string; yearly: string }
-  family: { monthly: string; yearly: string }
 }
 
 export default function AboPage() {
   const searchParams = useSearchParams()
   const success = searchParams.get('success')
   const canceled = searchParams.get('canceled')
-  
+
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState<string | null>(null)
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [priceIds, setPriceIds] = useState<StripePriceIds | null>(null)
-  
+
   const supabase = createClient()
   const { capture } = usePostHog()
 
@@ -65,17 +64,17 @@ export default function AboPage() {
     setIsLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    
+
     const { data } = await supabase
       .from('profiles')
       .select('subscription_status, subscription_current_period_end, stripe_customer_id, stripe_price_id')
       .eq('id', user.id)
       .single()
-    
+
     if (data) {
-      setSubscription({ 
-        status: data.subscription_status, 
-        current_period_end: data.subscription_current_period_end, 
+      setSubscription({
+        status: data.subscription_status,
+        current_period_end: data.subscription_current_period_end,
         stripe_customer_id: data.stripe_customer_id,
         price_id: data.stripe_price_id
       })
@@ -84,7 +83,7 @@ export default function AboPage() {
   }, [supabase])
 
   useEffect(() => { fetchSubscription() }, [fetchSubscription])
-  
+
   // Refetch after successful checkout
   useEffect(() => {
     if (success) {
@@ -98,14 +97,12 @@ export default function AboPage() {
 
   const getPriceId = (tierId: SubscriptionTier, period: 'monthly' | 'yearly'): string => {
     if (!priceIds) return ''
-    
+
     switch (tierId) {
       case 'basic':
         return period === 'monthly' ? priceIds.basic.monthly : priceIds.basic.yearly
       case 'premium':
         return period === 'monthly' ? priceIds.premium.monthly : priceIds.premium.yearly
-      case 'family':
-        return period === 'monthly' ? priceIds.family.monthly : priceIds.family.yearly
       default:
         return ''
     }
@@ -113,10 +110,10 @@ export default function AboPage() {
 
   const handleSubscribe = async (tier: TierConfig) => {
     if (tier.id === 'free') return
-    
+
     setIsProcessing(tier.id)
     setError(null)
-    
+
     try {
       const priceId = getPriceId(tier.id, billingPeriod)
 
@@ -124,12 +121,12 @@ export default function AboPage() {
         throw new Error('Preis nicht konfiguriert')
       }
 
-      const response = await fetch('/api/stripe/create-checkout', { 
+      const response = await fetch('/api/stripe/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ priceId })
       })
-      
+
       const data = await response.json()
       if (data.error) throw new Error(data.error)
       if (data.url) window.location.href = data.url
@@ -155,20 +152,20 @@ export default function AboPage() {
   }
 
   const isSubscribed = subscription?.status === 'active' || subscription?.status === 'trialing'
-  
+
   // Determine current tier based on price ID
   const getCurrentTier = (): SubscriptionTier => {
     if (!isSubscribed || !priceIds || !subscription?.price_id) return 'free'
-    
+
     const priceId = subscription.price_id
     if (priceId === priceIds.basic.monthly || priceId === priceIds.basic.yearly) return 'basic'
     if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) return 'premium'
-    if (priceId === priceIds.family.monthly || priceId === priceIds.family.yearly) return 'family'
-    
+    if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) return 'premium'
+
     // Default to premium for legacy/unknown subscriptions
     return 'premium'
   }
-  
+
   const currentTier = getCurrentTier()
 
   const getPrice = (tier: TierConfig) => {
@@ -299,11 +296,10 @@ export default function AboPage() {
           return (
             <Card
               key={tier.id}
-              className={`relative flex flex-col ${
-                tier.highlighted
-                  ? 'border-2 border-sage-500 shadow-xl scale-[1.02]'
-                  : 'border-warmgray-200'
-              } ${isCurrent ? 'ring-2 ring-sage-300' : ''}`}
+              className={`relative flex flex-col ${tier.highlighted
+                ? 'border-2 border-sage-500 shadow-xl scale-[1.02]'
+                : 'border-warmgray-200'
+                } ${isCurrent ? 'ring-2 ring-sage-300' : ''}`}
             >
               {/* Badges */}
               {tier.highlighted && (
@@ -401,8 +397,8 @@ export default function AboPage() {
                   {isCurrent
                     ? 'Ihr aktueller Tarif'
                     : tier.id === 'free'
-                    ? 'Kostenlos starten'
-                    : '30 Tage kostenlos testen'}
+                      ? 'Kostenlos starten'
+                      : '30 Tage kostenlos testen'}
                 </Button>
               </CardContent>
             </Card>
