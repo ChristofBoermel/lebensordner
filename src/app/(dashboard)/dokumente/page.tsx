@@ -604,6 +604,39 @@ export default function DocumentsPage() {
     setSelectedDocuments(new Set())
   }
 
+  // Navigate to document logic
+  const navigateToDocument = (doc: Document) => {
+    // 1. Determine tab and category
+    if (doc.custom_category_id) {
+      setActiveTab(`custom:${doc.custom_category_id}`)
+      setSelectedCustomCategory(doc.custom_category_id)
+      setSelectedCategory(null)
+    } else {
+      setActiveTab(doc.category)
+      setSelectedCategory(doc.category)
+      setSelectedCustomCategory(null)
+    }
+
+    // 2. Open folder if document is in one
+    if (doc.subcategory_id) {
+      const folder = subcategories.find(s => s.id === doc.subcategory_id)
+      if (folder) {
+        setCurrentFolder(folder)
+      }
+    } else {
+      setCurrentFolder(null)
+    }
+
+    // 3. Highlight and scroll
+    setHighlightedDoc(doc.id)
+    setTimeout(() => {
+      const element = document.getElementById(`doc-${doc.id}`)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 100)
+  }
+
   // Move handlers
   const openMoveDialog = (docIds?: string[]) => {
     if (docIds) {
@@ -951,16 +984,20 @@ export default function DocumentsPage() {
       <div
         key={doc.id}
         id={`doc-${doc.id}`}
-        className={`document-item flex items-center gap-3 p-3 rounded-xl border border-warmgray-200 dark:border-warmgray-800 group transition-all duration-300 ${isHighlighted
+        onClick={() => navigateToDocument(doc)}
+        className={`document-item flex items-center gap-3 p-3 rounded-xl border border-warmgray-200 dark:border-warmgray-800 group transition-all duration-300 cursor-pointer ${isHighlighted
           ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300 ring-offset-2'
           : isSelected
             ? 'bg-sage-50 border-sage-300'
-            : 'bg-white dark:bg-warmgray-900'
+            : 'bg-white dark:bg-warmgray-900 hover:border-sage-200 hover:bg-sage-50/30'
           }`}
       >
         {/* Checkbox */}
         <button
-          onClick={() => toggleDocumentSelection(doc.id)}
+          onClick={(e) => {
+            e.stopPropagation()
+            toggleDocumentSelection(doc.id)
+          }}
           className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected
             ? 'bg-sage-500 border-sage-500 text-white'
             : 'border-warmgray-300 hover:border-sage-400'
@@ -990,7 +1027,7 @@ export default function DocumentsPage() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+        <div className="flex items-center gap-1 flex-shrink-0 ml-auto" onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-9 w-9 text-warmgray-400 !p-0 flex-shrink-0">
