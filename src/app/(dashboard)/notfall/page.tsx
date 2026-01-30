@@ -563,7 +563,7 @@ export default function NotfallPage() {
   if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-sage-600" /></div>
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-8 px-4 sm:px-0">
       <div className="page-header">
         <h1 className="text-3xl font-serif font-semibold text-warmgray-900">Notfall & Vorsorge</h1>
         <p className="text-lg text-warmgray-600 mt-2">Wichtige Informationen für den Notfall und Vorsorgedokumente</p>
@@ -616,34 +616,51 @@ export default function NotfallPage() {
         <TabsContent value="notfall" className="mt-6">
           <Card>
             <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2"><Phone className="w-5 h-5 text-sage-600" />Notfall-Kontakte</CardTitle>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="flex items-center gap-2 flex-wrap text-xl sm:text-2xl">
+                    <Phone className="w-5 h-5 text-sage-600 flex-shrink-0" />
+                    <span className="truncate sm:whitespace-normal">Notfall-Kontakte</span>
+                  </CardTitle>
                   <CardDescription>Personen, die im Notfall kontaktiert werden sollen</CardDescription>
                 </div>
-                <Button onClick={() => handleOpenContactDialog()}><Plus className="w-4 h-4 mr-2" />Hinzufügen</Button>
+                <Button onClick={() => handleOpenContactDialog()} className="w-full sm:w-auto flex-shrink-0">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Hinzufügen
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
               {emergencyContacts.length > 0 ? (
                 <div className="space-y-3">
                   {emergencyContacts.map((contact) => (
-                    <div key={contact.id} className="flex items-center justify-between p-4 rounded-lg bg-cream-50 border border-cream-200">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-sage-100 flex items-center justify-center"><User className="w-6 h-6 text-sage-600" /></div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-warmgray-900">{contact.name}</p>
-                            {contact.is_primary && <span className="px-2 py-0.5 text-xs font-medium bg-sage-100 text-sage-700 rounded-full flex items-center gap-1"><Star className="w-3 h-3" />Hauptkontakt</span>}
+                    <div key={contact.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg bg-cream-50 border border-cream-200 gap-4">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
+                          <User className="w-6 h-6 text-sage-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-warmgray-900 truncate">{contact.name}</p>
+                            {contact.is_primary && (
+                              <span className="px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-sage-100 text-sage-700 rounded-full flex items-center gap-1 flex-shrink-0">
+                                <Star className="w-3 h-3" />
+                                Hauptkontakt
+                              </span>
+                            )}
                           </div>
-                          <p className="text-sm text-warmgray-600">{contact.relationship}</p>
-                          <p className="text-sm text-warmgray-500">{contact.phone}</p>
-                          {contact.email && <p className="text-sm text-warmgray-500">{contact.email}</p>}
+                          <p className="text-sm text-warmgray-600 truncate">{contact.relationship}</p>
+                          <p className="text-sm text-warmgray-500 truncate">{contact.phone}</p>
+                          {contact.email && <p className="text-sm text-warmgray-500 truncate">{contact.email}</p>}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleOpenContactDialog(contact)}><Edit2 className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteContact(contact.id)} className="text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
+                      <div className="flex items-center gap-2 flex-shrink-0 justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenContactDialog(contact)} className="h-9 w-9">
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteContact(contact.id)} className="text-red-600 hover:bg-red-50 h-9 w-9">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -662,12 +679,22 @@ export default function NotfallPage() {
         <TabsContent value="gesundheit" className="mt-6 space-y-6">
           <Card>
             <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2"><HeartPulse className="w-5 h-5 text-sage-600" />Medizinische Informationen</CardTitle>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="flex items-center gap-2 flex-wrap text-xl sm:text-2xl">
+                    <HeartPulse className="w-5 h-5 text-sage-600 flex-shrink-0" />
+                    <span>Medizinische Informationen</span>
+                  </CardTitle>
                   <CardDescription>Wichtige Gesundheitsdaten für Notfälle</CardDescription>
                 </div>
-                <Button variant="outline" onClick={() => { setMedicalForm(medicalInfo); setError(null); setIsMedicalDialogOpen(true) }}><Edit2 className="w-4 h-4 mr-2" />Bearbeiten</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => { setMedicalForm(medicalInfo); setError(null); setIsMedicalDialogOpen(true) }}
+                  className="w-full sm:w-auto flex-shrink-0"
+                >
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Bearbeiten
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -712,12 +739,22 @@ export default function NotfallPage() {
         <TabsContent value="vorsorge" className="mt-6">
           <Card>
             <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2"><Scale className="w-5 h-5 text-sage-600" />Vorsorgedokumente</CardTitle>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="flex items-center gap-2 flex-wrap text-xl sm:text-2xl">
+                    <Scale className="w-5 h-5 text-sage-600 flex-shrink-0" />
+                    <span>Vorsorgedokumente</span>
+                  </CardTitle>
                   <CardDescription>Vollmachten und Verfügungen</CardDescription>
                 </div>
-                <Button variant="outline" onClick={() => { setDirectivesForm(advanceDirectives); setError(null); setIsDirectivesDialogOpen(true) }}><Edit2 className="w-4 h-4 mr-2" />Bearbeiten</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => { setDirectivesForm(advanceDirectives); setError(null); setIsDirectivesDialogOpen(true) }}
+                  className="w-full sm:w-auto flex-shrink-0"
+                >
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Bearbeiten
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -732,10 +769,10 @@ export default function NotfallPage() {
                   return (
                     <div key={item.label} className="p-4 rounded-lg bg-cream-50 border border-cream-200">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <item.icon className="w-5 h-5 text-sage-600" />
-                          <p className="font-medium text-warmgray-900">{item.label}</p>
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${item.has ? 'bg-green-100 text-green-700' : 'bg-warmgray-100 text-warmgray-600'}`}>
+                        <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
+                          <item.icon className="w-5 h-5 text-sage-600 flex-shrink-0" />
+                          <p className="font-medium text-warmgray-900 truncate">{item.label}</p>
+                          <span className={`px-2 py-0.5 text-[10px] sm:text-xs rounded-full whitespace-nowrap ${item.has ? 'bg-green-100 text-green-700' : 'bg-warmgray-100 text-warmgray-600'}`}>
                             {item.has ? 'Vorhanden' : 'Nicht vorhanden'}
                           </span>
                         </div>
@@ -827,12 +864,22 @@ export default function NotfallPage() {
         <TabsContent value="bestattung" className="mt-6">
           <Card>
             <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2"><Flower2 className="w-5 h-5 text-sage-600" />Bestattungswünsche</CardTitle>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="flex items-center gap-2 flex-wrap text-xl sm:text-2xl">
+                    <Flower2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
+                    <span>Bestattungswünsche</span>
+                  </CardTitle>
                   <CardDescription>Ihre Wünsche für die Bestattung</CardDescription>
                 </div>
-                <Button variant="outline" onClick={() => { setFuneralForm(funeralWishes); setError(null); setIsFuneralDialogOpen(true) }}><Edit2 className="w-4 h-4 mr-2" />Bearbeiten</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => { setFuneralForm(funeralWishes); setError(null); setIsFuneralDialogOpen(true) }}
+                  className="w-full sm:w-auto flex-shrink-0"
+                >
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Bearbeiten
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
