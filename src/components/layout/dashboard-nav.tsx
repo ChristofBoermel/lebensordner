@@ -139,7 +139,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="overflow-y-auto px-4 py-6 space-y-1 flex-1">
+          <nav className="overflow-y-auto px-4 py-6 space-y-1 flex-1 min-h-0">
             {navigation.map((item) => {
               // Feature check
               if (item.feature && !hasFeatureAccess(tier, item.feature as any)) {
@@ -202,7 +202,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
           </nav>
 
           {/* Accessibility Controls */}
-          <div className="border-t border-warmgray-200 px-4 py-4">
+          <div className="border-t border-warmgray-200 px-4 py-4 flex-shrink-0">
             {/* Einfache Ansicht Toggle - prominent placement */}
             <button
               onClick={() => setSeniorMode(!seniorMode)}

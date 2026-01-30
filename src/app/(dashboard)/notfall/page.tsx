@@ -605,12 +605,12 @@ export default function NotfallPage() {
         </CardContent>
       </Card>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
-          <TabsTrigger value="notfall">Notfall</TabsTrigger>
-          <TabsTrigger value="gesundheit">Gesundheit</TabsTrigger>
-          <TabsTrigger value="vorsorge">Vollmachten</TabsTrigger>
-          <TabsTrigger value="bestattung">Bestattung</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto p-1 bg-warmgray-100/50">
+          <TabsTrigger value="notfall" className="py-3 sm:py-2">Notfall</TabsTrigger>
+          <TabsTrigger value="gesundheit" className="py-3 sm:py-2">Gesundheit</TabsTrigger>
+          <TabsTrigger value="vorsorge" className="py-3 sm:py-2">Vollmachten</TabsTrigger>
+          <TabsTrigger value="bestattung" className="py-3 sm:py-2">Bestattung</TabsTrigger>
         </TabsList>
 
         <TabsContent value="notfall" className="mt-6">
@@ -768,7 +768,7 @@ export default function NotfallPage() {
                   const uploadedDoc = uploadedDocuments[item.key]
                   return (
                     <div key={item.label} className="p-4 rounded-lg bg-cream-50 border border-cream-200">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
                           <item.icon className="w-5 h-5 text-sage-600 flex-shrink-0" />
                           <p className="font-medium text-warmgray-900 truncate">{item.label}</p>
@@ -778,13 +778,14 @@ export default function NotfallPage() {
                         </div>
 
                         {/* Document upload/view buttons */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0 justify-end">
                           {uploadedDoc ? (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleViewDocument(uploadedDoc.id)}
                               title="Dokument ansehen"
+                              className="h-9"
                             >
                               <Eye className="w-4 h-4 mr-1" />
                               Ansehen
@@ -807,6 +808,7 @@ export default function NotfallPage() {
                                 size="sm"
                                 asChild
                                 disabled={isUploadingDoc === item.key}
+                                className="h-9"
                               >
                                 <span>
                                   {isUploadingDoc === item.key ? (
@@ -819,9 +821,9 @@ export default function NotfallPage() {
                               </Button>
                             </label>
                           ) : (
-                            <div className="flex items-center gap-1 text-xs text-warmgray-500">
+                            <div className="flex items-center gap-1 text-xs text-warmgray-500 bg-white/50 px-2 py-1 rounded-md border border-warmgray-100">
                               <Lock className="w-3 h-3" />
-                              <Link href="/abo" className="hover:underline">Basis+</Link>
+                              <Link href="/abo" className="hover:underline font-medium">Basis+</Link>
                             </div>
                           )}
                         </div>
