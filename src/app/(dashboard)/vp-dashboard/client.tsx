@@ -107,7 +107,7 @@ export default function FamilienUebersichtClientPage() {
     }
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className="max-w-4xl mx-auto space-y-8 px-4 sm:px-0">
             <div className="page-header">
                 <h1 className="text-3xl font-serif font-semibold text-warmgray-900">Familien-Übersicht</h1>
                 <p className="text-lg text-warmgray-600 mt-2">
@@ -150,22 +150,22 @@ export default function FamilienUebersichtClientPage() {
                                 {accessibleMembers.map((member) => (
                                     <Card key={member.id} className="hover:border-sage-300 transition-colors">
                                         <CardContent className="pt-6">
-                                            <div className="flex items-center justify-between">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-14 h-14 rounded-full bg-sage-100 flex items-center justify-center">
+                                                    <div className="w-14 h-14 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
                                                         <User className="w-7 h-7 text-sage-600" />
                                                     </div>
-                                                    <div>
-                                                        <h3 className="font-semibold text-warmgray-900 text-lg">{member.name}</h3>
+                                                    <div className="min-w-0">
+                                                        <h3 className="font-semibold text-warmgray-900 text-lg truncate">{member.name}</h3>
                                                         <p className="text-warmgray-600">{member.relationship}</p>
-                                                        <div className="flex items-center gap-4 mt-1 text-sm text-warmgray-500">
-                                                            <span className="flex items-center gap-1">
-                                                                <Mail className="w-3.5 h-3.5" />
+                                                        <div className="flex flex-col sm:flex-row sm:items-center gap-x-4 gap-y-1 mt-1 text-sm text-warmgray-500">
+                                                            <span className="flex items-center gap-1.5 truncate">
+                                                                <Mail className="w-3.5 h-3.5 flex-shrink-0" />
                                                                 {member.email}
                                                             </span>
                                                             {member.linkedAt && (
-                                                                <span className="flex items-center gap-1">
-                                                                    <Calendar className="w-3.5 h-3.5" />
+                                                                <span className="flex items-center gap-1.5">
+                                                                    <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
                                                                     Verbunden seit {new Date(member.linkedAt).toLocaleDateString('de-DE')}
                                                                 </span>
                                                             )}
@@ -176,7 +176,7 @@ export default function FamilienUebersichtClientPage() {
                                                 <Button
                                                     onClick={() => handleDownloadDocuments(member.id, member.name)}
                                                     disabled={downloadingFor === member.id}
-                                                    className="min-w-[180px]"
+                                                    className="w-full sm:min-w-[180px] sm:w-auto"
                                                 >
                                                     {downloadingFor === member.id ? (
                                                         <>
@@ -212,25 +212,25 @@ export default function FamilienUebersichtClientPage() {
                                 {outgoingMembers.map((member) => (
                                     <Card key={member.id} className="opacity-80">
                                         <CardContent className="pt-6">
-                                            <div className="flex items-center justify-between">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-14 h-14 rounded-full bg-warmgray-100 flex items-center justify-center">
+                                                    <div className="w-14 h-14 rounded-full bg-warmgray-100 flex items-center justify-center flex-shrink-0">
                                                         <User className="w-7 h-7 text-warmgray-500" />
                                                     </div>
-                                                    <div>
-                                                        <h3 className="font-semibold text-warmgray-900 text-lg">{member.name}</h3>
+                                                    <div className="min-w-0">
+                                                        <h3 className="font-semibold text-warmgray-900 text-lg truncate">{member.name}</h3>
                                                         <p className="text-warmgray-600">{member.relationship}</p>
-                                                        <div className="flex items-center gap-4 mt-1 text-sm text-warmgray-500">
-                                                            <span className="flex items-center gap-1">
-                                                                <Mail className="w-3.5 h-3.5" />
+                                                        <div className="mt-1 text-sm text-warmgray-500 truncate">
+                                                            <span className="flex items-center gap-1.5">
+                                                                <Mail className="w-3.5 h-3.5 flex-shrink-0" />
                                                                 {member.email}
                                                             </span>
                                                         </div>
                                                     </div>
                                                 </div>
 
-                                                <span className="text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full flex items-center gap-1">
-                                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                                <span className="text-xs sm:text-sm text-green-600 bg-green-50 px-4 py-2 rounded-full flex items-center justify-center sm:justify-start gap-2 w-full sm:w-auto border border-green-100">
+                                                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
                                                     Hat Zugriff auf Ihre Dokumente
                                                 </span>
                                             </div>
