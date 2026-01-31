@@ -18,12 +18,14 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false)
   const [theme, setTheme] = useState<Theme>('light')
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
   const [fontSize, setFontSize] = useState<FontSize>('normal')
   const [seniorMode, setSeniorMode] = useState<boolean>(false)
 
   useEffect(() => {
+    setMounted(true)
     // Force light theme and remove saved theme
     setTheme('light')
     setResolvedTheme('light')

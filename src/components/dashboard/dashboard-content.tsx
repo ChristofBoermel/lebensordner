@@ -99,32 +99,32 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-4">
-              <Link href="/dokumente?upload=true" className="block">
-                <Button size="lg" className="w-full min-h-[4rem] h-auto py-3 text-lg justify-start gap-4 whitespace-normal">
+              <Button asChild size="lg" className="w-full min-h-[4rem] h-auto py-3 text-lg justify-start gap-4 whitespace-normal">
+                <Link href="/dokumente?upload=true">
                   <span className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
                     <Upload className="w-5 h-5" />
                   </span>
                   <span>Dokument hinzufügen</span>
-                </Button>
-              </Link>
+                </Link>
+              </Button>
 
-              <Link href="/notfall" className="block">
-                <Button size="lg" variant="outline" className="w-full min-h-[4rem] h-auto py-3 text-lg justify-start gap-4 whitespace-normal border-2">
+              <Button asChild size="lg" variant="outline" className="w-full min-h-[4rem] h-auto py-3 text-lg justify-start gap-4 whitespace-normal border-2">
+                <Link href="/notfall">
                   <span className="w-10 h-10 rounded-lg bg-sage-100 flex items-center justify-center flex-shrink-0">
                     <Phone className="w-5 h-5 text-sage-600" />
                   </span>
                   <span>Notfallkontakt anlegen</span>
-                </Button>
-              </Link>
+                </Link>
+              </Button>
 
-              <Link href="/zugriff" className="block">
-                <Button size="lg" variant="outline" className="w-full min-h-[4rem] h-auto py-3 text-lg justify-start gap-4 whitespace-normal border-2">
+              <Button asChild size="lg" variant="outline" className="w-full min-h-[4rem] h-auto py-3 text-lg justify-start gap-4 whitespace-normal border-2">
+                <Link href="/zugriff">
                   <span className="w-10 h-10 rounded-lg bg-sage-100 flex items-center justify-center flex-shrink-0">
                     <Users className="w-5 h-5 text-sage-600" />
                   </span>
                   <span>Familienmitglied einladen</span>
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
