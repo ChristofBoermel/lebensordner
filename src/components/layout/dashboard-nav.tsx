@@ -210,15 +210,15 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
               >
                 <Eye className={cn("w-5 h-5", seniorMode ? "text-sage-600 dark:text-sage-400" : "text-warmgray-400")} />
                 <span className="flex-1 text-left">Einfache Ansicht</span>
-                <div className={cn(
-                  "w-10 h-6 rounded-full transition-colors relative",
+                <span className={cn(
+                  "w-10 h-6 rounded-full transition-colors relative block",
                   seniorMode ? "bg-sage-600" : "bg-warmgray-300 dark:bg-warmgray-600"
                 )}>
-                  <div className={cn(
-                    "absolute top-1 w-4 h-4 rounded-full bg-white transition-transform",
+                  <span className={cn(
+                    "absolute top-1 w-4 h-4 rounded-full bg-white transition-transform block",
                     seniorMode ? "translate-x-5" : "translate-x-1"
                   )} />
-                </div>
+                </span>
               </button>
 
               <div className="flex items-center justify-end gap-4">

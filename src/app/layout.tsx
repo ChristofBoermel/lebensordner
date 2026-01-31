@@ -25,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="de" suppressHydrationWarning>
+    <html lang="de" className="light" suppressHydrationWarning>
       <body className="font-sans antialiased">
         <ThemeProvider>
           <ErrorBoundary>
