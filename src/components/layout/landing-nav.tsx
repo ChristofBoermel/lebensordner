@@ -22,8 +22,8 @@ export function LandingNav() {
           </Link>
 
           <nav className="hidden lg:flex items-center gap-8">
-            <Link href="#funktionen" className="text-warmgray-600 dark:text-warmgray-400 hover:text-sage-600 dark:hover:text-sage-400 transition-colors">
-              Funktionen
+            <Link href="#so-funktionierts" className="text-warmgray-600 dark:text-warmgray-400 hover:text-sage-600 dark:hover:text-sage-400 transition-colors">
+              So funktioniert&apos;s
             </Link>
             <Link href="#sicherheit" className="text-warmgray-600 dark:text-warmgray-400 hover:text-sage-600 dark:hover:text-sage-400 transition-colors">
               Sicherheit
@@ -62,11 +62,11 @@ export function LandingNav() {
           <div className="lg:hidden py-4 border-t border-cream-200 dark:border-warmgray-800">
             <nav className="flex flex-col gap-4">
               <Link
-                href="#funktionen"
+                href="#so-funktionierts"
                 className="text-warmgray-600 dark:text-warmgray-400 hover:text-sage-600 dark:hover:text-sage-400 transition-colors py-2"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Funktionen
+                So funktioniert&apos;s
               </Link>
               <Link
                 href="#sicherheit"
