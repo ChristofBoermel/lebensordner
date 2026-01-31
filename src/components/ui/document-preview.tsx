@@ -211,57 +211,85 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
             <div className="flex items-center gap-1 sm:gap-2">
               {isImage && (
                 <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleZoomOut}
-                    disabled={zoom <= 50}
-                    title="Verkleinern"
-                    className="h-8 w-8 sm:h-10 sm:w-10"
-                  >
-                    <ZoomOut className="w-4 h-4" />
-                  </Button>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleZoomOut}
+                          disabled={zoom <= 50}
+                          className="h-10 w-10 sm:h-11 sm:w-11 min-h-[44px]"
+                          aria-label="Verkleinern"
+                        >
+                          <ZoomOut className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Verkleinern</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                   <span className="text-xs sm:text-sm text-warmgray-600 min-w-[3rem] sm:min-w-[4rem] text-center">
                     {zoom}%
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleZoomIn}
-                    disabled={zoom >= 200}
-                    title="Vergrößern"
-                    className="h-8 w-8 sm:h-10 sm:w-10"
-                  >
-                    <ZoomIn className="w-4 h-4" />
-                  </Button>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleZoomIn}
+                          disabled={zoom >= 200}
+                          className="h-10 w-10 sm:h-11 sm:w-11 min-h-[44px]"
+                          aria-label="Vergrößern"
+                        >
+                          <ZoomIn className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Vergrößern</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                   <div className="w-px h-6 bg-warmgray-200 mx-1 sm:mx-2" />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleRotate}
-                    title="Drehen"
-                    className="h-8 w-8 sm:h-10 sm:w-10"
-                  >
-                    <RotateCw className="w-4 h-4" />
-                  </Button>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleRotate}
+                          className="h-10 w-10 sm:h-11 sm:w-11 min-h-[44px]"
+                          aria-label="Drehen"
+                        >
+                          <RotateCw className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Drehen</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </>
               )}
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleFullscreen}
-                title="In neuem Tab öffnen"
-                className="h-8 w-8 sm:h-10 sm:w-10"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </Button>
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleFullscreen}
+                      className="h-10 w-10 sm:h-11 sm:w-11 min-h-[44px]"
+                      aria-label="In neuem Tab öffnen"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>In neuem Tab öffnen</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleDownload}
-                className="h-8 sm:h-9"
+                className="h-10 sm:h-11 min-h-[44px] px-4"
               >
                 <Download className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">Herunterladen</span>

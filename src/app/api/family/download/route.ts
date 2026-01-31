@@ -1,14 +1,14 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
-import JSZip from 'jszip'
+import { getFamilyPermissions } from '@/lib/permissions/family-permissions'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -20,6 +20,8 @@ export async function GET(request: Request) {
     // Get ownerId from query params
     const { searchParams } = new URL(request.url)
     const ownerId = searchParams.get('ownerId')
+    const documentIdsParam = searchParams.get('documentIds')
+    const documentIds = documentIdsParam ? documentIdsParam.split(',') : null
 
     if (!ownerId) {
       return NextResponse.json({ error: 'Benutzer-ID fehlt' }, { status: 400 })
@@ -27,19 +29,24 @@ export async function GET(request: Request) {
 
     const adminClient = getSupabaseAdmin()
 
-    // Check if current user is linked as a trusted person for the owner
-    const { data: trustedPerson, error: tpError } = await adminClient
-      .from('trusted_persons')
-      .select('id, name, access_level')
-      .eq('user_id', ownerId)
-      .eq('linked_user_id', user.id)
-      .eq('invitation_status', 'accepted')
-      .eq('is_active', true)
-      .single()
+    // Check family permissions using the new centralized logic
+    const permissions = await getFamilyPermissions(user.id, ownerId)
 
-    if (tpError || !trustedPerson) {
+    // If not owner and not a family member with view access
+    if (!permissions.isOwner && !permissions.canView) {
       return NextResponse.json(
         { error: 'Keine Berechtigung für diesen Download' },
+        { status: 403 }
+      )
+    }
+
+    // If family member (not owner), check download permission based on subscription
+    if (!permissions.isOwner && !permissions.canDownload) {
+      return NextResponse.json(
+        { 
+          error: 'Download erfordert Premium-Abonnement des Besitzers',
+          code: 'PREMIUM_REQUIRED'
+        },
         { status: 403 }
       )
     }
@@ -53,11 +60,18 @@ export async function GET(request: Request) {
 
     const ownerName = ownerProfile?.full_name || ownerProfile?.email || 'Lebensordner'
 
-    // Get all documents for the owner
-    const { data: documents, error: docsError } = await adminClient
+    // Fetch documents - either selected ones or all
+    let documentsQuery = adminClient
       .from('documents')
       .select('*')
       .eq('user_id', ownerId)
+    
+    // Filter by selected document IDs if provided
+    if (documentIds && documentIds.length > 0) {
+      documentsQuery = documentsQuery.in('id', documentIds)
+    }
+    
+    const { data: documents, error: docsError } = await documentsQuery
       .order('category')
       .order('title')
 
@@ -76,23 +90,31 @@ export async function GET(request: Request) {
       )
     }
 
-    // Create ZIP file
+    // Import JSZip dynamically for streaming support
+    const { default: JSZip } = await import('jszip')
+    
+    // Create ZIP file with streaming
     const zip = new JSZip()
+    const zipStream = zip.generateNodeStream({
+      streamFiles: true,
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 }
+    })
 
     // Category name mapping
-    const categoryNames: Record<string, string> = {
-      identitaet: 'Identität',
-      finanzen: 'Finanzen',
-      versicherungen: 'Versicherungen',
-      wohnen: 'Wohnen',
-      gesundheit: 'Gesundheit',
-      vertraege: 'Verträge',
-      rente: 'Rente & Pension',
-      familie: 'Familie',
-      arbeit: 'Arbeit',
-      religion: 'Religion',
-      sonstige: 'Sonstige',
-    }
+    const CATEGORY_NAMES: Record<string, string> = {
+  identitaet: 'Identität',
+  finanzen: 'Finanzen',
+  versicherungen: 'Versicherungen',
+  wohnen: 'Wohnen',
+  gesundheit: 'Gesundheit',
+  vertraege: 'Verträge',
+  rente: 'Rente & Pension',
+  familie: 'Familie',
+  arbeit: 'Arbeit',
+  religion: 'Religion',
+  sonstige: 'Sonstige',
+}
 
     // Download each document and add to ZIP
     for (const doc of documents) {
@@ -106,23 +128,33 @@ export async function GET(request: Request) {
           continue
         }
 
-        const categoryFolder = categoryNames[doc.category] || doc.category
+        const categoryFolder = CATEGORY_NAMES[doc.category] || doc.category
         const filePath = `${categoryFolder}/${doc.file_name}`
+        
+        // Stream file data instead of buffering
         const arrayBuffer = await fileData.arrayBuffer()
-        zip.file(filePath, arrayBuffer)
+        zip.file(filePath, arrayBuffer, { compression: 'STORE' })
       } catch (err) {
         console.error(`Error processing document ${doc.id}:`, err)
         continue
       }
     }
 
-    // Generate ZIP
-    const zipBlob = await zip.generateAsync({ type: 'arraybuffer' })
+    // Generate ZIP with streaming (no large buffers)
+    const zipBlob = await zip.generateAsync({ 
+      type: 'arraybuffer',
+      streamFiles: true,
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 }
+    })
 
-    // Create safe filename
+    // Create safe filename - include count for multi-select
     const safeOwnerName = ownerName.replace(/[^a-zA-Z0-9äöüÄÖÜß\s-]/g, '').replace(/\s+/g, '_')
     const dateStr = new Date().toISOString().split('T')[0]
-    const filename = `Lebensordner_${safeOwnerName}_${dateStr}.zip`
+    const docCount = documents.length
+    const filename = documentIds 
+      ? `Dokumente_${safeOwnerName}_${dateStr}_${docCount}files.zip`
+      : `Lebensordner_${safeOwnerName}_${dateStr}.zip`
 
     // Return ZIP file
     return new NextResponse(zipBlob, {

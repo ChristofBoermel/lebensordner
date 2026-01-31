@@ -297,6 +297,7 @@ export interface Database {
           invitation_sent_at: string | null
           invitation_accepted_at: string | null
           linked_user_id: string | null
+          role: 'emergency_contact' | 'family_member' | null
         }
         Insert: {
           id?: string
@@ -316,6 +317,7 @@ export interface Database {
           invitation_sent_at?: string | null
           invitation_accepted_at?: string | null
           linked_user_id?: string | null
+          role?: 'emergency_contact' | 'family_member' | null
         }
         Update: {
           id?: string
@@ -335,6 +337,7 @@ export interface Database {
           invitation_sent_at?: string | null
           invitation_accepted_at?: string | null
           linked_user_id?: string | null
+          role?: 'emergency_contact' | 'family_member' | null
         }
       }
       reminders: {

@@ -992,18 +992,19 @@ export default function DocumentsPage() {
             : 'bg-white dark:bg-warmgray-900 hover:border-sage-200 hover:bg-sage-50/30'
           }`}
       >
-        {/* Checkbox */}
+        {/* Checkbox - 44px touch target */}
         <button
           onClick={(e) => {
             e.stopPropagation()
             toggleDocumentSelection(doc.id)
           }}
-          className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected
+          className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected
             ? 'bg-sage-500 border-sage-500 text-white'
             : 'border-warmgray-300 hover:border-sage-400'
             }`}
+          aria-label={isSelected ? 'Auswahl aufheben' : 'Dokument auswählen'}
         >
-          {isSelected && <Check className="w-4 h-4" />}
+          {isSelected && <Check className="w-5 h-5" />}
         </button>
 
         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -1030,7 +1031,12 @@ export default function DocumentsPage() {
         <div className="flex items-center gap-1 flex-shrink-0 ml-auto" onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9 text-warmgray-400 !p-0 flex-shrink-0">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-11 w-11 min-h-[44px] min-w-[44px] text-warmgray-400"
+                aria-label="Dokumentoptionen"
+              >
                 <MoreVertical className="w-5 h-5" />
               </Button>
             </DropdownMenuTrigger>
