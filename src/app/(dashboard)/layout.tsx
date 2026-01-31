@@ -68,6 +68,17 @@ export default async function DashboardLayout({
     redirect('/anmelden')
   }
 
+  // Check role: Redirect Family Members to /family
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.role === 'family_member') {
+    redirect('/family')
+  }
+
   // Note: Profile and Tier fetching is now handled in NavWithTier to avoid blocking the initial shell render
 
   return (

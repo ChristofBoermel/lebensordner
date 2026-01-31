@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { DocumentListItem } from './components/DocumentListItem'
+import { FolderCard } from './components/FolderCard'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -972,96 +974,30 @@ export default function DocumentsPage() {
 
   // Render document item
   const renderDocumentItem = (doc: Document) => {
-    const category = DOCUMENT_CATEGORIES[doc.category]
-    const Icon = iconMap[category.icon] || FileText
+    const categoryInfo = DOCUMENT_CATEGORIES[doc.category]
     const subcategory = doc.subcategory_id
       ? subcategories.find(s => s.id === doc.subcategory_id)
       : null
-    const isSelected = selectedDocuments.has(doc.id)
-    const isHighlighted = highlightedDoc === doc.id
 
     return (
-      <div
+      <DocumentListItem
         key={doc.id}
-        id={`doc-${doc.id}`}
-        onClick={() => navigateToDocument(doc)}
-        className={`document-item flex items-center gap-3 p-3 rounded-xl border border-warmgray-200 dark:border-warmgray-800 group transition-all duration-300 cursor-pointer ${isHighlighted
-          ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300 ring-offset-2'
-          : isSelected
-            ? 'bg-sage-50 border-sage-300'
-            : 'bg-white dark:bg-warmgray-900 hover:border-sage-200 hover:bg-sage-50/30'
-          }`}
-      >
-        {/* Checkbox - 44px touch target */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            toggleDocumentSelection(doc.id)
-          }}
-          className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected
-            ? 'bg-sage-500 border-sage-500 text-white'
-            : 'border-warmgray-300 hover:border-sage-400'
-            }`}
-          aria-label={isSelected ? 'Auswahl aufheben' : 'Dokument auswählen'}
-        >
-          {isSelected && <Check className="w-5 h-5" />}
-        </button>
-
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="w-10 h-10 rounded-lg bg-sage-50 dark:bg-sage-900/30 flex items-center justify-center flex-shrink-0">
-            <Icon className="w-5 h-5 text-sage-600 dark:text-sage-400" />
-          </div>
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <p className="font-medium text-warmgray-900 truncate leading-tight">{doc.title}</p>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-warmgray-500 mt-0.5">
-              <span className="truncate">{category.name}</span>
-              {subcategory && (
-                <>
-                  <ChevronRight className="w-3 h-3 flex-shrink-0" />
-                  <span className="truncate">{subcategory.name}</span>
-                </>
-              )}
-              <span className="flex-shrink-0">•</span>
-              <span className="flex-shrink-0">{formatFileSize(doc.file_size)}</span>
-              <span className="flex-shrink-0 hidden xs:inline">•</span>
-              <span className="flex-shrink-0 hidden xs:inline">{formatDate(doc.created_at)}</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0 ml-auto" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-11 w-11 min-h-[44px] min-w-[44px] text-warmgray-400"
-                aria-label="Dokumentoptionen"
-              >
-                <MoreVertical className="w-5 h-5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setPreviewDocument(doc)} className="py-3">
-                <Eye className="w-4 h-4 mr-2" />
-                Ansehen
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownload(doc)} className="py-3">
-                <Download className="w-4 h-4 mr-2" />
-                Herunterladen
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openMoveDialog([doc.id])} className="py-3">
-                <MoveRight className="w-4 h-4 mr-2" />
-                Verschieben
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleDelete(doc)} className="text-red-600 py-3">
-                <Trash2 className="w-4 h-4 mr-2" />
-                Löschen
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+        doc={doc}
+        categoryInfo={{
+          name: categoryInfo.name,
+          icon: categoryInfo.icon
+        }}
+        subcategoryName={subcategory?.name}
+        isSelected={selectedDocuments.has(doc.id)}
+        isHighlighted={highlightedDoc === doc.id}
+        iconMap={iconMap as any}
+        onToggleSelection={toggleDocumentSelection}
+        onNavigate={navigateToDocument}
+        onPreview={setPreviewDocument}
+        onDownload={handleDownload}
+        onMove={openMoveDialog}
+        onDelete={handleDelete}
+      />
     )
   }
 
@@ -1070,141 +1006,109 @@ export default function DocumentsPage() {
     const categorySubcategories = getSubcategoriesForCategory(category)
     const uncategorizedDocs = getUncategorizedDocuments(category)
     const categoryInfo = DOCUMENT_CATEGORIES[category]
-    const Icon = iconMap[categoryInfo.icon] || FileText
 
     return (
-      <div className="space-y-6">
-        {/* Action bar */}
-        <div className="flex justify-end">
-          <Button onClick={() => openUploadDialog(category)}>
-            <Upload className="mr-2 h-4 w-4" />
+      <div className="space-y-10">
+        {/* Action bar - Senior Friendly */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-1">
+          <h3 className="text-2xl font-bold text-warmgray-900">
+            {categorySubcategories.length > 0 ? 'Unterordner' : 'Dokumente'}
+          </h3>
+          <Button
+            onClick={() => openUploadDialog(category)}
+            className="h-[56px] w-full sm:w-auto px-8 text-lg font-bold shadow-md hover:shadow-lg transition-all active:scale-95"
+          >
+            <PlusCircle className="mr-3 h-6 w-6" />
             Dokument hinzufügen
           </Button>
         </div>
 
-        {/* Folder Grid - Always show to allow creating folders */}
-        <div>
-          <h3 className="text-sm font-medium text-warmgray-600 mb-3">Unterordner</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {categorySubcategories.map(subcategory => {
-              const docCount = getDocumentsForSubcategory(subcategory.id).length
-              return (
-                <div
-                  key={subcategory.id}
-                  className="relative p-4 rounded-lg border-2 border-warmgray-200 hover:border-sage-400 hover:bg-sage-50 transition-all text-left group cursor-pointer"
-                  onClick={() => setCurrentFolder(subcategory)}
-                >
-                  {/* Folder Actions Menu */}
-                  <div className="absolute top-2 right-2 z-10" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-full bg-white/50 hover:bg-white text-warmgray-400 hover:text-warmgray-900 border border-warmgray-100"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Ordner-Optionen</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => handleDeleteFolder(subcategory)}
-                          className="text-red-600 focus:text-red-600"
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Ordner löschen
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="flex items-center justify-center mb-3">
-                    <Folder className="w-12 h-12 text-sage-500 group-hover:text-sage-600 transition-colors" />
-                  </div>
-                  <p className="font-medium text-warmgray-800 text-center truncate">{subcategory.name}</p>
-                  <p className="text-xs text-warmgray-500 text-center mt-1">
-                    {docCount} Dokument{docCount !== 1 ? 'e' : ''}
-                  </p>
-                </div>
-              )
-            })}
-            {/* Add new folder - inline input or button */}
-            {isCreatingFolderInGrid && newFolderCategory === category ? (
-              <div className="p-3 rounded-lg border-2 border-sage-400 bg-sage-50 flex flex-col items-center">
-                <div className="flex items-center justify-center mb-2">
-                  <FolderPlus className="w-8 h-8 text-sage-500" />
-                </div>
-                <Input
-                  placeholder="Ordnername"
-                  value={newSubcategoryName}
-                  onChange={(e) => setNewSubcategoryName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      handleCreateFolderInGrid()
-                    } else if (e.key === 'Escape') {
-                      setIsCreatingFolderInGrid(false)
-                      setNewFolderCategory(null)
-                      setNewSubcategoryName('')
-                    }
-                  }}
-                  autoFocus
-                  className="text-center mb-3 h-10 senior-mode:h-12"
-                />
-                <div className="flex flex-col w-full gap-2">
-                  <Button size="sm" className="w-full h-9 senior-mode:h-11" onClick={handleCreateFolderInGrid} disabled={!newSubcategoryName.trim()}>
-                    Erstellen
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="w-full h-8 senior-mode:h-10 text-warmgray-500"
-                    onClick={() => {
-                      setIsCreatingFolderInGrid(false)
-                      setNewFolderCategory(null)
-                      setNewSubcategoryName('')
-                    }}
-                  >
-                    Abbrechen
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  setIsCreatingFolderInGrid(true)
-                  setNewFolderCategory(category)
-                  setNewSubcategoryName('')
-                }}
-                className="p-4 rounded-lg border-2 border-dashed border-warmgray-300 hover:border-sage-400 hover:bg-sage-50 transition-all text-center group"
-              >
-                <div className="flex items-center justify-center mb-3">
-                  <FolderPlus className="w-12 h-12 text-warmgray-400 group-hover:text-sage-500 transition-colors" />
-                </div>
-                <p className="font-medium text-warmgray-500 group-hover:text-sage-600">Neuer Ordner</p>
-              </button>
-            )}
-          </div>
+        {/* Folder Grid - Robust Mobile First */}
+        <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 px-1">
+          {categorySubcategories.map(subcategory => (
+            <FolderCard
+              key={subcategory.id}
+              subcategory={subcategory}
+              docCount={getDocumentsForSubcategory(subcategory.id).length}
+              onOpen={setCurrentFolder}
+              onDelete={handleDeleteFolder}
+            />
+          ))}
+
+          {/* Add new folder button */}
+          <button
+            onClick={() => {
+              setIsCreatingFolderInGrid(true)
+              setNewFolderCategory(category)
+              setNewSubcategoryName('')
+            }}
+            className="flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-dashed border-warmgray-200 bg-white hover:border-sage-400 hover:bg-sage-50/30 transition-all duration-300 min-h-[140px] gap-3 group shadow-sm overflow-hidden"
+          >
+            <div className="h-14 w-14 rounded-xl bg-warmgray-50 flex items-center justify-center text-warmgray-400 group-hover:bg-sage-100 group-hover:text-sage-600 transition-colors">
+              <FolderPlus className="w-8 h-8" />
+            </div>
+            <span className="font-bold text-lg text-warmgray-600 group-hover:text-sage-800">Ordner erstellen</span>
+          </button>
         </div>
 
-        {/* Documents without folder */}
+        {/* Inline Folder Creation */}
+        {isCreatingFolderInGrid && newFolderCategory === category && (
+          <div className="mx-1 p-6 rounded-2xl border-2 border-sage-500 bg-white shadow-xl animate-in fade-in slide-in-from-top-4">
+            <h4 className="text-lg font-bold text-warmgray-900 mb-4">Neuen Ordner in "{categoryInfo.name}" erstellen</h4>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Input
+                placeholder="Name des Ordners (z.B. Kontoauszüge)"
+                value={newSubcategoryName}
+                onChange={(e) => setNewSubcategoryName(e.target.value)}
+                autoFocus
+                className="flex-1 h-14 text-lg px-5 rounded-xl border-warmgray-200"
+              />
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleCreateFolderInGrid}
+                  disabled={!newSubcategoryName.trim()}
+                  className="h-14 px-8 text-lg font-bold flex-1 sm:flex-initial"
+                >
+                  Erstellen
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setIsCreatingFolderInGrid(false)
+                    setNewFolderCategory(null)
+                    setNewSubcategoryName('')
+                  }}
+                  className="h-14 px-6 text-lg font-medium text-warmgray-500 flex-1 sm:flex-initial"
+                >
+                  Abbrechen
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Uncategorized Documents Section */}
         {uncategorizedDocs.length > 0 && (
-          <div>
-            <h3 className="text-sm font-medium text-warmgray-600 mb-3">
-              Dokumente ohne Ordner
+          <div className="pt-8 border-t border-warmgray-100 px-1">
+            <h3 className="text-xl font-bold text-warmgray-800 mb-6 px-1">
+              Weitere Dokumente in {categoryInfo.name}
             </h3>
-            <div className="space-y-2">
+            <div className="space-y-4">
               {uncategorizedDocs.map(renderDocumentItem)}
             </div>
           </div>
         )}
 
         {/* Empty state - only when no folders AND no documents */}
-        {categorySubcategories.length === 0 && uncategorizedDocs.length === 0 && (
-          <div className="text-center py-4 text-warmgray-500">
-            <p>Noch keine Dokumente in {categoryInfo.name}</p>
-            <p className="text-sm mt-1">Erstelle einen Ordner oben oder lade direkt ein Dokument hoch.</p>
+        {categorySubcategories.length === 0 && uncategorizedDocs.length === 0 && !isCreatingFolderInGrid && (
+          <div className="text-center py-20 px-4">
+            <div className="w-24 h-24 rounded-full bg-cream-100 flex items-center justify-center mx-auto mb-6 text-sage-300">
+              <FolderOpen className="w-12 h-12" />
+            </div>
+            <h3 className="text-2xl font-bold text-warmgray-900 mb-3">Noch keine Inhalte vorhanden</h3>
+            <p className="text-lg text-warmgray-500 mb-10 max-w-sm mx-auto leading-relaxed">
+              Klicken Sie auf "Dokument hinzufügen" oder erstellen Sie einen Ordner, um Ihre Unterlagen zu organisieren.
+            </p>
           </div>
         )}
       </div>
@@ -1217,39 +1121,37 @@ export default function DocumentsPage() {
     const categoryInfo = DOCUMENT_CATEGORIES[folder.parent_category]
 
     return (
-      <div className="space-y-4">
-        {/* Breadcrumb navigation */}
+      <div className="space-y-8 animate-in fade-in duration-300">
         {/* Breadcrumb navigation and Upload button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center flex-wrap gap-2 text-sm sm:text-base">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-4 sm:p-6 rounded-2xl border border-warmgray-200 shadow-sm">
+          <div className="flex items-center flex-wrap gap-2 text-lg">
             <Button
               variant="ghost"
-              size="sm"
               onClick={() => setCurrentFolder(null)}
-              className="text-sage-600 hover:text-sage-700 -ml-2 h-auto py-1 senior-mode:text-lg"
+              className="text-sage-600 hover:text-sage-700 -ml-2 h-12 px-4 font-bold text-lg rounded-xl transition-colors"
             >
-              <ChevronRight className="w-4 h-4 rotate-180 mr-1 flex-shrink-0" />
+              <ChevronRight className="w-5 h-5 rotate-180 mr-2 flex-shrink-0 stroke-[3]" />
               {categoryInfo.name}
             </Button>
-            <ChevronRight className="w-4 h-4 text-warmgray-400 flex-shrink-0" />
-            <div className="flex items-center gap-1 senior-mode:gap-2">
-              <span className="flex items-center gap-2 text-warmgray-800 font-medium senior-mode:text-lg">
-                <FolderOpen className="w-4 h-4 text-sage-600 flex-shrink-0" />
-                <span className="truncate max-w-[120px] xs:max-w-[150px] sm:max-w-none">{folder.name}</span>
+            <ChevronRight className="w-5 h-5 text-warmgray-300 flex-shrink-0" />
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-2 text-warmgray-900 font-bold">
+                <FolderOpen className="w-6 h-6 text-sage-600 flex-shrink-0" />
+                <span className="truncate max-w-[150px] xs:max-w-[200px] sm:max-w-none">{folder.name}</span>
               </span>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-warmgray-400">
-                    <ChevronDown className="w-4 h-4" />
+                  <Button variant="ghost" size="icon" className="h-11 w-11 rounded-xl text-warmgray-400 hover:text-red-600 transition-colors">
+                    <MoreVertical className="w-6 h-6" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
+                <DropdownMenuContent align="start" className="p-2 rounded-xl">
                   <DropdownMenuItem
                     onClick={() => handleDeleteFolder(folder)}
-                    className="text-red-600 focus:text-red-600"
+                    className="text-red-600 focus:bg-red-50 focus:text-red-700 py-3 rounded-lg flex gap-3 text-base"
                   >
-                    <Trash2 className="w-4 h-4 mr-2" />
+                    <Trash2 className="w-5 h-5 mr-1" />
                     Ordner löschen
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -1258,30 +1160,31 @@ export default function DocumentsPage() {
           </div>
 
           <Button
-            size="sm"
             onClick={() => {
               setUploadCategory(folder.parent_category)
               setUploadSubcategory(folder.id)
               setIsUploadOpen(true)
             }}
-            className="w-full sm:w-auto h-10 senior-mode:h-12 flex-shrink-0"
+            className="w-full sm:w-auto h-[56px] px-8 text-lg font-bold shadow-md rounded-xl active:scale-95 transition-transform"
           >
-            <Upload className="mr-2 h-4 w-4" />
+            <Upload className="mr-3 h-6 w-6" />
             In "{folder.name}" ablegen
           </Button>
         </div>
 
         {/* Documents in folder */}
         {folderDocs.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-4">
             {folderDocs.map(renderDocumentItem)}
           </div>
         ) : (
-          <div className="text-center py-12 border-2 border-dashed border-warmgray-200 rounded-lg">
-            <Folder className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
-            <h3 className="text-warmgray-700 font-medium mb-2">Dieser Ordner ist leer</h3>
-            <p className="text-warmgray-500 text-sm mb-4">
-              Legen Sie ein Dokument ab, um es hier zu speichern
+          <div className="text-center py-20 bg-cream-50/30 border-2 border-dashed border-warmgray-200 rounded-3xl">
+            <div className="w-20 h-20 rounded-full bg-warmgray-50 flex items-center justify-center mx-auto mb-6 text-warmgray-300">
+              <Folder className="w-10 h-10" />
+            </div>
+            <h3 className="text-2xl font-bold text-warmgray-900 mb-2">Dieser Ordner ist leer</h3>
+            <p className="text-lg text-warmgray-500 mb-8 max-w-xs mx-auto">
+              Legen Sie Ihr erstes Dokument in diesen Ordner ab.
             </p>
             <Button
               onClick={() => {
@@ -1289,8 +1192,10 @@ export default function DocumentsPage() {
                 setUploadSubcategory(folder.id)
                 setIsUploadOpen(true)
               }}
+              size="lg"
+              className="h-[56px] px-10 text-lg font-bold"
             >
-              <Upload className="mr-2 h-4 w-4" />
+              <Upload className="mr-3 h-5 w-5" />
               Dokument hinzufügen
             </Button>
           </div>
@@ -1300,14 +1205,14 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 overflow-x-hidden px-0.5">
+    <div className="max-w-6xl mx-auto space-y-10 overflow-x-hidden px-4 sm:px-8 py-8 sm:py-12">
       {/* Header */}
-      <div className="page-header">
-        <h1 className="text-3xl font-serif font-semibold text-warmgray-900">
+      <div className="space-y-3 pb-2">
+        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-warmgray-900 leading-tight">
           Dokumente
         </h1>
-        <p className="text-lg text-warmgray-600 mt-2">
-          Organisieren Sie Ihre wichtigen Unterlagen nach Kategorien und Unterordnern
+        <p className="text-xl text-warmgray-600 max-w-2xl leading-[1.6]">
+          Ihre wichtige Unterlagen sicher organisiert. Einfach zu finden, immer griffbereit.
         </p>
       </div>
 
@@ -1356,20 +1261,23 @@ export default function DocumentsPage() {
         />
       )}
 
-      {/* Search and View Toggle */}
+      {/* Search and View Toggle - Senior Friendly (56px) */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-400" />
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warmgray-400" />
           <Input
             type="search"
-            placeholder="Dokumente durchsuchen..."
-            className="pl-12"
+            placeholder="Nach Dokumenten suchen..."
+            className="pl-14 h-14 text-lg rounded-2xl border-warmgray-200 focus:ring-sage-500 shadow-sm transition-all"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <Button onClick={() => openUploadDialog(selectedCategory || 'identitaet')} className="w-full sm:w-auto">
-          <Upload className="mr-2 h-5 w-5" />
+        <Button
+          onClick={() => openUploadDialog(selectedCategory || 'identitaet')}
+          className="w-full sm:w-auto h-14 px-8 text-lg font-bold shadow-md rounded-2xl active:scale-95 transition-transform"
+        >
+          <Upload className="mr-3 h-6 w-6" />
           Dokument hinzufügen
         </Button>
       </div>
@@ -1393,11 +1301,11 @@ export default function DocumentsPage() {
           setCurrentFolder(null) // Reset folder when changing category
         }}
       >
-        <TabsList className="w-full h-auto flex-wrap justify-start bg-transparent gap-2 p-0">
+        <TabsList className="w-full h-auto flex-wrap justify-start bg-transparent gap-3 p-0 mb-6">
           {/* Overview Tab - First */}
           <TabsTrigger
             value="overview"
-            className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700"
+            className="data-[state=active]:bg-sage-600 data-[state=active]:text-white data-[state=inactive]:bg-white data-[state=inactive]:border-warmgray-200 border-2 h-12 px-6 rounded-xl font-bold text-lg transition-all"
           >
             Übersicht
           </TabsTrigger>
@@ -1407,9 +1315,9 @@ export default function DocumentsPage() {
               <TabsTrigger
                 key={key}
                 value={key}
-                className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700"
+                className="data-[state=active]:bg-sage-600 data-[state=active]:text-white data-[state=inactive]:bg-white data-[state=inactive]:border-warmgray-200 border-2 h-12 px-6 rounded-xl font-bold text-lg transition-all"
               >
-                {category.name} ({count})
+                {category.name} <span className="ml-2 px-2 py-0.5 rounded-full bg-black/10 text-base font-medium">{count}</span>
               </TabsTrigger>
             )
           })}
@@ -1420,55 +1328,60 @@ export default function DocumentsPage() {
               <TabsTrigger
                 key={cat.id}
                 value={`custom:${cat.id}`}
-                className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700 group relative"
+                className="data-[state=active]:bg-sage-600 data-[state=active]:text-white data-[state=inactive]:bg-white data-[state=inactive]:border-warmgray-200 border-2 h-12 px-6 rounded-xl font-bold text-lg transition-all group relative"
               >
-                <Tag className="w-3 h-3 mr-1" />
-                {cat.name} ({count})
+                <Tag className="w-4 h-4 mr-2" />
+                {cat.name} <span className="ml-2 px-2 py-0.5 rounded-full bg-black/10 text-base font-medium">{count}</span>
               </TabsTrigger>
             )
           })}
           {/* All Tab */}
           <TabsTrigger
             value="all"
-            className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700"
+            className="data-[state=active]:bg-sage-600 data-[state=active]:text-white data-[state=inactive]:bg-white data-[state=inactive]:border-warmgray-200 border-2 h-12 px-6 rounded-xl font-bold text-lg transition-all"
           >
-            Alle ({validatedDocuments.length})
+            Alle <span className="ml-2 px-2 py-0.5 rounded-full bg-black/10 text-base font-medium">{validatedDocuments.length}</span>
           </TabsTrigger>
           {/* Add Category Button - Last */}
           {userTier.limits.maxCustomCategories !== 0 && (userTier.limits.maxCustomCategories === -1 || customCategories.length < userTier.limits.maxCustomCategories) && (
             <Button
-              variant="ghost"
-              size="sm"
+              variant="outline"
+              size="lg"
               onClick={() => openCategoryDialog()}
-              className="h-8 text-sage-600 hover:text-sage-700 hover:bg-sage-50"
+              className="h-12 border-2 border-dashed border-sage-300 text-sage-600 hover:bg-sage-50 font-bold rounded-xl"
             >
-              <PlusCircle className="w-4 h-4 mr-1" />
+              <PlusCircle className="w-5 h-5 mr-2" />
               Neue Kategorie
             </Button>
           )}
         </TabsList>
 
         {/* Overview - Shows 3 newest documents + category overview */}
-        <TabsContent value="overview" className="mt-6">
+        <TabsContent value="overview" className="mt-8">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-sage-600" />
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-12 h-12 animate-spin text-sage-600" />
             </div>
           ) : (
-            <div className="space-y-8">
+            <div className="space-y-12">
               {/* Recent Documents */}
-              <div>
-                <h2 className="text-lg font-semibold text-warmgray-900 mb-4">Zuletzt hinzugefügt</h2>
+              <div className="space-y-6">
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-2xl font-bold text-warmgray-900">Zuletzt hinzugefügt</h2>
+                  <Button variant="ghost" className="text-sage-600 font-bold text-lg" onClick={() => setActiveTab('all')}>
+                    Alle ansehen
+                  </Button>
+                </div>
                 {validatedDocuments.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {validatedDocuments.slice(0, 3).map(renderDocumentItem)}
                   </div>
                 ) : (
-                  <div className="text-center py-8 border-2 border-dashed border-warmgray-200 rounded-lg">
-                    <FileText className="w-10 h-10 text-warmgray-300 mx-auto mb-3" />
-                    <p className="text-warmgray-500">Noch keine Dokumente vorhanden</p>
-                    <Button onClick={() => openUploadDialog('identitaet')} className="mt-3">
-                      <Upload className="mr-2 h-4 w-4" />
+                  <div className="text-center py-16 bg-cream-50/50 rounded-3xl border-2 border-dashed border-warmgray-200">
+                    <FileText className="w-16 h-16 text-warmgray-300 mx-auto mb-4" />
+                    <p className="text-xl text-warmgray-600 mb-6">Noch keine Dokumente vorhanden</p>
+                    <Button onClick={() => openUploadDialog('identitaet')} size="lg" className="h-[56px] px-8 text-lg font-bold">
+                      <Upload className="mr-3 h-5 w-5" />
                       Erstes Dokument hinzufügen
                     </Button>
                   </div>
@@ -1601,8 +1514,8 @@ export default function DocumentsPage() {
       </Tabs>
 
       {/* Category Cards (when no category is selected) */}
-      {!selectedCategory && !searchQuery && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {(activeTab === 'overview' || activeTab === 'all') && !searchQuery && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pt-8">
           {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
             const Icon = iconMap[category.icon] || FileText
             const count = getDocumentCountForCategory(key as DocumentCategory)
@@ -1610,100 +1523,136 @@ export default function DocumentsPage() {
             return (
               <Card
                 key={key}
-                className="cursor-pointer hover:border-sage-300 hover:shadow-md transition-all"
+                className="group cursor-pointer hover:border-sage-400 hover:shadow-xl transition-all duration-300 rounded-3xl border-2 overflow-hidden bg-white shadow-sm flex flex-col h-full"
                 onClick={() => {
+                  setActiveTab(key)
                   setSelectedCategory(key as DocumentCategory)
                   setCurrentFolder(null)
                 }}
               >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center">
-                      <Icon className="w-6 h-6 text-sage-600" />
+                <CardHeader className="p-8 pb-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="w-14 h-14 rounded-2xl bg-sage-100 flex items-center justify-center text-sage-600 transition-transform group-hover:scale-110">
+                      <Icon className="w-8 h-8" />
                     </div>
                     <Button
-                      size="sm"
+                      size="icon"
                       variant="ghost"
+                      className="h-12 w-12 rounded-xl text-warmgray-400 hover:text-sage-700 hover:bg-sage-50 transition-colors"
                       onClick={(e) => {
                         e.stopPropagation()
                         openUploadDialog(key as DocumentCategory)
                       }}
                     >
-                      <Upload className="w-4 h-4" />
+                      <PlusCircle className="w-6 h-6" />
                     </Button>
                   </div>
-                  <CardTitle className="text-lg">{category.name}</CardTitle>
-                  <CardDescription>{category.description}</CardDescription>
+                  <CardTitle className="text-2xl font-bold text-warmgray-900 group-hover:text-sage-700 transition-colors">
+                    {category.name}
+                  </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-warmgray-600">
-                    <span className="font-semibold text-sage-600">{count}</span> Dokument{count !== 1 ? 'e' : ''}
+                <CardContent className="px-8 pb-8 pt-0 flex-1 flex flex-col">
+                  <p className="text-lg text-warmgray-600 leading-[1.6] mb-6 line-clamp-2">
+                    {category.description}
+                  </p>
+                  <div className="mt-auto space-y-4 pt-4 border-t border-warmgray-100">
+                    <div className="flex items-center justify-between text-base font-bold">
+                      <span className="text-warmgray-500 uppercase tracking-wider text-xs font-black">Inhalt</span>
+                      <span className="text-sage-700 bg-sage-50 px-3 py-1 rounded-full">{count} Dokument{count !== 1 ? 'e' : ''}</span>
+                    </div>
                     {categorySubcats.length > 0 && (
-                      <span className="text-warmgray-500"> in {categorySubcats.length} Unterordner{categorySubcats.length !== 1 ? 'n' : ''}</span>
+                      <div className="flex items-center gap-2 text-base text-warmgray-500">
+                        <Folder className="w-4 h-4" />
+                        <span>{categorySubcats.length} Unterordner</span>
+                      </div>
                     )}
-                  </p>
-                  <p className="text-xs text-warmgray-500 mt-2">
-                    z.B. {category.examples.slice(0, 3).join(', ')}
-                  </p>
+                  </div>
                 </CardContent>
               </Card>
             )
           })}
-        </div>)}
+        </div>
+      )}
       {/* Upload Dialog */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
-        <DialogContent className="w-full h-[100dvh] sm:h-auto sm:max-w-lg p-0 overflow-hidden flex flex-col">
-          <DialogHeader className="p-6 pb-2">
-            <DialogTitle>Neues Dokument</DialogTitle>
+        <DialogContent className="w-full h-[100dvh] sm:h-auto sm:max-w-2xl p-0 overflow-hidden flex flex-col rounded-none sm:rounded-3xl border-none sm:border shadow-2xl">
+          <DialogHeader className="p-6 sm:p-8 bg-sage-600 text-white shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl sm:text-3xl font-bold">Dokument ablegen</DialogTitle>
+                <DialogDescription className="text-sage-100 text-lg mt-1">
+                  Wählen Sie eine Kategorie für Ihre Unterlagen
+                </DialogDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-12 w-12 rounded-xl hover:bg-white/10 text-white"
+                onClick={() => setIsUploadOpen(false)}
+              >
+                <X className="w-7 h-7" />
+              </Button>
+            </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => {
-                    setUploadCategory(key as DocumentCategory)
-                    setUploadCustomCategory(null)
-                    setUploadSubcategory(null)
-                    setIsCreatingSubcategory(false)
-                  }}
-                  className={`p-3 text-left rounded-lg border-2 transition-colors ${uploadCategory === key && !uploadCustomCategory
-                    ? 'border-sage-500 bg-sage-50 text-sage-800'
-                    : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
-                    }`}
-                >
-                  <span className="text-sm font-medium">{category.name}</span>
-                </button>
-              ))}
-              {/* Custom Categories */}
-              {customCategories.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => {
-                    setUploadCategory('sonstige')
-                    setUploadCustomCategory(cat.id)
-                    setUploadSubcategory(null)
-                    setIsCreatingSubcategory(false)
-                  }}
-                  className={`p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-2 ${uploadCustomCategory === cat.id
-                    ? 'border-sage-500 bg-sage-50 text-sage-800'
-                    : 'border-warmgray-200 hover:border-warmgray-400 text-warmgray-700'
-                    }`}
-                >
-                  <Tag className="w-4 h-4 flex-shrink-0" />
-                  <span className="text-sm font-medium">{cat.name}</span>
-                </button>
-              ))}
+          <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-8 bg-white">
+            <div className="space-y-4">
+              <Label className="text-xl font-bold text-warmgray-900 block px-1">Kategorie wählen</Label>
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
+                {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setUploadCategory(key as DocumentCategory)
+                      setUploadCustomCategory(null)
+                      setUploadSubcategory(null)
+                      setIsCreatingSubcategory(false)
+                    }}
+                    className={`p-4 text-left rounded-2xl border-2 transition-all flex items-center gap-3 min-h-[64px] ${uploadCategory === key && !uploadCustomCategory
+                      ? 'border-sage-500 bg-sage-50 text-sage-800 shadow-sm'
+                      : 'border-warmgray-200 hover:border-sage-300 text-warmgray-700 bg-white'
+                      }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${uploadCategory === key && !uploadCustomCategory ? 'bg-sage-500 text-white' : 'bg-warmgray-100 text-warmgray-500'}`}>
+                      {(() => {
+                        const Icon = iconMap[category.icon] || FileText
+                        return <Icon className="w-5 h-5" />
+                      })()}
+                    </div>
+                    <span className="text-lg font-bold truncate leading-tight">{category.name}</span>
+                  </button>
+                ))}
+                {/* Custom Categories */}
+                {customCategories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      setUploadCategory('sonstige')
+                      setUploadCustomCategory(cat.id)
+                      setUploadSubcategory(null)
+                      setIsCreatingSubcategory(false)
+                    }}
+                    className={`p-4 text-left rounded-2xl border-2 transition-all flex items-center gap-3 min-h-[64px] ${uploadCustomCategory === cat.id
+                      ? 'border-sage-500 bg-sage-50 text-sage-800 shadow-sm'
+                      : 'border-warmgray-200 hover:border-sage-300 text-warmgray-700 bg-white'
+                      }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${uploadCustomCategory === cat.id ? 'bg-sage-500 text-white' : 'bg-warmgray-100 text-warmgray-500'}`}>
+                      <Tag className="w-5 h-5" />
+                    </div>
+                    <span className="text-lg font-bold truncate leading-tight">{cat.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Subcategory Selection - Dropdown (only for standard categories) */}
             {uploadCategory && !uploadCustomCategory && (
-              <div className="space-y-2">
-                <Label>Unterordner (optional)</Label>
-                <div className="space-y-2">
+              <div className="space-y-4">
+                <Label className="text-xl font-bold text-warmgray-900 block px-1">Unterordner (optional)</Label>
+                <div className="space-y-4">
                   <select
                     value={uploadSubcategory || '_none'}
                     onChange={(e) => {
@@ -1719,9 +1668,9 @@ export default function DocumentsPage() {
                         setIsCreatingSubcategory(false)
                       }
                     }}
-                    className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
+                    className="w-full h-14 px-4 rounded-xl border-2 border-warmgray-200 bg-white text-lg font-medium text-warmgray-900 focus:ring-4 focus:ring-sage-500/10 focus:border-sage-500 transition-all outline-none"
                   >
-                    <option value="_none">Kein Unterordner</option>
+                    <option value="_none">In Hauptkategorie ablegen</option>
                     {getCategorySubcategoriesForUpload().map(sub => (
                       <option key={sub.id} value={sub.id}>
                         📁 {sub.name}
@@ -1732,9 +1681,9 @@ export default function DocumentsPage() {
 
                   {/* Create new subcategory inline */}
                   {isCreatingSubcategory && (
-                    <div className="flex gap-2 mt-2">
+                    <div className="flex flex-col sm:flex-row gap-3 pt-2">
                       <Input
-                        placeholder="Name des Unterordners"
+                        placeholder="Name des neuen Ordners"
                         value={newSubcategoryName}
                         onChange={(e) => setNewSubcategoryName(e.target.value)}
                         onKeyDown={(e) => {
@@ -1744,20 +1693,27 @@ export default function DocumentsPage() {
                           }
                         }}
                         autoFocus
+                        className="h-14 text-lg px-5 rounded-xl border-sage-200 focus:border-sage-500"
                       />
-                      <Button size="sm" onClick={handleCreateSubcategory} disabled={!newSubcategoryName.trim()}>
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setIsCreatingSubcategory(false)
-                          setNewSubcategoryName('')
-                        }}
-                      >
-                        Abbrechen
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleCreateSubcategory}
+                          disabled={!newSubcategoryName.trim()}
+                          className="h-14 px-6 text-lg font-bold rounded-xl flex-1 sm:flex-initial"
+                        >
+                          Erstellen
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            setIsCreatingSubcategory(false)
+                            setNewSubcategoryName('')
+                          }}
+                          className="h-14 px-4 text-warmgray-500 hover:text-warmgray-900 text-lg rounded-xl flex-1 sm:flex-initial"
+                        >
+                          Abbrechen
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1765,129 +1721,132 @@ export default function DocumentsPage() {
             )}
 
             {/* File Selection - Drag & Drop */}
-            <div className="space-y-2">
-              <Label>Datei</Label>
+            <div className="space-y-4">
+              <Label className="text-xl font-bold text-warmgray-900 block px-1">Datei auswählen</Label>
               <FileUpload
                 selectedFile={uploadFile}
                 onFileSelect={validateAndSetFile}
                 onClear={() => setUploadFile(null)}
+                className="border-2 border-dashed border-warmgray-300 rounded-2xl p-8 hover:border-sage-500 hover:bg-sage-50/30 transition-all cursor-pointer"
               />
             </div>
 
-            {/* Title */}
-            <div className="space-y-2">
-              <Label htmlFor="title">Titel</Label>
-              <Input
-                id="title"
-                placeholder="z.B. Personalausweis"
-                value={uploadTitle}
-                onChange={(e) => setUploadTitle(e.target.value)}
-              />
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notiz (optional)</Label>
-              <Input
-                id="notes"
-                placeholder="z.B. Gültig bis 2028"
-                value={uploadNotes}
-                onChange={(e) => setUploadNotes(e.target.value)}
-              />
-            </div>
-
-            {/* Expiry Date */}
-            <div className="space-y-2">
-              <Label>Ablaufdatum (optional)</Label>
-              <DatePicker
-                value={uploadExpiryDate}
-                onChange={setUploadExpiryDate}
-                minDate={new Date().toISOString().split('T')[0]}
-                placeholder="Ablaufdatum wählen"
-              />
-              <p className="text-xs text-warmgray-500">
-                Sie werden automatisch erinnert, wenn das Dokument bald abläuft
-              </p>
-            </div>
-
-            {/* Custom Reminder - only show when expiry date is set */}
-            {uploadExpiryDate && (
-              <div className="space-y-2">
-                <Label>Erinnerung (optional)</Label>
-                <select
-                  value={uploadCustomReminderDays === null ? '_default' : uploadCustomReminderDays.toString()}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    if (value === '_default') {
-                      setUploadCustomReminderDays(null)
-                    } else {
-                      setUploadCustomReminderDays(parseInt(value))
-                    }
-                  }}
-                  className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
-                >
-                  <option value="_default">Standard (aus Einstellungen)</option>
-                  <option value="1">1 Tag vorher</option>
-                  <option value="3">3 Tage vorher</option>
-                  <option value="7">7 Tage vorher</option>
-                  <option value="14">14 Tage vorher</option>
-                  <option value="30">1 Monat vorher</option>
-                  <option value="60">2 Monate vorher</option>
-                  <option value="90">3 Monate vorher</option>
-                  <option value="180">6 Monate vorher</option>
-                </select>
-                <p className="text-xs text-warmgray-500">
-                  Überschreibt die allgemeine Erinnerungseinstellung für dieses Dokument
-                </p>
+            {/* Form Fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <Label htmlFor="title" className="text-lg font-bold text-warmgray-700">Titel</Label>
+                <Input
+                  id="title"
+                  placeholder="z.B. Personalausweis"
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                  className="h-14 text-lg rounded-xl border-warmgray-200"
+                />
               </div>
-            )}
 
-            {/* Reminder Watcher - only show when expiry date is set and family members exist */}
+              <div className="space-y-3">
+                <Label htmlFor="notes" className="text-lg font-bold text-warmgray-700">Notiz (optional)</Label>
+                <Input
+                  id="notes"
+                  placeholder="z.B. Gültig bis 2028"
+                  value={uploadNotes}
+                  onChange={(e) => setUploadNotes(e.target.value)}
+                  className="h-14 text-lg rounded-xl border-warmgray-200"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-lg font-bold text-warmgray-700">Ablaufdatum (optional)</Label>
+                <DatePicker
+                  value={uploadExpiryDate}
+                  onChange={setUploadExpiryDate}
+                  minDate={new Date().toISOString().split('T')[0]}
+                  placeholder="Datum wählen"
+                  className="h-14 text-lg w-full rounded-xl"
+                />
+              </div>
+
+              {uploadExpiryDate && (
+                <div className="space-y-3">
+                  <Label className="text-lg font-bold text-warmgray-700">Erinnerung</Label>
+                  <select
+                    value={uploadCustomReminderDays === null ? '_default' : uploadCustomReminderDays.toString()}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value === '_default') {
+                        setUploadCustomReminderDays(null)
+                      } else {
+                        setUploadCustomReminderDays(parseInt(value))
+                      }
+                    }}
+                    className="w-full h-14 px-4 rounded-xl border-2 border-warmgray-200 bg-white text-lg font-medium text-warmgray-900 focus:ring-4 focus:ring-sage-500/10 focus:border-sage-500 transition-all outline-none"
+                  >
+                    <option value="_default">Standard-Einstellung</option>
+                    <option value="1">1 Tag vorher</option>
+                    <option value="3">3 Tage vorher</option>
+                    <option value="7">7 Tage vorher</option>
+                    <option value="14">14 Tage vorher</option>
+                    <option value="30">1 Monat vorher</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Reminder Watcher - only show when family members exist */}
             {uploadExpiryDate && familyMembers.length > 0 && (
-              <div className="space-y-2">
-                <Label>Soll eine weitere Person den Termin im Blick haben?</Label>
+              <div className="space-y-3 bg-cream-50/50 p-6 rounded-2xl border border-warmgray-200 shadow-inner">
+                <Label className="text-lg font-bold text-warmgray-900">Termin-Überwachung teilen</Label>
                 <select
                   value={uploadReminderWatcher || '_none'}
                   onChange={(e) => {
                     const value = e.target.value
                     setUploadReminderWatcher(value === '_none' ? null : value)
                   }}
-                  className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
+                  className="w-full h-14 px-4 rounded-xl border-2 border-warmgray-200 bg-white text-lg font-medium text-warmgray-900 focus:ring-4 focus:ring-sage-500/10 focus:border-sage-500 transition-all outline-none"
                 >
-                  <option value="_none">Nein, nur ich</option>
+                  <option value="_none">Nur für mich</option>
                   {familyMembers.map((member) => (
                     <option key={member.id} value={member.id}>
                       {member.name} ({member.email})
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-warmgray-500">
-                  Diese Person erhält eine Bestätigung und wird ebenfalls an den Termin erinnert
+                <p className="text-base text-warmgray-500 leading-relaxed">
+                  Die gewählte Person erhält eine Bestätigung und wird ebenfalls rechtzeitig erinnert.
                 </p>
               </div>
             )}
+
+            <p className="text-center text-warmgray-500 text-base py-4 leading-relaxed">
+              Ihre Dateien werden sicher verschlüsselt gespeichert.
+            </p>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUploadOpen(false)}>
+          <DialogFooter className="p-6 sm:p-8 bg-warmgray-50/50 border-t border-warmgray-100 flex-row gap-4">
+            <Button
+              variant="outline"
+              onClick={() => setIsUploadOpen(false)}
+              className="h-14 px-8 text-lg font-bold rounded-xl flex-1 sm:flex-none"
+            >
               Abbrechen
             </Button>
             <Button
               onClick={handleUpload}
               disabled={!uploadFile || !uploadCategory || !uploadTitle.trim() || isUploading}
+              className="h-14 px-10 text-lg font-bold rounded-xl flex-1 sm:flex-none shadow-md"
             >
               {isUploading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-3 h-6 w-6 animate-spin" />
                   Hinzufügen...
                 </>
               ) : (
-                'Hinzufügen'
+                'Dokument ablegen'
               )}
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog >
+      </Dialog>
 
       {/* Document Preview */}
       <DocumentPreview
@@ -1910,41 +1869,47 @@ export default function DocumentsPage() {
 
           <div className="space-y-4">
             {/* Existing folders */}
-            <div className="space-y-2">
-              <Label>Zielordner</Label>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
+            <div className="space-y-4">
+              <Label className="text-lg font-bold">Zielordner wählen</Label>
+              <div className="space-y-3 flex flex-col">
                 {/* Remove from folder option */}
                 <button
                   onClick={() => {
                     setMoveTargetFolder(null)
                     setIsCreatingFolderInMove(false)
                   }}
-                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${moveTargetFolder === null && !isCreatingFolderInMove
+                  className={`w-full p-4 text-left rounded-2xl border-2 transition-all flex items-center gap-4 min-h-[64px] ${moveTargetFolder === null && !isCreatingFolderInMove
                     ? 'border-sage-500 bg-sage-50'
-                    : 'border-warmgray-200 hover:border-warmgray-400'
+                    : 'border-warmgray-200 hover:border-sage-300 bg-white shadow-sm'
                     }`}
                 >
-                  <X className="w-5 h-5 text-warmgray-500" />
-                  <span className="text-sm">Kein Ordner (aus Ordner entfernen)</span>
+                  <div className="h-10 w-10 rounded-full bg-warmgray-100 flex items-center justify-center text-warmgray-500">
+                    <X className="w-6 h-6" />
+                  </div>
+                  <span className="text-lg font-medium">Kein Ordner (Hauptkategorie)</span>
                 </button>
 
                 {/* Existing folders for this category */}
-                {getAvailableFoldersForMove().map(folder => (
-                  <button
-                    key={folder.id}
-                    onClick={() => {
-                      setMoveTargetFolder(folder.id)
-                      setIsCreatingFolderInMove(false)
-                    }}
-                    className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${moveTargetFolder === folder.id
-                      ? 'border-sage-500 bg-sage-50'
-                      : 'border-warmgray-200 hover:border-warmgray-400'
-                      }`}
-                  >
-                    <Folder className="w-5 h-5 text-sage-500" />
-                    <span className="text-sm font-medium">{folder.name}</span>
-                  </button>
-                ))}
+                <div className="space-y-3 overflow-y-visible">
+                  {getAvailableFoldersForMove().map(folder => (
+                    <button
+                      key={folder.id}
+                      onClick={() => {
+                        setMoveTargetFolder(folder.id)
+                        setIsCreatingFolderInMove(false)
+                      }}
+                      className={`w-full p-4 text-left rounded-2xl border-2 transition-all flex items-center gap-4 min-h-[64px] ${moveTargetFolder === folder.id
+                        ? 'border-sage-500 bg-sage-50'
+                        : 'border-warmgray-200 hover:border-sage-300 bg-white shadow-sm'
+                        }`}
+                    >
+                      <div className="h-10 w-10 rounded-full bg-sage-100 flex items-center justify-center text-sage-600">
+                        <Folder className="w-6 h-6 fill-current" />
+                      </div>
+                      <span className="text-lg font-bold truncate">{folder.name}</span>
+                    </button>
+                  ))}
+                </div>
 
                 {/* Create new folder option */}
                 <button
@@ -1952,13 +1917,15 @@ export default function DocumentsPage() {
                     setIsCreatingFolderInMove(true)
                     setMoveTargetFolder(null)
                   }}
-                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-3 ${isCreatingFolderInMove
+                  className={`w-full p-4 text-left rounded-2xl border-2 transition-all flex items-center gap-4 min-h-[64px] ${isCreatingFolderInMove
                     ? 'border-sage-500 bg-sage-50'
-                    : 'border-dashed border-warmgray-300 hover:border-sage-400'
+                    : 'border-dashed border-warmgray-300 bg-white hover:border-sage-400'
                     }`}
                 >
-                  <FolderPlus className="w-5 h-5 text-warmgray-400" />
-                  <span className="text-sm">Neuen Ordner erstellen...</span>
+                  <div className="h-10 w-10 rounded-full bg-warmgray-50 flex items-center justify-center text-warmgray-400">
+                    <FolderPlus className="w-6 h-6" />
+                  </div>
+                  <span className="text-lg font-medium">Neuen Ordner erstellen...</span>
                 </button>
               </div>
             </div>
@@ -2001,39 +1968,41 @@ export default function DocumentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Bulk Action Bar - Fixed at bottom when documents selected */}
-      {
-        selectedDocuments.size > 0 && (
-          <div className="fixed bottom-4 inset-x-4 sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 sm:w-auto bg-warmgray-900 text-white rounded-lg shadow-xl px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between sm:justify-start gap-2 sm:gap-6 z-50 overflow-hidden">
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Check className="w-5 h-5 text-sage-400" />
-              <span className="font-medium whitespace-nowrap text-sm sm:text-base">{selectedDocuments.size} <span className="hidden xs:inline">ausgewählt</span></span>
+      {/* Bulk Action Bar - Senior Friendly (Fixed at bottom) */}
+      {selectedDocuments.size > 0 && (
+        <div className="fixed bottom-6 inset-x-4 sm:left-1/2 sm:-translate-x-1/2 sm:w-auto sm:min-w-[400px] bg-warmgray-900 text-white rounded-2xl shadow-2xl px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 z-50 animate-in slide-in-from-bottom-10 h-auto">
+          <div className="flex items-center gap-4 w-full sm:w-auto border-b sm:border-b-0 border-warmgray-800 pb-3 sm:pb-0">
+            <div className="h-10 w-10 rounded-full bg-sage-600 flex items-center justify-center">
+              <Check className="w-6 h-6 text-white stroke-[3]" />
             </div>
-            <div className="h-6 w-px bg-warmgray-700 hidden sm:block" />
-            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-white hover:bg-warmgray-800 h-9 px-2 sm:px-3 flex-shrink-0"
-                onClick={() => openMoveDialog()}
-              >
-                <MoveRight className="sm:mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Verschieben</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-white hover:bg-warmgray-800 h-9 px-2 sm:px-3 flex-shrink-0"
-                onClick={clearSelection}
-              >
-                <X className="sm:mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Auswahl aufheben</span>
-                <span className="sm:hidden">Abbrechen</span>
-              </Button>
+            <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-2">
+              <span className="font-bold text-xl">{selectedDocuments.size}</span>
+              <span className="text-warmgray-400 font-medium">Dokumente ausgewählt</span>
             </div>
           </div>
-        )
-      }
+
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Button
+              size="lg"
+              variant="secondary"
+              className="bg-warmgray-800 hover:bg-warmgray-700 text-white h-[56px] px-6 flex-1 sm:flex-none font-bold text-lg rounded-xl transition-all"
+              onClick={() => openMoveDialog()}
+            >
+              <MoveRight className="mr-3 h-5 w-5" />
+              Verschieben
+            </Button>
+            <Button
+              size="lg"
+              variant="ghost"
+              className="text-warmgray-400 hover:text-white h-[56px] px-6 flex-1 sm:flex-none font-bold text-lg rounded-xl transition-all"
+              onClick={clearSelection}
+            >
+              <X className="mr-3 h-5 w-5" />
+              <span>Abbrechen</span>
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Category Dialog */}
       <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>

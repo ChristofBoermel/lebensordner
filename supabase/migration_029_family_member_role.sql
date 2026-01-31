@@ -8,6 +8,9 @@ ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'emergency_contact';
 -- Create enum-like constraint via check constraint (PostgreSQL style)
 -- Valid roles: 'emergency_contact', 'family_member'
 ALTER TABLE trusted_persons 
+DROP CONSTRAINT IF EXISTS trusted_persons_role_check;
+
+ALTER TABLE trusted_persons 
 ADD CONSTRAINT trusted_persons_role_check 
 CHECK (role IN ('emergency_contact', 'family_member'));
 

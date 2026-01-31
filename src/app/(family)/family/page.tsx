@@ -10,32 +10,16 @@ import {
 } from './family-documents-client'
 
 // Documents list server component
-async function DocumentsList({ userId }: { userId: string }) {
+async function DocumentsList({
+  userId,
+  ownerId,
+  ownerName
+}: {
+  userId: string,
+  ownerId: string,
+  ownerName: string
+}) {
   const supabase = await createServerSupabaseClient()
-
-  // Get the owner this family member is connected to
-  const { data: trustedPerson } = await supabase
-    .from('trusted_persons')
-    .select('user_id, name')
-    .eq('linked_user_id', userId)
-    .eq('invitation_status', 'accepted')
-    .eq('is_active', true)
-    .single()
-
-  if (!trustedPerson) {
-    return (
-      <Card className="border-amber-200 bg-amber-50">
-        <CardContent className="flex items-center gap-3 p-6">
-          <Folder className="h-5 w-5 text-amber-600" aria-hidden="true" />
-          <p className="text-amber-800">
-            Keine Verbindung zu einem Familienmitglied gefunden.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const ownerId = trustedPerson.user_id
 
   // Get permissions (checks subscription tier for download)
   const permissions = await getFamilyPermissions(userId, ownerId)
@@ -56,7 +40,7 @@ async function DocumentsList({ userId }: { userId: string }) {
             Keine Dokumente vorhanden
           </h3>
           <p className="mt-2 max-w-sm text-sm leading-[1.6] text-warmgray-500">
-            {trustedPerson.name} hat noch keine Dokumente hochgeladen oder Sie haben noch keinen Zugriff.
+            {ownerName} hat noch keine Dokumente hochgeladen oder Sie haben noch keinen Zugriff.
           </p>
         </CardContent>
       </Card>
@@ -67,7 +51,7 @@ async function DocumentsList({ userId }: { userId: string }) {
     <FamilyDocumentsClient
       documents={documents}
       ownerId={ownerId}
-      ownerName={trustedPerson.name || 'Besitzer'}
+      ownerName={ownerName}
       canDownload={permissions.canDownload}
     />
   )
@@ -82,22 +66,54 @@ export default async function FamilyPage() {
     redirect('/anmelden')
   }
 
+  // Get the owner this family member is connected to
+  const { data: trustedPerson } = await supabase
+    .from('trusted_persons')
+    .select('user_id, name')
+    .eq('linked_user_id', user.id)
+    .eq('invitation_status', 'accepted')
+    .eq('is_active', true)
+    .single()
+
+  if (!trustedPerson) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold text-warmgray-900">Dokumente</h1>
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="flex items-center gap-3 p-6">
+            <Folder className="h-5 w-5 text-amber-600" aria-hidden="true" />
+            <p className="text-amber-800">
+              Keine Verbindung zu einem Familienmitglied gefunden.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 sm:space-y-8">
       {/* Page Header */}
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold leading-[1.3] text-warmgray-900 sm:text-3xl">
+      <div className="space-y-4 text-center sm:text-left">
+        <h1 className="text-4xl font-bold tracking-tight text-warmgray-900 sm:text-5xl">
           Dokumente
         </h1>
-        <p className="text-base leading-[1.6] text-warmgray-600">
-          Hier finden Sie alle Dokumente, auf die Sie Zugriff haben.
+        <p className="text-xl leading-[1.6] text-warmgray-700 max-w-2xl mx-auto sm:mx-0">
+          Hier finden Sie alle wichtigen Unterlagen von <span className="font-semibold">{trustedPerson.name || 'Ihrem Familienmitglied'}</span>,
+          auf die Sie Zugriff haben.
         </p>
       </div>
 
-      {/* Documents with Suspense */}
-      <Suspense fallback={<DocumentsSkeleton />}>
-        <DocumentsList userId={user.id} />
-      </Suspense>
+      <div className="mt-12">
+        {/* Documents with Suspense */}
+        <Suspense fallback={<DocumentsSkeleton />}>
+          <DocumentsList
+            userId={user.id}
+            ownerId={trustedPerson.user_id}
+            ownerName={trustedPerson.name || 'Besitzer'}
+          />
+        </Suspense>
+      </div>
     </div>
   )
 }

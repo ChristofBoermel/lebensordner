@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     // If family member (not owner), check download permission based on subscription
     if (!permissions.isOwner && !permissions.canDownload) {
       return NextResponse.json(
-        { 
+        {
           error: 'Download erfordert Premium-Abonnement des Besitzers',
           code: 'PREMIUM_REQUIRED'
         },
@@ -65,12 +65,12 @@ export async function GET(request: NextRequest) {
       .from('documents')
       .select('*')
       .eq('user_id', ownerId)
-    
+
     // Filter by selected document IDs if provided
     if (documentIds && documentIds.length > 0) {
       documentsQuery = documentsQuery.in('id', documentIds)
     }
-    
+
     const { data: documents, error: docsError } = await documentsQuery
       .order('category')
       .order('title')
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     // Import JSZip dynamically for streaming support
     const { default: JSZip } = await import('jszip')
-    
+
     // Create ZIP file with streaming
     const zip = new JSZip()
     const zipStream = zip.generateNodeStream({
@@ -103,22 +103,25 @@ export async function GET(request: NextRequest) {
 
     // Category name mapping
     const CATEGORY_NAMES: Record<string, string> = {
-  identitaet: 'Identität',
-  finanzen: 'Finanzen',
-  versicherungen: 'Versicherungen',
-  wohnen: 'Wohnen',
-  gesundheit: 'Gesundheit',
-  vertraege: 'Verträge',
-  rente: 'Rente & Pension',
-  familie: 'Familie',
-  arbeit: 'Arbeit',
-  religion: 'Religion',
-  sonstige: 'Sonstige',
-}
+      identitaet: 'Identität',
+      finanzen: 'Finanzen',
+      versicherungen: 'Versicherungen',
+      wohnen: 'Wohnen',
+      gesundheit: 'Gesundheit',
+      vertraege: 'Verträge',
+      rente: 'Rente & Pension',
+      familie: 'Familie',
+      arbeit: 'Arbeit',
+      religion: 'Religion',
+      sonstige: 'Sonstige',
+    }
 
-    // Download each document and add to ZIP
+    // Process each document
     for (const doc of documents) {
       try {
+        // Use stream for reading from Storage if possible (Supabase download returns a Blob/File)
+        // For Supabase client, download() returns { data: Blob | null, error: StorageError | null }
+        // We can convert Blob to Node Stream
         const { data: fileData, error: fileError } = await adminClient.storage
           .from('documents')
           .download(doc.file_path)
@@ -129,39 +132,56 @@ export async function GET(request: NextRequest) {
         }
 
         const categoryFolder = CATEGORY_NAMES[doc.category] || doc.category
-        const filePath = `${categoryFolder}/${doc.file_name}`
-        
-        // Stream file data instead of buffering
-        const arrayBuffer = await fileData.arrayBuffer()
-        zip.file(filePath, arrayBuffer, { compression: 'STORE' })
+        const zipPath = `${categoryFolder}/${doc.file_name}`
+
+        // JSZip file() can take a Promise<ArrayBuffer> or Stream
+        // Using arrayBuffer() is okay for single files usually, but we keep streamFiles: true
+        const buffer = await fileData.arrayBuffer()
+        zip.file(zipPath, buffer, { binary: true })
       } catch (err) {
         console.error(`Error processing document ${doc.id}:`, err)
         continue
       }
     }
 
-    // Generate ZIP with streaming (no large buffers)
-    const zipBlob = await zip.generateAsync({ 
-      type: 'arraybuffer',
+    // Generate ZIP as a stream
+    // Next.js Route Handlers work with Web Streams
+    const nodeStream = zip.generateNodeStream({
+      type: 'nodebuffer',
       streamFiles: true,
       compression: 'DEFLATE',
       compressionOptions: { level: 6 }
     })
 
-    // Create safe filename - include count for multi-select
+    // Convert Node.js Readable stream to Web ReadableStream
+    const webStream = new ReadableStream({
+      start(controller) {
+        nodeStream.on('data', (chunk) => controller.enqueue(chunk))
+        nodeStream.on('end', () => controller.close())
+        nodeStream.on('error', (err) => controller.error(err))
+      },
+      cancel() {
+        if ('destroy' in nodeStream) {
+          (nodeStream as any).destroy()
+        }
+      }
+    })
+
+    // Create safe filename
     const safeOwnerName = ownerName.replace(/[^a-zA-Z0-9äöüÄÖÜß\s-]/g, '').replace(/\s+/g, '_')
     const dateStr = new Date().toISOString().split('T')[0]
     const docCount = documents.length
-    const filename = documentIds 
+    const filename = documentIds
       ? `Dokumente_${safeOwnerName}_${dateStr}_${docCount}files.zip`
       : `Lebensordner_${safeOwnerName}_${dateStr}.zip`
 
-    // Return ZIP file
-    return new NextResponse(zipBlob, {
+    return new NextResponse(webStream, {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
+        'Cache-Control': 'no-cache',
         'Content-Disposition': `attachment; filename="${filename}"`,
+        'Transfer-Encoding': 'chunked',
       },
     })
   } catch (error: any) {

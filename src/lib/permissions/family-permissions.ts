@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
+import { getTierFromSubscription } from '@/lib/subscription-tiers'
 
 type SubscriptionStatus = Database['public']['Tables']['profiles']['Row']['subscription_status']
 
@@ -73,32 +74,17 @@ export async function getFamilyRelationship(
 }
 
 /**
- * Determines download permission based on owner's subscription tier
- * Premium = download allowed, Basic = download denied
- */
-function canDownloadBasedOnTier(subscriptionStatus: SubscriptionStatus | null): boolean {
-  // If subscription is active/trialing and premium tier -> allow download
-  if (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') {
-    // Check if it's premium by looking at stripe_price_id
-    // For now, we assume active/trialing on premium plan
-    // The actual check happens in conjunction with getTierFromSubscription
-    return true
-  }
-  return false
-}
-
-/**
  * Gets the owner's subscription tier and returns whether download is allowed
  * This is a helper that should be used server-side only
  */
 export async function getOwnerSubscriptionTier(
   ownerId: string
-): Promise<{ status: SubscriptionStatus; canDownload: boolean }> {
+): Promise<{ status: string | null; canDownload: boolean }> {
   const supabase = getSupabaseAdmin()
 
   const { data: profile } = await (supabase
     .from('profiles')
-    .select('subscription_status, stripe_price_id, stripe_subscription_id')
+    .select('subscription_status, stripe_price_id')
     .eq('id', ownerId)
     .single() as any)
 
@@ -106,31 +92,10 @@ export async function getOwnerSubscriptionTier(
     return { status: null, canDownload: false }
   }
 
-  // Check if subscription is active
-  const isActive = profile.subscription_status === 'active' ||
-    profile.subscription_status === 'trialing'
+  const tier = getTierFromSubscription(profile.subscription_status, profile.stripe_price_id)
 
-  // Determine tier from price ID
-  const priceIds = {
-    basic: [
-      process.env.STRIPE_PRICE_BASIC_MONTHLY,
-      process.env.STRIPE_PRICE_BASIC_YEARLY,
-    ].filter(Boolean),
-    premium: [
-      process.env.STRIPE_PRICE_PREMIUM_MONTHLY,
-      process.env.STRIPE_PRICE_PREMIUM_YEARLY,
-      process.env.STRIPE_PRICE_ID, // legacy
-    ].filter(Boolean),
-  }
-
-  const priceId = profile.stripe_price_id
-
-  // If it's premium tier and active -> allow download
-  const isPremium = priceId && priceIds.premium.includes(priceId)
-  // Legacy: if subscription is active but price ID unknown, assume premium (safe default)
-  const isLegacyPremium = isActive && !priceId
-
-  const canDownload = isActive && (isPremium || isLegacyPremium)
+  // Download is only allowed for Premium tier
+  const canDownload = tier.id === 'premium'
 
   return {
     status: profile.subscription_status,
