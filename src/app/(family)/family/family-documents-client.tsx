@@ -104,12 +104,12 @@ function FamilyDocumentCard({
 
       if (response.ok) {
         const { signedUrl, fileName } = await response.json()
-        const link = document.createElement('a')
+        const link = window.document.createElement('a')
         link.href = signedUrl
         link.download = fileName
-        document.body.appendChild(link)
+        window.document.body.appendChild(link)
         link.click()
-        document.body.removeChild(link)
+        window.document.body.removeChild(link)
       }
     })
   }
@@ -127,7 +127,7 @@ function FamilyDocumentCard({
         <div className="absolute left-3 top-3 z-10">
           <Checkbox
             checked={isSelected}
-            onCheckedChange={(checked) => onSelect(document.id, checked as boolean)}
+            onCheckedChange={(checked: boolean | 'indeterminate') => onSelect(document.id, checked as boolean)}
             className="h-8 w-8 min-h-[44px] min-w-[44px] border-2 data-[state=checked]:bg-sage-600 data-[state=checked]:border-sage-600"
             aria-label={`${document.title} auswählen`}
           />
@@ -278,12 +278,12 @@ export function FamilyDocumentsClient({
       if (response.ok) {
         const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
+        const link = window.document.createElement('a')
         link.href = url
         link.download = `Dokumente_${ownerName}_${new Date().toISOString().split('T')[0]}.zip`
-        document.body.appendChild(link)
+        window.document.body.appendChild(link)
         link.click()
-        document.body.removeChild(link)
+        window.document.body.removeChild(link)
         window.URL.revokeObjectURL(url)
         setSelectedDocs(new Set())
         setSelectionMode(false)

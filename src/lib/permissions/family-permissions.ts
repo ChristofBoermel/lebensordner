@@ -23,7 +23,7 @@ interface TrustedPersonRelationship {
   access_level: 'immediate' | 'emergency' | 'after_confirmation'
 }
 
-const getSupabaseAdmin = () => createClient<Database>(
+const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
@@ -34,13 +34,13 @@ const getSupabaseAdmin = () => createClient<Database>(
  */
 export async function isOwner(userId: string): Promise<boolean> {
   const supabase = getSupabaseAdmin()
-  
-  const { data: profile } = await supabase
+
+  const { data: profile } = await (supabase
     .from('profiles')
     .select('id')
     .eq('id', userId)
-    .single()
-  
+    .single() as any)
+
   return !!profile
 }
 
@@ -53,22 +53,22 @@ export async function getFamilyRelationship(
   ownerId: string
 ): Promise<TrustedPersonRelationship | null> {
   const supabase = getSupabaseAdmin()
-  
-  const { data: trustedPerson } = await supabase
+
+  const { data: trustedPerson } = await (supabase
     .from('trusted_persons')
     .select('id, role, access_level')
     .eq('user_id', ownerId)
     .eq('linked_user_id', userId)
     .eq('invitation_status', 'accepted')
     .eq('is_active', true)
-    .single()
-  
+    .maybeSingle() as any)
+
   if (!trustedPerson) return null
-  
+
   return {
     id: trustedPerson.id,
-    role: trustedPerson.role,
-    access_level: trustedPerson.access_level,
+    role: trustedPerson.role as TrustedPersonRelationship['role'],
+    access_level: trustedPerson.access_level as TrustedPersonRelationship['access_level'],
   }
 }
 
@@ -95,21 +95,21 @@ export async function getOwnerSubscriptionTier(
   ownerId: string
 ): Promise<{ status: SubscriptionStatus; canDownload: boolean }> {
   const supabase = getSupabaseAdmin()
-  
-  const { data: profile } = await supabase
+
+  const { data: profile } = await (supabase
     .from('profiles')
     .select('subscription_status, stripe_price_id, stripe_subscription_id')
     .eq('id', ownerId)
-    .single()
-  
+    .single() as any)
+
   if (!profile) {
     return { status: null, canDownload: false }
   }
-  
+
   // Check if subscription is active
-  const isActive = profile.subscription_status === 'active' || 
-                   profile.subscription_status === 'trialing'
-  
+  const isActive = profile.subscription_status === 'active' ||
+    profile.subscription_status === 'trialing'
+
   // Determine tier from price ID
   const priceIds = {
     basic: [
@@ -122,16 +122,16 @@ export async function getOwnerSubscriptionTier(
       process.env.STRIPE_PRICE_ID, // legacy
     ].filter(Boolean),
   }
-  
+
   const priceId = profile.stripe_price_id
-  
+
   // If it's premium tier and active -> allow download
   const isPremium = priceId && priceIds.premium.includes(priceId)
   // Legacy: if subscription is active but price ID unknown, assume premium (safe default)
   const isLegacyPremium = isActive && !priceId
-  
+
   const canDownload = isActive && (isPremium || isLegacyPremium)
-  
+
   return {
     status: profile.subscription_status,
     canDownload,
@@ -158,12 +158,12 @@ export async function getFamilyPermissions(
   if (!ownerId || userId === ownerId) {
     // Check if user is actually an owner (has a profile)
     const supabase = getSupabaseAdmin()
-    const { data: profile } = await supabase
+    const { data: profile } = await (supabase
       .from('profiles')
       .select('subscription_status')
       .eq('id', userId)
-      .single()
-    
+      .single() as any)
+
     if (profile) {
       // User is an owner - full permissions
       return {
@@ -174,7 +174,7 @@ export async function getFamilyPermissions(
         ownerId: userId,
       }
     }
-    
+
     // User exists but has no profile - shouldn't happen in normal flow
     return {
       canDownload: false,
@@ -184,11 +184,11 @@ export async function getFamilyPermissions(
       ownerId: null,
     }
   }
-  
+
   // User is trying to access another owner's data
   // Check if they have a family relationship
   const relationship = await getFamilyRelationship(userId, ownerId)
-  
+
   if (!relationship || relationship.role !== 'family_member') {
     return {
       canDownload: false,
@@ -198,10 +198,10 @@ export async function getFamilyPermissions(
       ownerId: null,
     }
   }
-  
+
   // Family member with valid relationship - check owner's subscription tier
   const { status, canDownload } = await getOwnerSubscriptionTier(ownerId)
-  
+
   return {
     canDownload,
     canView: true, // Family members can always view
@@ -221,14 +221,14 @@ export async function requireFamilyPermission(
   requiredPermission: 'view' | 'download'
 ): Promise<FamilyPermissions> {
   const permissions = await getFamilyPermissions(userId, ownerId)
-  
+
   if (!permissions.canView) {
     throw new Error('Access denied: Not a family member')
   }
-  
+
   if (requiredPermission === 'download' && !permissions.canDownload) {
     throw new Error('Access denied: Download requires Premium subscription')
   }
-  
+
   return permissions
 }
