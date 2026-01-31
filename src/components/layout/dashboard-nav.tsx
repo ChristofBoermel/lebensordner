@@ -268,12 +268,12 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
                   <Avatar className="h-10 w-10 flex-shrink-0">
                     <AvatarFallback>{initials}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="text-sm font-medium text-warmgray-900 truncate">
+                  <span className="flex-1 min-w-0 text-left block">
+                    <span className="text-sm font-medium text-warmgray-900 truncate block">
                       {user.full_name || 'Benutzer'}
-                    </p>
-                    <p
-                      className="text-xs text-warmgray-500 truncate cursor-pointer hover:text-warmgray-700"
+                    </span>
+                    <span
+                      className="text-xs text-warmgray-500 truncate cursor-pointer hover:text-warmgray-700 block"
                       onClick={(e) => {
                         e.stopPropagation()
                         navigator.clipboard.writeText(user.email)
@@ -283,8 +283,8 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
                       {user.email.length > 20
                         ? user.email.slice(0, 17) + '...'
                         : user.email}
-                    </p>
-                  </div>
+                    </span>
+                  </span>
                   <ChevronDown className="w-4 h-4 text-warmgray-400 flex-shrink-0" />
                 </button>
               </DropdownMenuTrigger>

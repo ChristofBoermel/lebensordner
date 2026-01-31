@@ -10,11 +10,11 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { 
-  Search, 
-  FileText, 
-  Users, 
-  Clock, 
+import {
+  Search,
+  FileText,
+  Users,
+  Clock,
   AlertCircle,
   Loader2,
   Command,
@@ -228,19 +228,19 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                     selectedIndex === index ? 'bg-sage-50' : 'hover:bg-warmgray-50'
                   )}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-warmgray-100 flex items-center justify-center flex-shrink-0">
+                  <span className="w-10 h-10 rounded-lg bg-warmgray-100 flex items-center justify-center flex-shrink-0">
                     {getIcon(result.type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-warmgray-900 truncate">
+                  </span>
+                  <span className="flex-1 min-w-0 block">
+                    <span className="font-medium text-warmgray-900 truncate block">
                       {result.title}
-                    </p>
+                    </span>
                     {result.subtitle && (
-                      <p className="text-sm text-warmgray-500 truncate">
+                      <span className="text-sm text-warmgray-500 truncate block">
                         {result.subtitle}
-                      </p>
+                      </span>
                     )}
-                  </div>
+                  </span>
                   <ArrowRight className="w-4 h-4 text-warmgray-400 flex-shrink-0" />
                 </button>
               ))}
