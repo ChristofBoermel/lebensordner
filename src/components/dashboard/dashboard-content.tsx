@@ -100,29 +100,29 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
           <CardContent>
             <div className="grid grid-cols-1 gap-4">
               <Link href="/dokumente?upload=true" className="block">
-                <Button size="lg" className="w-full h-16 text-lg justify-start gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
+                <Button size="lg" className="w-full min-h-[4rem] h-auto py-3 text-lg justify-start gap-4 whitespace-normal">
+                  <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
                     <Upload className="w-5 h-5" />
                   </div>
-                  Dokument hinzufügen
+                  <span>Dokument hinzufügen</span>
                 </Button>
               </Link>
 
               <Link href="/notfall" className="block">
-                <Button size="lg" variant="outline" className="w-full h-16 text-lg justify-start gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-sage-100 flex items-center justify-center">
+                <Button size="lg" variant="outline" className="w-full min-h-[4rem] h-auto py-3 text-lg justify-start gap-4 whitespace-normal border-2">
+                  <div className="w-10 h-10 rounded-lg bg-sage-100 flex items-center justify-center flex-shrink-0">
                     <Phone className="w-5 h-5 text-sage-600" />
                   </div>
-                  Notfallkontakt anlegen
+                  <span>Notfallkontakt anlegen</span>
                 </Button>
               </Link>
 
               <Link href="/zugriff" className="block">
-                <Button size="lg" variant="outline" className="w-full h-16 text-lg justify-start gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-sage-100 flex items-center justify-center">
+                <Button size="lg" variant="outline" className="w-full min-h-[4rem] h-auto py-3 text-lg justify-start gap-4 whitespace-normal border-2">
+                  <div className="w-10 h-10 rounded-lg bg-sage-100 flex items-center justify-center flex-shrink-0">
                     <Users className="w-5 h-5 text-sage-600" />
                   </div>
-                  Familienmitglied einladen
+                  <span>Familienmitglied einladen</span>
                 </Button>
               </Link>
             </div>
