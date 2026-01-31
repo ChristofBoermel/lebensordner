@@ -9,19 +9,12 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-<<<<<<< D:/Projects/Lebensordner/package.json
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
-=======
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug"
->>>>>>> C:/Users/chris/.windsurf/worktrees/Lebensordner/Lebensordner-881c138a/package.json
   },
   "keywords": [
     "lebensordner",
