@@ -1109,18 +1109,6 @@ export default function EinstellungenPage() {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between py-3">
             <div>
-              <p className="font-medium text-warmgray-900">Design</p>
-              <p className="text-sm text-warmgray-500">
-                Wählen Sie zwischen Hell, Dunkel oder System
-              </p>
-            </div>
-            <ThemeToggle />
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between py-3">
-            <div>
               <p className="font-medium text-warmgray-900">Einfache Ansicht</p>
               <p className="text-sm text-warmgray-500">
                 Größere Schrift und Bedienelemente

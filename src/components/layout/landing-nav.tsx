@@ -34,19 +34,6 @@ export function LandingNav() {
           </nav>
 
           <div className="flex items-center gap-2 md:gap-4">
-            {/* Dark Mode Toggle */}
-            <button
-              onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-              className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
-              title={resolvedTheme === 'dark' ? 'Hellmodus' : 'Dunkelmodus'}
-            >
-              {resolvedTheme === 'dark' ? (
-                <Sun className="w-5 h-5 text-warmgray-600 dark:text-warmgray-400" />
-              ) : (
-                <Moon className="w-5 h-5 text-warmgray-600" />
-              )}
-            </button>
-
             <div className="hidden md:flex items-center gap-4">
               <Link href="/anmelden">
                 <Button variant="ghost">Anmelden</Button>
