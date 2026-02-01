@@ -75,6 +75,8 @@ export async function POST(request: Request) {
 
     if (action === 'accept') {
       updateData.invitation_accepted_at = new Date().toISOString()
+      // Set role to family_member for accepted invitations via dashboard
+      updateData.role = 'family_member'
     }
 
     const { error } = await supabase

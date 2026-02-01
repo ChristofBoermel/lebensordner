@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { FAQAccordion } from '@/components/landing/faq-accordion'
+import { LandingNav } from '@/components/layout/landing-nav'
 import {
   Shield,
   Users,
@@ -49,39 +50,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-cream-50">
       {/* Header */}
-      <header className="border-b border-cream-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="section-container">
-          <div className="flex items-center justify-between h-20">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-lg bg-sage-600 flex items-center justify-center">
-                <Leaf className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-xl font-semibold text-warmgray-900">Lebensordner</span>
-            </Link>
-
-            <nav className="hidden md:flex items-center gap-8">
-              <Link href="#so-funktionierts" className="text-warmgray-600 hover:text-sage-600 transition-colors">
-                So funktioniert&apos;s
-              </Link>
-              <Link href="#sicherheit" className="text-warmgray-600 hover:text-sage-600 transition-colors">
-                Sicherheit
-              </Link>
-              <Link href="#preise" className="text-warmgray-600 hover:text-sage-600 transition-colors">
-                Preise
-              </Link>
-            </nav>
-
-            <div className="flex items-center gap-4">
-              <Link href="/anmelden">
-                <Button variant="ghost">Anmelden</Button>
-              </Link>
-              <Link href="/registrieren">
-                <Button>Kostenlos starten</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
+      <LandingNav />
 
       {/* Hero Section */}
       <section className="py-20 md:py-28">

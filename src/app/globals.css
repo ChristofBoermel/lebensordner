@@ -53,11 +53,13 @@
   * {
     @apply border-border;
   }
-  
+
   html {
     font-size: 17px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    max-width: 100vw;
   }
 
   /* Font size variants for accessibility */
@@ -72,10 +74,12 @@
   html.font-xlarge {
     font-size: 24px;
   }
-  
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    overflow-x: hidden;
+    max-width: 100vw;
   }
 
   *:focus-visible {
@@ -86,7 +90,7 @@
     @apply text-sage-600 hover:text-sage-700 transition-colors;
   }
 
-  button, 
+  button,
   [role="button"],
   input[type="submit"],
   input[type="button"] {
@@ -143,7 +147,7 @@
 @layer components {
   .card-elevated {
     @apply bg-card rounded-lg border border-border shadow-sm;
-    box-shadow: 
+    box-shadow:
       0 1px 3px 0 rgb(0 0 0 / 0.04),
       0 1px 2px -1px rgb(0 0 0 / 0.04);
   }
@@ -326,10 +330,21 @@
     text-wrap: balance;
   }
 
-  .animation-delay-100 { animation-delay: 100ms; }
-  .animation-delay-200 { animation-delay: 200ms; }
-  .animation-delay-300 { animation-delay: 300ms; }
-  .animation-delay-400 { animation-delay: 400ms; }
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .animation-delay-400 {
+    animation-delay: 400ms;
+  }
 }
 
 /* =================================================================

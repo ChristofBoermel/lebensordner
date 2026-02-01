@@ -38,23 +38,23 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
     const daysInMonth = lastDay.getDate()
-    
+
     // Get the day of week for the first day (0 = Sunday, adjust to Monday = 0)
     let startDay = firstDay.getDay() - 1
     if (startDay < 0) startDay = 6
-    
+
     const days: (number | null)[] = []
-    
+
     // Add empty slots for days before the first of the month
     for (let i = 0; i < startDay; i++) {
       days.push(null)
     }
-    
+
     // Add the days of the month
     for (let i = 1; i <= daysInMonth; i++) {
       days.push(i)
     }
-    
+
     return days
   }
 
@@ -75,7 +75,7 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
 
   const handleDayClick = (day: number) => {
     if (isDateDisabled(day)) return
-    
+
     const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), day)
     const formatted = newDate.toISOString().split('T')[0]
     onChange(formatted)
@@ -129,20 +129,20 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
           <Calendar className="mr-2 h-4 w-4 text-warmgray-500" />
           {value ? formatDisplayDate(value) : placeholder}
           {value && (
-            <X 
-              className="ml-auto h-4 w-4 text-warmgray-400 hover:text-warmgray-600" 
+            <X
+              className="ml-auto h-4 w-4 text-warmgray-400 hover:text-warmgray-600"
               onClick={clearDate}
             />
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 bg-white shadow-lg border border-warmgray-200" align="start">
+      <PopoverContent className="w-auto max-w-[calc(100vw-2rem)] p-0 bg-white shadow-lg border border-warmgray-200" align="start">
         <div className="p-4">
           {/* Header with month navigation */}
           <div className="flex items-center justify-between mb-4">
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={goToPrevMonth}
               className="h-8 w-8 hover:bg-warmgray-100"
             >
@@ -151,9 +151,9 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
             <span className="font-semibold text-warmgray-900">
               {MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}
             </span>
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={goToNextMonth}
               className="h-8 w-8 hover:bg-warmgray-100"
             >
@@ -199,11 +199,11 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
           </div>
 
           {/* Quick actions */}
-          <div className="flex gap-2 mt-4 pt-4 border-t border-warmgray-200">
+          <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-4 border-t border-warmgray-200">
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 text-xs h-9"
+              className="flex-1 text-xs h-9 whitespace-nowrap px-2"
               onClick={() => {
                 const today = new Date()
                 today.setFullYear(today.getFullYear() + 1)
@@ -211,12 +211,12 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
                 setIsOpen(false)
               }}
             >
-              In 1 Jahr
+              +1 Jahr
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 text-xs h-9"
+              className="flex-1 text-xs h-9 whitespace-nowrap px-2"
               onClick={() => {
                 const today = new Date()
                 today.setFullYear(today.getFullYear() + 5)
@@ -224,12 +224,12 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
                 setIsOpen(false)
               }}
             >
-              In 5 Jahren
+              +5 Jahre
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 text-xs h-9"
+              className="flex-1 text-xs h-9 whitespace-nowrap px-2"
               onClick={() => {
                 const today = new Date()
                 today.setFullYear(today.getFullYear() + 10)
@@ -237,7 +237,7 @@ export function DatePicker({ value, onChange, minDate, placeholder = 'Datum wäh
                 setIsOpen(false)
               }}
             >
-              In 10 Jahren
+              +10 Jahre
             </Button>
           </div>
         </div>

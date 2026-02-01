@@ -18,17 +18,19 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('system')
+  const [mounted, setMounted] = useState(false)
+  const [theme, setTheme] = useState<Theme>('light')
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
   const [fontSize, setFontSize] = useState<FontSize>('normal')
   const [seniorMode, setSeniorMode] = useState<boolean>(false)
 
   useEffect(() => {
-    // Load saved theme
-    const savedTheme = localStorage.getItem('theme') as Theme | null
-    if (savedTheme) {
-      setTheme(savedTheme)
-    }
+    setMounted(true)
+    // Force light theme and remove saved theme
+    setTheme('light')
+    setResolvedTheme('light')
+    localStorage.removeItem('theme')
+
     // Load saved font size
     const savedFontSize = localStorage.getItem('fontSize') as FontSize | null
     if (savedFontSize) {
@@ -44,38 +46,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const root = window.document.documentElement
 
-    // Determine resolved theme
-    let resolved: 'light' | 'dark' = 'light'
-    if (theme === 'system') {
-      resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-    } else {
-      resolved = theme
-    }
-
-    setResolvedTheme(resolved)
+    // Force light mode
+    setResolvedTheme('light')
 
     // Apply theme class
-    root.classList.remove('light', 'dark')
-    root.classList.add(resolved)
-
-    // Save to localStorage
-    localStorage.setItem('theme', theme)
+    root.classList.remove('dark')
+    root.classList.add('light')
   }, [theme])
 
-  // Listen for system theme changes
+  // Listen for system theme changes - Disabled for Version 1
   useEffect(() => {
-    if (theme !== 'system') return
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleChange = (e: MediaQueryListEvent) => {
-      setResolvedTheme(e.matches ? 'dark' : 'light')
-      document.documentElement.classList.remove('light', 'dark')
-      document.documentElement.classList.add(e.matches ? 'dark' : 'light')
-    }
-
-    mediaQuery.addEventListener('change', handleChange)
-    return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [theme])
+    // Dark mode disabled
+  }, [])
 
   // Apply font size
   useEffect(() => {

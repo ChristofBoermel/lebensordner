@@ -14,6 +14,7 @@ interface FamilyMember {
   relationship: string
   direction: 'incoming' | 'outgoing' // incoming = they added me, outgoing = I added them
   linkedAt: string | null
+  role: 'emergency_contact' | 'family_member' | null
 }
 
 export async function GET() {
@@ -35,7 +36,8 @@ export async function GET() {
         user_id,
         name,
         relationship,
-        invitation_accepted_at
+        invitation_accepted_at,
+        role
       `)
       .eq('linked_user_id', user.id)
       .eq('invitation_status', 'accepted')
@@ -63,6 +65,7 @@ export async function GET() {
             relationship: link.relationship,
             direction: 'incoming',
             linkedAt: link.invitation_accepted_at,
+            role: link.role,
           })
         }
       }
@@ -77,7 +80,8 @@ export async function GET() {
         name,
         email,
         relationship,
-        invitation_accepted_at
+        invitation_accepted_at,
+        role
       `)
       .eq('user_id', user.id)
       .eq('invitation_status', 'accepted')
@@ -95,6 +99,7 @@ export async function GET() {
       relationship: link.relationship,
       direction: 'outgoing' as const,
       linkedAt: link.invitation_accepted_at,
+      role: link.role,
     }))
 
     // Combine and deduplicate (someone might be both incoming and outgoing)

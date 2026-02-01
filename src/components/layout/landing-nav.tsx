@@ -18,12 +18,12 @@ export function LandingNav() {
             <div className="w-10 h-10 rounded-lg bg-sage-600 flex items-center justify-center">
               <Leaf className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-semibold text-warmgray-900 dark:text-warmgray-100">Lebensordner</span>
+            <span className="hidden sm:inline text-xl font-semibold text-warmgray-900 dark:text-warmgray-100">Lebensordner</span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8">
-            <Link href="#funktionen" className="text-warmgray-600 dark:text-warmgray-400 hover:text-sage-600 dark:hover:text-sage-400 transition-colors">
-              Funktionen
+          <nav className="hidden lg:flex items-center gap-8">
+            <Link href="#so-funktionierts" className="text-warmgray-600 dark:text-warmgray-400 hover:text-sage-600 dark:hover:text-sage-400 transition-colors">
+              So funktioniert&apos;s
             </Link>
             <Link href="#sicherheit" className="text-warmgray-600 dark:text-warmgray-400 hover:text-sage-600 dark:hover:text-sage-400 transition-colors">
               Sicherheit
@@ -34,20 +34,7 @@ export function LandingNav() {
           </nav>
 
           <div className="flex items-center gap-2 md:gap-4">
-            {/* Dark Mode Toggle */}
-            <button
-              onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-              className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
-              title={resolvedTheme === 'dark' ? 'Hellmodus' : 'Dunkelmodus'}
-            >
-              {resolvedTheme === 'dark' ? (
-                <Sun className="w-5 h-5 text-warmgray-600 dark:text-warmgray-400" />
-              ) : (
-                <Moon className="w-5 h-5 text-warmgray-600" />
-              )}
-            </button>
-
-            <div className="hidden md:flex items-center gap-4">
+            <div className="hidden lg:flex items-center gap-4">
               <Link href="/anmelden">
                 <Button variant="ghost">Anmelden</Button>
               </Link>
@@ -58,7 +45,7 @@ export function LandingNav() {
 
             {/* Mobile menu button */}
             <button
-              className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
+              className="lg:hidden flex items-center justify-center w-10 h-10 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               {mobileMenuOpen ? (
@@ -72,14 +59,14 @@ export function LandingNav() {
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-cream-200 dark:border-warmgray-800">
+          <div className="lg:hidden py-4 border-t border-cream-200 dark:border-warmgray-800">
             <nav className="flex flex-col gap-4">
               <Link
-                href="#funktionen"
+                href="#so-funktionierts"
                 className="text-warmgray-600 dark:text-warmgray-400 hover:text-sage-600 dark:hover:text-sage-400 transition-colors py-2"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Funktionen
+                So funktioniert&apos;s
               </Link>
               <Link
                 href="#sicherheit"

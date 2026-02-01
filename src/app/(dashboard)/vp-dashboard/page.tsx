@@ -1,11 +1,7 @@
-'use client'
+import { requireFeature } from '@/lib/auth/tier-guard'
+import FamilienUebersichtClientPage from './client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import {
-  Loader2, Users, User, Download, Mail, Calendar, CheckCircle2, ArrowRight
-} from 'lucide-react'
+export const dynamic = 'force-dynamic'
 
 interface FamilyMember {
   id: string
@@ -240,28 +236,5 @@ export default function FamilienUebersichtPage() {
             </div>
           )}
 
-          {/* Info box if user only has outgoing members */}
-          {accessibleMembers.length === 0 && outgoingMembers.length > 0 && (
-            <Card className="border-sage-200 bg-sage-50">
-              <CardContent className="pt-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-sage-100 flex items-center justify-center flex-shrink-0">
-                    <ArrowRight className="w-5 h-5 text-sage-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-warmgray-900 mb-1">So funktioniert die Familien-Übersicht</p>
-                    <p className="text-sm text-warmgray-600">
-                      Um Dokumente von Familienmitgliedern herunterzuladen, muss die andere Person Sie
-                      zuerst als Vertrauensperson hinzufügen. Bitten Sie Ihre Familienmitglieder, Sie über
-                      <span className="font-medium"> Zugriff & Familie</span> einzuladen.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-    </div>
-  )
+  return <FamilienUebersichtClientPage />
 }

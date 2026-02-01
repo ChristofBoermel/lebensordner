@@ -40,12 +40,15 @@ import { useState, useEffect } from 'react'
 import { GlobalSearch } from '@/components/search/global-search'
 import { useTheme } from '@/components/theme/theme-provider'
 
+import { TierConfig, hasFeatureAccess } from '@/lib/subscription-tiers'
+
 interface DashboardNavProps {
   user: {
     email: string
     full_name?: string | null
     role?: string | null
   }
+  tier: TierConfig
 }
 
 const navigation = [
@@ -53,7 +56,7 @@ const navigation = [
   { name: 'Dokumente', href: '/dokumente', icon: FileText },
   { name: 'Notfall & Vorsorge', href: '/notfall', icon: Heart },
   { name: 'Zugriff & Familie', href: '/zugriff', icon: Users },
-  { name: 'Familien-Übersicht', href: '/vp-dashboard', icon: Users },
+  { name: 'Familien-Übersicht', href: '/vp-dashboard', icon: Users, feature: 'familyDashboard' },
   { name: 'Erinnerungen', href: '/erinnerungen', icon: Bell },
   { name: 'Export', href: '/export', icon: FileDown },
   { name: 'Abonnement', href: '/abo', icon: CreditCard },
@@ -71,7 +74,7 @@ const fontSizeLabels = {
   xlarge: 'Sehr Groß'
 }
 
-export function DashboardNav({ user }: DashboardNavProps) {
+export function DashboardNav({ user, tier }: DashboardNavProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -79,7 +82,6 @@ export function DashboardNav({ user }: DashboardNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { theme, setTheme, resolvedTheme, fontSize, setFontSize, seniorMode, setSeniorMode } = useTheme()
 
-  // Keyboard shortcut for search (Cmd/Ctrl + K)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -87,7 +89,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
         setIsSearchOpen(true)
       }
     }
-    
+
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
@@ -104,7 +106,6 @@ export function DashboardNav({ user }: DashboardNavProps) {
 
   return (
     <>
-      {/* Global Search */}
       <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
 
       {/* Desktop Sidebar */}
@@ -178,121 +179,169 @@ export function DashboardNav({ user }: DashboardNavProps) {
               </>
             )}
 
-            {/* Logout Button - visible for elderly users */}
-            <div className="mt-4 pt-4 border-t border-warmgray-200">
+            {/* Search Button */}
+            <div className="px-4 pt-4">
               <button
-                onClick={handleLogout}
-                className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors text-red-600 hover:bg-red-50 hover:text-red-700"
+                onClick={() => setIsSearchOpen(true)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border border-warmgray-200 bg-warmgray-50 text-warmgray-500 hover:bg-warmgray-100 transition-colors"
               >
-                <LogOut className="w-5 h-5 text-red-500" />
-                Abmelden
+                <Search className="w-4 h-4" />
+                <span className="flex-1 text-left text-sm">Suchen...</span>
+                <kbd className="hidden sm:inline-flex px-1.5 py-0.5 text-xs rounded bg-warmgray-200 text-warmgray-600">⌘K</kbd>
               </button>
-            </div>
-          </nav>
-
-          {/* Accessibility Controls */}
-          <div className="border-t border-warmgray-200 px-4 py-4">
-            {/* Einfache Ansicht Toggle - prominent placement */}
-            <button
-              onClick={() => setSeniorMode(!seniorMode)}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors mb-3",
-                seniorMode
-                  ? "bg-sage-100 text-sage-700 dark:bg-sage-900/30 dark:text-sage-400"
-                  : "bg-warmgray-50 text-warmgray-600 hover:bg-warmgray-100 dark:bg-warmgray-800 dark:text-warmgray-400 dark:hover:bg-warmgray-700"
-              )}
-              title="Größere Schrift und Bedienelemente"
-            >
-              <Eye className={cn("w-5 h-5", seniorMode ? "text-sage-600 dark:text-sage-400" : "text-warmgray-400")} />
-              <span className="flex-1 text-left">Einfache Ansicht</span>
-              <div className={cn(
-                "w-10 h-6 rounded-full transition-colors relative",
-                seniorMode ? "bg-sage-600" : "bg-warmgray-300 dark:bg-warmgray-600"
-              )}>
-                <div className={cn(
-                  "absolute top-1 w-4 h-4 rounded-full bg-white transition-transform",
-                  seniorMode ? "translate-x-5" : "translate-x-1"
-                )} />
-              </div>
-            </button>
-
-            <div className="flex items-center justify-between gap-4">
-              {/* Dark Mode Toggle */}
-              <button
-                onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-                className="flex items-center justify-center w-11 h-11 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors"
-                title={resolvedTheme === 'dark' ? 'Hellmodus' : 'Dunkelmodus'}
-              >
-                {resolvedTheme === 'dark' ? (
-                  <Sun className="w-5 h-5 text-warmgray-600 dark:text-warmgray-400" />
-                ) : (
-                  <Moon className="w-5 h-5 text-warmgray-600" />
-                )}
-              </button>
-
-              {/* Font Size Control */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className="flex items-center gap-2 px-3 h-11 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors text-sm text-warmgray-600 dark:text-warmgray-400"
-                    title="Schriftgröße ändern"
-                  >
-                    <Type className="w-5 h-5" />
-                    <span className="hidden sm:inline">{fontSizeLabels[fontSize]}</span>
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                  <DropdownMenuLabel>Schriftgröße</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setFontSize('normal')}
-                    className={cn("cursor-pointer", fontSize === 'normal' && "bg-sage-50 text-sage-700")}
-                  >
-                    Normal
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setFontSize('large')}
-                    className={cn("cursor-pointer", fontSize === 'large' && "bg-sage-50 text-sage-700")}
-                  >
-                    Groß
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setFontSize('xlarge')}
-                    className={cn("cursor-pointer", fontSize === 'xlarge' && "bg-sage-50 text-sage-700")}
-                  >
-                    Sehr Groß
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </div>
 
-          {/* User Menu */}
-          <div className="border-t border-warmgray-200 p-4">
+          {/* Navigation and Accessibility Area (Scrollable) */}
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6">
+            <nav className="space-y-1">
+              {navigation.map((item) => {
+                if (item.feature && !hasFeatureAccess(tier, item.feature as any)) {
+                  return null
+                }
+
+                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors',
+                      isActive
+                        ? 'bg-sage-50 text-sage-700'
+                        : 'text-warmgray-600 hover:bg-warmgray-50 hover:text-warmgray-900'
+                    )}
+                  >
+                    <item.icon className={cn('w-5 h-5', isActive ? 'text-sage-600' : 'text-warmgray-400')} />
+                    {item.name}
+                  </Link>
+                )
+              })}
+
+              {user.role === 'admin' && (
+                <>
+                  <div className="my-4 border-t border-warmgray-200" />
+                  {adminNavigation.map((item) => {
+                    const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        className={cn(
+                          'flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors',
+                          isActive
+                            ? 'bg-red-50 text-red-700'
+                            : 'text-red-600 hover:bg-red-50 hover:text-red-700'
+                        )}
+                      >
+                        <item.icon className={cn('w-5 h-5', isActive ? 'text-red-600' : 'text-red-400')} />
+                        {item.name}
+                      </Link>
+                    )
+                  })}
+                </>
+              )}
+
+              <div className="mt-4 pt-4 border-t border-warmgray-200">
+                <button
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors text-red-600 hover:bg-red-50 hover:text-red-700"
+                >
+                  <LogOut className="w-5 h-5 text-red-500" />
+                  Abmelden
+                </button>
+              </div>
+            </nav>
+
+            {/* Accessibility Controls - now part of scrollable area */}
+            <div className="mt-6 pt-6 border-t border-warmgray-200 space-y-4">
+              <button
+                onClick={() => setSeniorMode(!seniorMode)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors",
+                  seniorMode
+                    ? "bg-sage-100 text-sage-700 dark:bg-sage-900/30 dark:text-sage-400"
+                    : "bg-warmgray-50 text-warmgray-600 hover:bg-warmgray-100 dark:bg-warmgray-800 dark:text-warmgray-400 dark:hover:bg-warmgray-700"
+                )}
+                title="Größere Schrift und Bedienelemente"
+              >
+                <Eye className={cn("w-5 h-5", seniorMode ? "text-sage-600 dark:text-sage-400" : "text-warmgray-400")} />
+                <span className="flex-1 text-left">Einfache Ansicht</span>
+                <span className={cn(
+                  "w-10 h-6 rounded-full transition-colors relative block",
+                  seniorMode ? "bg-sage-600" : "bg-warmgray-300 dark:bg-warmgray-600"
+                )}>
+                  <span className={cn(
+                    "absolute top-1 w-4 h-4 rounded-full bg-white transition-transform block",
+                    seniorMode ? "translate-x-5" : "translate-x-1"
+                  )} />
+                </span>
+              </button>
+
+              <div className="flex items-center justify-end gap-4">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="flex items-center gap-2 px-3 h-11 rounded-lg hover:bg-warmgray-100 dark:hover:bg-warmgray-800 transition-colors text-sm text-warmgray-600 dark:text-warmgray-400"
+                      title="Schriftgröße ändern"
+                    >
+                      <Type className="w-5 h-5" />
+                      <span className="hidden sm:inline">{fontSizeLabels[fontSize]}</span>
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuLabel>Schriftgröße</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setFontSize('normal')}
+                      className={cn("cursor-pointer", fontSize === 'normal' && "bg-sage-50 text-sage-700")}
+                    >
+                      Normal
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setFontSize('large')}
+                      className={cn("cursor-pointer", fontSize === 'large' && "bg-sage-50 text-sage-700")}
+                    >
+                      Groß
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setFontSize('xlarge')}
+                      className={cn("cursor-pointer", fontSize === 'xlarge' && "bg-sage-50 text-sage-700")}
+                    >
+                      Sehr Groß
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          </div>
+
+          {/* User Menu - Permanently stuck to bottom */}
+          <div className="flex-shrink-0 border-t border-warmgray-200 p-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex w-full items-center gap-3 rounded-lg px-3 py-3 hover:bg-warmgray-50 dark:hover:bg-warmgray-800 transition-colors">
                   <Avatar className="h-10 w-10 flex-shrink-0">
                     <AvatarFallback>{initials}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="text-sm font-medium text-warmgray-900 truncate">
+                  <span className="flex-1 min-w-0 text-left block">
+                    <span className="text-sm font-medium text-warmgray-900 truncate block">
                       {user.full_name || 'Benutzer'}
-                    </p>
-                    <p 
-                      className="text-xs text-warmgray-500 truncate cursor-pointer hover:text-warmgray-700"
+                    </span>
+                    <span
+                      className="text-xs text-warmgray-500 truncate cursor-pointer hover:text-warmgray-700 block"
                       onClick={(e) => {
                         e.stopPropagation()
                         navigator.clipboard.writeText(user.email)
                       }}
                       title={`${user.email} - Klicken zum Kopieren`}
                     >
-                      {user.email.length > 20 
-                        ? user.email.slice(0, 17) + '...' 
+                      {user.email.length > 20
+                        ? user.email.slice(0, 17) + '...'
                         : user.email}
-                    </p>
-                  </div>
+                    </span>
+                  </span>
                   <ChevronDown className="w-4 h-4 text-warmgray-400 flex-shrink-0" />
                 </button>
               </DropdownMenuTrigger>
