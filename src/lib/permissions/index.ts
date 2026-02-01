@@ -2,11 +2,11 @@
 // Centralized permission handling for family dashboard access
 
 export {
+  canAccessUserDocuments,
+  getAccessibleOwners,
   getFamilyPermissions,
-  getFamilyRelationship,
-  getOwnerSubscriptionTier,
-  isOwner,
-  requireFamilyPermission,
+  getUserType,
+  type AccessibleOwner,
+  type FamilyAccessResult,
   type FamilyPermissions,
-  type FamilyMemberContext,
 } from './family-permissions'
