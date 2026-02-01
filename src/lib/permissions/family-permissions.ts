@@ -152,3 +152,47 @@ export async function getUserType(userId: string): Promise<'owner' | 'family_mem
   // Default to owner (new users who haven't set up anything)
   return 'owner'
 }
+
+export interface FamilyPermissions {
+  isOwner: boolean
+  canDownload: boolean
+  canView: boolean
+  ownerName?: string
+}
+
+/**
+ * Get family permissions for a viewer accessing an owner's documents
+ * Used by the family documents page to check download permissions
+ */
+export async function getFamilyPermissions(
+  viewerId: string,
+  ownerId: string
+): Promise<FamilyPermissions> {
+  // Check if viewer is the owner
+  if (viewerId === ownerId) {
+    return {
+      isOwner: true,
+      canDownload: true,
+      canView: true,
+    }
+  }
+
+  const accessResult = await canAccessUserDocuments(viewerId, ownerId)
+
+  if (!accessResult.hasAccess) {
+    return {
+      isOwner: false,
+      canDownload: false,
+      canView: false,
+    }
+  }
+
+  // For now, if they have access, they can download
+  // This could be extended to check subscription tier in the future
+  return {
+    isOwner: false,
+    canDownload: true,
+    canView: true,
+    ownerName: accessResult.ownerName,
+  }
+}
