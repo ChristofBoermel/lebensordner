@@ -519,7 +519,7 @@ export default function OnboardingPage() {
           </div>
         )
 
-      case 'documents':
+      case 'documents': {
         const categoryIcons: Record<string, React.ComponentType<{ className?: string }>> = {
           user: User,
           wallet: Wallet,
@@ -642,6 +642,7 @@ export default function OnboardingPage() {
             </div>
           </div>
         )
+      }
 
       case 'emergency':
         return (
