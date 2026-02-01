@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
-import { getFamilyPermissions } from '@/lib/permissions/family-permissions'
+import JSZip from 'jszip'
+import { canAccessUserDocuments } from '@/lib/permissions/family-permissions'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,36 +30,17 @@ export async function GET(request: NextRequest) {
 
     const adminClient = getSupabaseAdmin()
 
-    // Check family permissions using the new centralized logic
-    const permissions = await getFamilyPermissions(user.id, ownerId)
+    // Check if current user has permission to access owner's documents
+    const accessResult = await canAccessUserDocuments(user.id, ownerId)
 
-    // If not owner and not a family member with view access
-    if (!permissions.isOwner && !permissions.canView) {
+    if (!accessResult.hasAccess) {
       return NextResponse.json(
         { error: 'Keine Berechtigung für diesen Download' },
         { status: 403 }
       )
     }
 
-    // If family member (not owner), check download permission based on subscription
-    if (!permissions.isOwner && !permissions.canDownload) {
-      return NextResponse.json(
-        {
-          error: 'Download erfordert Premium-Abonnement des Besitzers',
-          code: 'PREMIUM_REQUIRED'
-        },
-        { status: 403 }
-      )
-    }
-
-    // Get owner profile
-    const { data: ownerProfile } = await adminClient
-      .from('profiles')
-      .select('full_name, email')
-      .eq('id', ownerId)
-      .single()
-
-    const ownerName = ownerProfile?.full_name || ownerProfile?.email || 'Lebensordner'
+    const ownerName = accessResult.ownerName || 'Lebensordner'
 
     // Fetch documents - either selected ones or all
     let documentsQuery = adminClient

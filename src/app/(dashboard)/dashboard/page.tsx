@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { DOCUMENT_CATEGORIES, type DocumentCategory } from '@/types/database'
 import { DashboardContent } from '@/components/dashboard/dashboard-content'
+import { getUserType, getAccessibleOwners } from '@/lib/permissions/family-permissions'
 
 interface DocumentRow {
   category: DocumentCategory
@@ -39,8 +40,18 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single() as { data: ProfileRow | null }
 
-  // Redirect to onboarding if no profile or not completed
+  // Check if user is primarily a family member (viewer only)
+  // If they haven't completed onboarding but have access to others' documents,
+  // redirect them to the family dashboard instead
   if (!profile || !profile.onboarding_completed) {
+    const userType = await getUserType(user.id)
+
+    // If user is a family member only (no own documents, no onboarding, but has access to others)
+    if (userType === 'family_member') {
+      redirect('/vp-dashboard')
+    }
+
+    // Otherwise, send them to onboarding as usual
     redirect('/onboarding')
   }
 

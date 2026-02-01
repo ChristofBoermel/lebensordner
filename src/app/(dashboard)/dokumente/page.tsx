@@ -537,7 +537,15 @@ export default function DocumentsPage() {
         error_type: 'document_upload_failed',
         category: uploadCategory,
       })
-      setUploadError(error.message || 'Fehler beim Hochladen. Bitte versuchen Sie es erneut.')
+      // Check for document limit error from server
+      const errorObj = error as { message?: string; code?: string }
+      if (errorObj?.message?.includes('Document limit') || errorObj?.code === 'check_violation') {
+        setUploadError('Dokumentenlimit erreicht. Bitte upgraden Sie für mehr Dokumente.')
+        setUpgradeModalFeature('document')
+        setUpgradeModalOpen(true)
+      } else {
+        setUploadError('Fehler beim Hochladen. Bitte versuchen Sie es erneut.')
+      }
       console.error('Upload error:', error)
     } finally {
       setIsUploading(false)
