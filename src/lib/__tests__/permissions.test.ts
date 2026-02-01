@@ -21,53 +21,41 @@ describe('Family Permissions | Rollen & Berechtigungen', () => {
     ;(createClient as any).mockReturnValue(mockSupabase)
   })
 
-  describe('getFamilyPermissions(ownerTier)', () => {
-    it('should return canDownload=false for Basic Owner', async () => {
-      // Arrange: Family member linked to basic owner
+  describe('getFamilyPermissions', () => {
+    it('should grant access to linked family member', async () => {
+      // Arrange: Family member linked via trusted_persons
       mockSupabase.single
         .mockResolvedValueOnce({
-          data: { user_id: 'owner-basic', role: 'family_member' },
+          data: { id: 'tp-1', name: 'Test', access_level: 'immediate', relationship: 'child', user_id: 'owner-1' },
           error: null,
         })
         .mockResolvedValueOnce({
-          data: { subscription_status: 'basic' },
+          data: { full_name: 'Owner Name', email: 'owner@test.com' },
           error: null,
         })
 
       // Act
-      const result = await getFamilyPermissions('family-1', 'owner-basic')
-
-      // Assert
-      expect(result.canView).toBe(true)
-      expect(result.canDownload).toBe(false)
-      expect(result.isOwner).toBe(false)
-      expect(result.ownerSubscription).toBe('basic')
-    })
-
-    it('should return canDownload=true for Premium Owner', async () => {
-      // Arrange: Family member linked to premium owner
-      mockSupabase.single
-        .mockResolvedValueOnce({
-          data: { user_id: 'owner-premium', role: 'family_member' },
-          error: null,
-        })
-        .mockResolvedValueOnce({
-          data: { subscription_status: 'premium' },
-          error: null,
-        })
-
-      // Act
-      const result = await getFamilyPermissions('family-1', 'owner-premium')
+      const result = await getFamilyPermissions('family-1', 'owner-1')
 
       // Assert
       expect(result.canView).toBe(true)
       expect(result.canDownload).toBe(true)
       expect(result.isOwner).toBe(false)
-      expect(result.ownerSubscription).toBe('premium')
+      expect(result.ownerName).toBe('Owner Name')
+    })
+
+    it('should grant full access to owner viewing own documents', async () => {
+      // Act - owner checking own documents (no DB call needed)
+      const result = await getFamilyPermissions('owner-1', 'owner-1')
+
+      // Assert
+      expect(result.canView).toBe(true)
+      expect(result.canDownload).toBe(true)
+      expect(result.isOwner).toBe(true)
     })
 
     it('should deny all access for non-family member', async () => {
-      // Arrange: No relationship exists
+      // Arrange: No relationship exists in trusted_persons
       mockSupabase.single.mockResolvedValueOnce({
         data: null,
         error: { code: 'PGRST116' },
@@ -80,37 +68,6 @@ describe('Family Permissions | Rollen & Berechtigungen', () => {
       expect(result.canView).toBe(false)
       expect(result.canDownload).toBe(false)
       expect(result.isOwner).toBe(false)
-    })
-
-    it('should allow full access for owner checking own documents', async () => {
-      // Arrange: User is the owner
-      mockSupabase.single.mockResolvedValueOnce({
-        data: null,
-        error: { code: 'PGRST116' },
-      })
-
-      // Act
-      const result = await getFamilyPermissions('owner-123', 'owner-123')
-
-      // Assert
-      expect(result.isOwner).toBe(true)
-      expect(result.canView).toBe(true)
-      expect(result.canDownload).toBe(true)
-    })
-
-    it('should deny access for emergency_contact role (not family_member)', async () => {
-      // Arrange: Linked as emergency_contact, not family_member
-      mockSupabase.single.mockResolvedValueOnce({
-        data: { user_id: 'owner-123', role: 'emergency_contact' },
-        error: null,
-      })
-
-      // Act
-      const result = await getFamilyPermissions('emergency-1', 'owner-123')
-
-      // Assert
-      expect(result.canView).toBe(false)
-      expect(result.canDownload).toBe(false)
     })
   })
 })
