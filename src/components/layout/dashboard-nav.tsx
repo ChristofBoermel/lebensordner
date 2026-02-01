@@ -132,8 +132,8 @@ export function DashboardNav({ user }: DashboardNavProps) {
             </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-1">
+          {/* Navigation - scrollable to handle Senior Mode larger text */}
+          <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
             {navigation.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
               return (

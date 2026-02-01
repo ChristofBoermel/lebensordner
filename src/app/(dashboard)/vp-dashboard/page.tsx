@@ -107,10 +107,10 @@ export default function FamilienUebersichtPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8 px-4 sm:px-0">
       <div className="page-header">
-        <h1 className="text-3xl font-serif font-semibold text-warmgray-900">Familien-Übersicht</h1>
-        <p className="text-lg text-warmgray-600 mt-2">
+        <h1 className="text-2xl sm:text-3xl font-serif font-semibold text-warmgray-900">Familien-Übersicht</h1>
+        <p className="text-base sm:text-lg text-warmgray-600 mt-2">
           Zugriff auf Lebensordner Ihrer Familienmitglieder
         </p>
       </div>
@@ -140,7 +140,7 @@ export default function FamilienUebersichtPage() {
           {accessibleMembers.length > 0 && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold text-warmgray-900">Zugriff auf Dokumente</h2>
+                <h2 className="text-lg sm:text-xl font-semibold text-warmgray-900">Zugriff auf Dokumente</h2>
                 <p className="text-warmgray-600 text-sm mt-1">
                   Diese Personen haben Sie als Vertrauensperson hinzugefügt
                 </p>
@@ -149,24 +149,25 @@ export default function FamilienUebersichtPage() {
               <div className="grid gap-4">
                 {accessibleMembers.map((member) => (
                   <Card key={member.id} className="hover:border-sage-300 transition-colors">
-                    <CardContent className="pt-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-full bg-sage-100 flex items-center justify-center">
-                            <User className="w-7 h-7 text-sage-600" />
+                    <CardContent className="pt-4 sm:pt-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4">
+                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
+                            <User className="w-6 h-6 sm:w-7 sm:h-7 text-sage-600" />
                           </div>
-                          <div>
-                            <h3 className="font-semibold text-warmgray-900 text-lg">{member.name}</h3>
-                            <p className="text-warmgray-600">{member.relationship}</p>
-                            <div className="flex items-center gap-4 mt-1 text-sm text-warmgray-500">
-                              <span className="flex items-center gap-1">
-                                <Mail className="w-3.5 h-3.5" />
-                                {member.email}
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-semibold text-warmgray-900 text-base sm:text-lg truncate">{member.name}</h3>
+                            <p className="text-warmgray-600 text-sm sm:text-base">{member.relationship}</p>
+                            <div className="flex flex-col xs:flex-row xs:flex-wrap items-start xs:items-center gap-1 xs:gap-3 mt-1 text-sm text-warmgray-500">
+                              <span className="flex items-center gap-1 truncate max-w-full">
+                                <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span className="truncate">{member.email}</span>
                               </span>
                               {member.linkedAt && (
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="w-3.5 h-3.5" />
-                                  Verbunden seit {new Date(member.linkedAt).toLocaleDateString('de-DE')}
+                                <span className="flex items-center gap-1 text-xs sm:text-sm">
+                                  <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                                  <span className="hidden xs:inline">Verbunden seit </span>
+                                  {new Date(member.linkedAt).toLocaleDateString('de-DE')}
                                 </span>
                               )}
                             </div>
@@ -176,7 +177,7 @@ export default function FamilienUebersichtPage() {
                         <Button
                           onClick={() => handleDownloadDocuments(member.id, member.name)}
                           disabled={downloadingFor === member.id}
-                          className="min-w-[180px]"
+                          className="w-full sm:w-auto min-h-[52px] sm:min-h-[44px] sm:min-w-[180px] text-base sm:text-sm"
                         >
                           {downloadingFor === member.id ? (
                             <>
@@ -202,7 +203,7 @@ export default function FamilienUebersichtPage() {
           {outgoingMembers.length > 0 && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold text-warmgray-900">Ihre Vertrauenspersonen</h2>
+                <h2 className="text-lg sm:text-xl font-semibold text-warmgray-900">Ihre Vertrauenspersonen</h2>
                 <p className="text-warmgray-600 text-sm mt-1">
                   Diese Personen haben Ihre Einladung akzeptiert und können Ihre Dokumente sehen
                 </p>
@@ -211,25 +212,23 @@ export default function FamilienUebersichtPage() {
               <div className="grid gap-4">
                 {outgoingMembers.map((member) => (
                   <Card key={member.id} className="opacity-80">
-                    <CardContent className="pt-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-full bg-warmgray-100 flex items-center justify-center">
-                            <User className="w-7 h-7 text-warmgray-500" />
+                    <CardContent className="pt-4 sm:pt-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4">
+                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-warmgray-100 flex items-center justify-center flex-shrink-0">
+                            <User className="w-6 h-6 sm:w-7 sm:h-7 text-warmgray-500" />
                           </div>
-                          <div>
-                            <h3 className="font-semibold text-warmgray-900 text-lg">{member.name}</h3>
-                            <p className="text-warmgray-600">{member.relationship}</p>
-                            <div className="flex items-center gap-4 mt-1 text-sm text-warmgray-500">
-                              <span className="flex items-center gap-1">
-                                <Mail className="w-3.5 h-3.5" />
-                                {member.email}
-                              </span>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-semibold text-warmgray-900 text-base sm:text-lg truncate">{member.name}</h3>
+                            <p className="text-warmgray-600 text-sm sm:text-base">{member.relationship}</p>
+                            <div className="flex items-center gap-1 mt-1 text-sm text-warmgray-500">
+                              <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span className="truncate">{member.email}</span>
                             </div>
                           </div>
                         </div>
 
-                        <span className="text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full flex items-center gap-1">
+                        <span className="text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full flex items-center gap-1 self-start sm:self-center whitespace-nowrap">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           Hat Zugriff auf Ihre Dokumente
                         </span>

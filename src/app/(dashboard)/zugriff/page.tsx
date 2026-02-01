@@ -230,6 +230,7 @@ export default function ZugriffPage() {
             access_level: 'immediate', // Default to immediate access for family dashboard
             access_delay_hours: 0,
             notes: form.notes || null,
+            role: 'family_member', // Mark as family member (viewer only)
           })
 
         if (error) throw error

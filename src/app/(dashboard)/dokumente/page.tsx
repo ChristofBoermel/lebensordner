@@ -1182,13 +1182,13 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8 px-4 sm:px-0">
       {/* Header */}
       <div className="page-header">
-        <h1 className="text-3xl font-serif font-semibold text-warmgray-900">
+        <h1 className="text-2xl sm:text-3xl font-serif font-semibold text-warmgray-900">
           Dokumente
         </h1>
-        <p className="text-lg text-warmgray-600 mt-2">
+        <p className="text-base sm:text-lg text-warmgray-600 mt-2">
           Organisieren Sie Ihre wichtigen Unterlagen nach Kategorien und Unterordnern
         </p>
       </div>

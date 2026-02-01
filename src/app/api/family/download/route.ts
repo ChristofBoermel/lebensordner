@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import JSZip from 'jszip'
+import { canAccessUserDocuments } from '@/lib/permissions/family-permissions'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,31 +28,17 @@ export async function GET(request: Request) {
 
     const adminClient = getSupabaseAdmin()
 
-    // Check if current user is linked as a trusted person for the owner
-    const { data: trustedPerson, error: tpError } = await adminClient
-      .from('trusted_persons')
-      .select('id, name, access_level')
-      .eq('user_id', ownerId)
-      .eq('linked_user_id', user.id)
-      .eq('invitation_status', 'accepted')
-      .eq('is_active', true)
-      .single()
+    // Check if current user has permission to access owner's documents
+    const accessResult = await canAccessUserDocuments(user.id, ownerId)
 
-    if (tpError || !trustedPerson) {
+    if (!accessResult.hasAccess) {
       return NextResponse.json(
         { error: 'Keine Berechtigung für diesen Download' },
         { status: 403 }
       )
     }
 
-    // Get owner profile
-    const { data: ownerProfile } = await adminClient
-      .from('profiles')
-      .select('full_name, email')
-      .eq('id', ownerId)
-      .single()
-
-    const ownerName = ownerProfile?.full_name || ownerProfile?.email || 'Lebensordner'
+    const ownerName = accessResult.ownerName || 'Lebensordner'
 
     // Get all documents for the owner
     const { data: documents, error: docsError } = await adminClient
