@@ -439,16 +439,18 @@ export default function ZugriffPage() {
           </div>
 
           <Tabs defaultValue="active">
-            <TabsList>
-              <TabsTrigger value="active">
-                Aktiv ({activePersons.length})
-              </TabsTrigger>
-              {inactivePersons.length > 0 && (
-                <TabsTrigger value="inactive">
-                  Deaktiviert ({inactivePersons.length})
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+              <TabsList className="w-full sm:w-auto">
+                <TabsTrigger value="active" className="flex-1 sm:flex-initial">
+                  Aktiv ({activePersons.length})
                 </TabsTrigger>
-              )}
-            </TabsList>
+                {inactivePersons.length > 0 && (
+                  <TabsTrigger value="inactive" className="flex-1 sm:flex-initial">
+                    Deaktiviert ({inactivePersons.length})
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            </div>
 
             <TabsContent value="active" className="mt-6">
               {activePersons.length > 0 ? (
@@ -456,85 +458,90 @@ export default function ZugriffPage() {
                   {activePersons.map((person) => (
                     <Card key={person.id}>
                       <CardContent className="pt-6">
-                        <div className="flex items-start justify-between">
-                          <div className="flex gap-4">
-                            <div className="w-12 h-12 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
-                              <Users className="w-6 h-6 text-sage-600" />
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                          <div className="flex gap-3 sm:gap-4 min-w-0">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
+                              <Users className="w-5 h-5 sm:w-6 sm:h-6 text-sage-600" />
                             </div>
-                            <div>
-                              <h3 className="font-semibold text-warmgray-900">{person.name}</h3>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-semibold text-warmgray-900 truncate">{person.name}</h3>
                               <p className="text-sm text-warmgray-600">{person.relationship}</p>
 
-                              <div className="flex items-center gap-4 mt-2 text-sm text-warmgray-500">
-                                <span className="flex items-center gap-1">
-                                  <Mail className="w-4 h-4" />
-                                  {person.email}
+                              <div className="flex flex-col xs:flex-row xs:flex-wrap items-start xs:items-center gap-1 xs:gap-3 mt-2 text-sm text-warmgray-500">
+                                <span className="flex items-center gap-1 truncate max-w-full">
+                                  <Mail className="w-4 h-4 flex-shrink-0" />
+                                  <span className="truncate">{person.email}</span>
                                 </span>
                                 {person.phone && (
                                   <span className="flex items-center gap-1">
-                                    <Phone className="w-4 h-4" />
+                                    <Phone className="w-4 h-4 flex-shrink-0" />
                                     {person.phone}
                                   </span>
                                 )}
                               </div>
 
                               {person.notes && (
-                                <p className="text-sm text-warmgray-500 mt-2 italic">
+                                <p className="text-sm text-warmgray-500 mt-2 italic line-clamp-2">
                                   {person.notes}
                                 </p>
                               )}
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          {/* Actions - stack on mobile, row on desktop */}
+                          <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end pl-13 sm:pl-0">
                             {(!person.invitation_status || person.invitation_status === 'pending') && (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleSendInvite(person.id)}
                                 title="Einladung senden"
-                                className="text-sage-600 hover:text-sage-700"
+                                className="text-sage-600 hover:text-sage-700 min-h-[44px] sm:min-h-0"
                               >
                                 <Send className="w-4 h-4 mr-1" />
                                 Einladen
                               </Button>
                             )}
                             {person.invitation_status === 'sent' && (
-                              <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                              <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1.5 rounded whitespace-nowrap">
                                 Einladung gesendet
                               </span>
                             )}
                             {person.invitation_status === 'accepted' && (
-                              <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded flex items-center gap-1">
+                              <span className="text-xs text-green-600 bg-green-50 px-2 py-1.5 rounded flex items-center gap-1 whitespace-nowrap">
                                 <CheckCircle2 className="w-3 h-3" />
                                 Verbunden
                               </span>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleOpenDialog(person)}
-                              title="Bearbeiten"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleToggleActive(person)}
-                              title="Deaktivieren"
-                            >
-                              <XCircle className="w-4 h-4 text-warmgray-400" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(person.id)}
-                              title="Löschen"
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            <div className="flex items-center">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleOpenDialog(person)}
+                                title="Bearbeiten"
+                                className="min-w-[44px] min-h-[44px]"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleToggleActive(person)}
+                                title="Deaktivieren"
+                                className="min-w-[44px] min-h-[44px]"
+                              >
+                                <XCircle className="w-4 h-4 text-warmgray-400" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDelete(person.id)}
+                                title="Löschen"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 min-w-[44px] min-h-[44px]"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </CardContent>
@@ -559,23 +566,24 @@ export default function ZugriffPage() {
                   {inactivePersons.map((person) => (
                     <Card key={person.id} className="opacity-60">
                       <CardContent className="pt-6">
-                        <div className="flex items-start justify-between">
-                          <div className="flex gap-4">
-                            <div className="w-12 h-12 rounded-full bg-warmgray-100 flex items-center justify-center flex-shrink-0">
-                              <Users className="w-6 h-6 text-warmgray-400" />
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                          <div className="flex gap-3 sm:gap-4 min-w-0">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-warmgray-100 flex items-center justify-center flex-shrink-0">
+                              <Users className="w-5 h-5 sm:w-6 sm:h-6 text-warmgray-400" />
                             </div>
-                            <div>
-                              <h3 className="font-semibold text-warmgray-700">{person.name}</h3>
+                            <div className="min-w-0">
+                              <h3 className="font-semibold text-warmgray-700 truncate">{person.name}</h3>
                               <p className="text-sm text-warmgray-500">{person.relationship}</p>
-                              <p className="text-sm text-warmgray-500 mt-1">{person.email}</p>
+                              <p className="text-sm text-warmgray-500 mt-1 truncate">{person.email}</p>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 pl-13 sm:pl-0">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleToggleActive(person)}
+                              className="min-h-[44px] sm:min-h-0"
                             >
                               <CheckCircle2 className="w-4 h-4 mr-1" />
                               Aktivieren
@@ -584,7 +592,7 @@ export default function ZugriffPage() {
                               variant="ghost"
                               size="icon"
                               onClick={() => handleDelete(person.id)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 min-w-[44px] min-h-[44px]"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -616,7 +624,7 @@ export default function ZugriffPage() {
 
       {/* Download Link Dialog */}
       <Dialog open={isDownloadLinkDialogOpen} onOpenChange={setIsDownloadLinkDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Link2 className="w-5 h-5 text-sage-600" />
@@ -729,7 +737,7 @@ export default function ZugriffPage() {
 
       {/* Add/Edit Person Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingPerson ? 'Person bearbeiten' : 'Person zur Familien-Übersicht einladen'}
