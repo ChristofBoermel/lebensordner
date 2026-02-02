@@ -166,10 +166,14 @@ export function getTierFromSubscription(
     return SUBSCRIPTION_TIERS.premium
   }
 
-  // Default to premium for legacy subscriptions with active status
-  // Note: We map unknown active subs to premium (safe default)
+  // If subscription is active but priceId is missing or unrecognized,
+  // default to basic tier (safe default to prevent over-granting permissions)
   if (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') {
-    return SUBSCRIPTION_TIERS.premium
+    if (!priceId) {
+      return SUBSCRIPTION_TIERS.basic
+    }
+    // Unrecognized priceId with active subscription - default to basic
+    return SUBSCRIPTION_TIERS.basic
   }
 
   return SUBSCRIPTION_TIERS.free
@@ -232,5 +236,44 @@ export function canUploadFile(
 // Get active tiers for display (excludes deprecated)
 export function getActiveTiers(): TierConfig[] {
   return ACTIVE_TIERS.map(id => SUBSCRIPTION_TIERS[id])
+}
+
+// Check if owner's tier allows document downloads for family members
+export function allowsFamilyDownloads(tier: TierConfig): boolean {
+  return tier.id === 'premium'
+}
+
+// Get tier display information
+export function getTierDisplayInfo(tier: TierConfig): {
+  name: string
+  color: string
+  badge: string
+  viewOnly: boolean
+} {
+  switch (tier.id) {
+    case 'premium':
+      return { name: 'Premium', color: 'text-purple-600', badge: 'bg-purple-100', viewOnly: false }
+    case 'basic':
+      return { name: 'Basis', color: 'text-blue-600', badge: 'bg-blue-100', viewOnly: true }
+    default:
+      return { name: 'Kostenlos', color: 'text-gray-600', badge: 'bg-gray-100', viewOnly: false }
+  }
+}
+
+// Get the download link type based on tier
+export function getDownloadLinkType(tier: TierConfig): 'view' | 'download' | null {
+  switch (tier.id) {
+    case 'premium':
+      return 'download'
+    case 'basic':
+      return 'view'
+    default:
+      return null
+  }
+}
+
+// Check if user can create download links
+export function canCreateDownloadLinks(tier: TierConfig): boolean {
+  return tier.id === 'basic' || tier.id === 'premium'
 }
 

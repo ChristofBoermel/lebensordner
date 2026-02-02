@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
+import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscription-tiers'
 
 const getResend = () => new Resend(process.env.RESEND_API_KEY)
 
@@ -27,12 +28,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Vertrauensperson nicht gefunden' }, { status: 404 })
     }
 
-    // Get owner profile
+    // Get owner profile with subscription info
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, email')
+      .select('full_name, email, subscription_status, stripe_price_id')
       .eq('id', user.id)
       .single()
+
+    // Determine owner's tier
+    const ownerTier = getTierFromSubscription(
+      profile?.subscription_status || null,
+      profile?.stripe_price_id || null
+    )
+    const canDownload = allowsFamilyDownloads(ownerTier)
 
     // Generate invitation token if not exists
     const invitationToken = trustedPerson.invitation_token || crypto.randomUUID()
@@ -65,6 +73,8 @@ export async function POST(request: Request) {
           ownerName,
           invitationLink,
           relationship: trustedPerson.relationship || 'Vertrauensperson',
+          ownerTier: ownerTier.id,
+          canDownload,
         }),
       })
       
@@ -94,6 +104,8 @@ interface InvitationEmailData {
   ownerName: string
   invitationLink: string
   relationship: string
+  ownerTier: 'free' | 'basic' | 'premium'
+  canDownload: boolean
 }
 
 function generateInvitationEmail(data: InvitationEmailData): string {
@@ -128,10 +140,46 @@ function generateInvitationEmail(data: InvitationEmailData): string {
         <h3 style="color: #166534; font-size: 16px; margin: 0 0 12px 0;">🔐 Was bedeutet das?</h3>
         <ul style="color: #374151; font-size: 14px; margin: 0; padding-left: 20px;">
           <li style="margin-bottom: 8px;">Sie können im Notfall auf wichtige Dokumente zugreifen</li>
-          <li style="margin-bottom: 8px;">Sie sehen nur die für Sie freigegebenen Informationen</li>
+          <li style="margin-bottom: 8px;">${data.canDownload
+            ? 'Sie können Dokumente ansehen und herunterladen'
+            : data.ownerTier === 'basic'
+              ? 'Sie können Dokumente ansehen (Download mit Premium)'
+              : `Zugriff wird verfügbar, sobald ${data.ownerName} ein Abo abschließt`}</li>
           <li>Sie können jederzeit den Zugriff beenden</li>
         </ul>
       </div>
+
+      ${data.canDownload ? `
+      <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          <span style="font-size: 20px;">✅</span>
+          <div>
+            <h4 style="color: #166534; font-size: 14px; font-weight: 600; margin: 0 0 4px 0;">Voller Zugriff</h4>
+            <p style="color: #166534; font-size: 13px; margin: 0;">Sie können alle Dokumente von ${data.ownerName} ansehen und herunterladen.</p>
+          </div>
+        </div>
+      </div>
+      ` : data.ownerTier === 'basic' ? `
+      <div style="background-color: #dbeafe; border: 1px solid #93c5fd; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          <span style="font-size: 20px;">👁️</span>
+          <div>
+            <h4 style="color: #1e40af; font-size: 14px; font-weight: 600; margin: 0 0 4px 0;">Ansichts-Zugriff</h4>
+            <p style="color: #1e40af; font-size: 13px; margin: 0;">Sie können alle Dokumente von ${data.ownerName} ansehen. Downloads sind mit einem Premium-Abo verfügbar.</p>
+          </div>
+        </div>
+      </div>
+      ` : `
+      <div style="background-color: #f3f4f6; border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          <span style="font-size: 20px;">ℹ️</span>
+          <div>
+            <h4 style="color: #374151; font-size: 14px; font-weight: 600; margin: 0 0 4px 0;">Eingeschränkter Zugriff</h4>
+            <p style="color: #374151; font-size: 13px; margin: 0;">${data.ownerName} benötigt ein kostenpflichtiges Abo, um Ihnen vollen Zugriff zu gewähren.</p>
+          </div>
+        </div>
+      </div>
+      `}
 
       <p style="color: #374151; font-size: 16px; margin: 0 0 24px 0;">
         Klicken Sie auf den Button unten, um die Einladung anzunehmen und sich zu registrieren:

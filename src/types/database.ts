@@ -124,6 +124,7 @@ export interface Database {
           email_reminder_days_before: number
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
+          stripe_price_id: string | null
           subscription_status: string | null
           subscription_current_period_end: string | null
           two_factor_enabled: boolean
@@ -151,6 +152,7 @@ export interface Database {
           email_reminder_days_before?: number
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          stripe_price_id?: string | null
           subscription_status?: string | null
           subscription_current_period_end?: string | null
           two_factor_enabled?: boolean
@@ -178,6 +180,7 @@ export interface Database {
           email_reminder_days_before?: number
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          stripe_price_id?: string | null
           subscription_status?: string | null
           subscription_current_period_end?: string | null
           two_factor_enabled?: boolean
@@ -382,6 +385,7 @@ export interface Database {
           used_at: string | null
           recipient_name: string | null
           recipient_email: string | null
+          link_type: 'view' | 'download'
         }
         Insert: {
           id?: string
@@ -392,6 +396,7 @@ export interface Database {
           used_at?: string | null
           recipient_name?: string | null
           recipient_email?: string | null
+          link_type?: 'view' | 'download'
         }
         Update: {
           id?: string
@@ -402,6 +407,7 @@ export interface Database {
           used_at?: string | null
           recipient_name?: string | null
           recipient_email?: string | null
+          link_type?: 'view' | 'download'
         }
       }
     }
@@ -415,6 +421,22 @@ export interface Database {
       [_ in never]: never
     }
   }
+}
+
+// Document metadata for family/VP document viewing
+export interface DocumentMetadata {
+  id: string
+  title: string
+  file_name: string
+  file_path: string
+  file_type: string
+  file_size: number
+  category: string
+  subcategory: string | null
+  expiry_date: string | null
+  notes: string | null
+  created_at: string
+  streamToken: string | null
 }
 
 export type Profile = Database['public']['Tables']['profiles']['Row']

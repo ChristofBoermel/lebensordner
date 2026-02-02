@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { randomBytes } from 'crypto'
+import { getTierFromSubscription, getDownloadLinkType, canCreateDownloadLinks } from '@/lib/subscription-tiers'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,14 +35,31 @@ export async function POST(request: Request) {
       )
     }
 
-    // Get user profile for the email
+    // Get user profile for the email and subscription info
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, email')
+      .select('full_name, email, subscription_status, stripe_price_id')
       .eq('id', user.id)
       .single()
 
     const senderName = profile?.full_name || profile?.email || 'Unbekannt'
+
+    // Determine user's tier and link type
+    const userTier = getTierFromSubscription(
+      profile?.subscription_status || null,
+      profile?.stripe_price_id || null
+    )
+
+    // Check if user can create download links
+    if (!canCreateDownloadLinks(userTier)) {
+      return NextResponse.json(
+        { error: 'Download-Links sind nur mit einem kostenpflichtigen Abo verfügbar. Bitte upgraden Sie Ihr Konto.' },
+        { status: 403 }
+      )
+    }
+
+    // Get link type based on tier
+    const linkType = getDownloadLinkType(userTier)!
 
     // Generate a secure random token
     const token = randomBytes(32).toString('hex')
@@ -58,6 +76,7 @@ export async function POST(request: Request) {
         expires_at: expiresAt.toISOString(),
         recipient_name: recipientName,
         recipient_email: recipientEmail,
+        link_type: linkType,
       })
 
     if (insertError) {
@@ -72,12 +91,35 @@ export async function POST(request: Request) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://lebensordner.org'
     const downloadUrl = `${baseUrl}/herunterladen/${token}`
 
-    // Send email to recipient
+    // Send email to recipient with tier-specific content
+    const isViewOnly = linkType === 'view'
+    const emailSubject = isViewOnly
+      ? `${senderName} teilt Dokumente mit Ihnen (Ansicht)`
+      : `${senderName} teilt Dokumente zum Download mit Ihnen`
+    const buttonText = isViewOnly ? 'Dokumente ansehen' : 'Dokumente herunterladen'
+    const actionDescription = isViewOnly
+      ? 'Klicken Sie auf den folgenden Link, um alle Dokumente im Browser anzusehen:'
+      : 'Klicken Sie auf den folgenden Link, um alle Dokumente als ZIP-Datei herunterzuladen:'
+    const tierInfo = isViewOnly
+      ? `<div style="background-color: #dbeafe; border: 1px solid #3b82f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 0; color: #1e40af;">
+            <strong>Hinweis:</strong> Sie können die Dokumente ansehen, aber nicht herunterladen. Der Besitzer hat ein Basis-Abo.
+          </p>
+        </div>`
+      : `<div style="background-color: #f3e8ff; border: 1px solid #a855f7; padding: 16px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 0; color: #7c3aed;">
+            Mit dem Premium-Abo des Besitzers können Sie alle Dokumente als ZIP-Datei herunterladen.
+          </p>
+        </div>`
+    const usageNote = isViewOnly
+      ? 'Dieser Link ist <strong>12 Stunden</strong> gültig und kann mehrfach zum Ansehen verwendet werden.'
+      : 'Dieser Link ist <strong>12 Stunden</strong> gültig und kann nur einmal verwendet werden.'
+
     try {
       await getResend().emails.send({
         from: 'Lebensordner <noreply@lebensordner.org>',
         to: recipientEmail,
-        subject: `${senderName} teilt Dokumente mit Ihnen`,
+        subject: emailSubject,
         html: `
           <!DOCTYPE html>
           <html>
@@ -99,22 +141,24 @@ export async function POST(request: Request) {
             </p>
 
             <p style="color: #374151;">
-              Klicken Sie auf den folgenden Link, um alle Dokumente als ZIP-Datei herunterzuladen:
+              ${actionDescription}
             </p>
 
             <div style="margin: 24px 0; text-align: center;">
               <a href="${downloadUrl}"
                  style="display: inline-block; background-color: #5d6b5d; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 500;">
-                Dokumente herunterladen
+                ${buttonText}
               </a>
             </div>
+
+            ${tierInfo}
 
             <div style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 16px; border-radius: 8px; margin: 24px 0;">
               <p style="margin: 0; color: #92400e; font-weight: 500;">
                 Wichtiger Hinweis:
               </p>
               <p style="margin: 8px 0 0 0; color: #92400e;">
-                Dieser Link ist <strong>12 Stunden</strong> gültig und kann nur einmal verwendet werden.
+                ${usageNote}
                 Der Link läuft ab am: <strong>${expiresAt.toLocaleDateString('de-DE')} um ${expiresAt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr</strong>
               </p>
             </div>
@@ -142,7 +186,10 @@ export async function POST(request: Request) {
       success: true,
       downloadUrl,
       expiresAt: expiresAt.toISOString(),
-      message: 'Download-Link wurde erstellt und per E-Mail gesendet',
+      linkType,
+      message: linkType === 'view'
+        ? 'Ansichts-Link wurde erstellt und per E-Mail gesendet'
+        : 'Download-Link wurde erstellt und per E-Mail gesendet',
     })
   } catch (error: any) {
     console.error('Create download link error:', error)

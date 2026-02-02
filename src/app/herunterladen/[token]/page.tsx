@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Download, Loader2, AlertTriangle, CheckCircle2, Leaf, XCircle, Clock } from 'lucide-react'
+import { Download, Loader2, AlertTriangle, CheckCircle2, Leaf, XCircle, Clock, Eye } from 'lucide-react'
 import Link from 'next/link'
 
 interface TokenInfo {
@@ -12,6 +12,7 @@ interface TokenInfo {
   used: boolean
   senderName?: string
   expiresAt?: string
+  linkType?: 'view' | 'download'
   error?: string
 }
 
@@ -36,6 +37,7 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
             used: false,
             senderName: data.senderName,
             expiresAt: data.expiresAt,
+            linkType: data.linkType || 'download',
           })
         } else {
           setTokenInfo({
@@ -59,7 +61,14 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
     checkToken()
   }, [resolvedParams.token])
 
-  const handleDownload = async () => {
+  const handleAction = async () => {
+    // For view mode, redirect to the view page
+    if (tokenInfo?.linkType === 'view') {
+      window.location.href = `/herunterladen/${resolvedParams.token}/view`
+      return
+    }
+
+    // For download mode, proceed with the download
     setIsDownloading(true)
     setError(null)
 
@@ -137,9 +146,18 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
                     <strong>{tokenInfo.senderName}</strong> hat Dokumente mit Ihnen geteilt.
                   </p>
                   <p className="text-sm text-warmgray-500">
-                    Klicken Sie auf den Button, um alle Dokumente als ZIP-Datei herunterzuladen.
+                    {tokenInfo.linkType === 'view'
+                      ? 'Klicken Sie auf den Button, um alle Dokumente im Browser anzusehen.'
+                      : 'Klicken Sie auf den Button, um alle Dokumente als ZIP-Datei herunterzuladen.'}
                   </p>
                 </div>
+
+                {tokenInfo.linkType === 'view' && (
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm text-center">
+                    <Eye className="w-4 h-4 inline mr-1" />
+                    Nur-Ansicht-Modus: Sie können die Dokumente ansehen, aber nicht herunterladen.
+                  </div>
+                )}
 
                 {error && (
                   <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 flex items-center gap-2">
@@ -149,7 +167,7 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
                 )}
 
                 <Button
-                  onClick={handleDownload}
+                  onClick={handleAction}
                   disabled={isDownloading}
                   className="w-full"
                   size="lg"
@@ -158,6 +176,11 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
                     <>
                       <Loader2 className="w-5 h-5 animate-spin mr-2" />
                       Wird heruntergeladen...
+                    </>
+                  ) : tokenInfo.linkType === 'view' ? (
+                    <>
+                      <Eye className="w-5 h-5 mr-2" />
+                      Dokumente ansehen
                     </>
                   ) : (
                     <>
@@ -179,7 +202,9 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
                 )}
 
                 <p className="text-xs text-warmgray-400 text-center">
-                  Nach dem Download wird dieser Link deaktiviert und kann nicht erneut verwendet werden.
+                  {tokenInfo.linkType === 'view'
+                    ? 'Dieser Link kann mehrfach zum Ansehen verwendet werden, solange er gültig ist.'
+                    : 'Nach dem Download wird dieser Link deaktiviert und kann nicht erneut verwendet werden.'}
                 </p>
               </>
             )

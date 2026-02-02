@@ -35,6 +35,14 @@ export async function GET(
       )
     }
 
+    // Check if this is a view-only link
+    if (downloadToken.link_type === 'view') {
+      return NextResponse.json(
+        { error: 'Dieser Link ist nur zum Ansehen. Download ist nur mit Premium-Abo verfügbar.' },
+        { status: 403 }
+      )
+    }
+
     // Check if token has expired
     if (new Date(downloadToken.expires_at) < new Date()) {
       return NextResponse.json(

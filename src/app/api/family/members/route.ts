@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
+import { getTierFromSubscription, allowsFamilyDownloads, getTierDisplayInfo } from '@/lib/subscription-tiers'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,6 +15,14 @@ interface FamilyMember {
   relationship: string
   direction: 'incoming' | 'outgoing' // incoming = they added me, outgoing = I added them
   linkedAt: string | null
+  tier?: {
+    id: string
+    name: string
+    color: string
+    badge: string
+    canDownload: boolean
+    viewOnly: boolean
+  }
 }
 
 export async function GET() {
@@ -51,11 +60,19 @@ export async function GET() {
       for (const link of incomingLinks) {
         const { data: profile } = await adminClient
           .from('profiles')
-          .select('full_name, email')
+          .select('full_name, email, subscription_status, stripe_price_id')
           .eq('id', link.user_id)
           .single()
 
         if (profile) {
+          // Get tier information for the owner
+          const ownerTier = getTierFromSubscription(
+            profile.subscription_status || null,
+            profile.stripe_price_id || null
+          )
+          const tierDisplay = getTierDisplayInfo(ownerTier)
+          const canDownload = allowsFamilyDownloads(ownerTier)
+
           incomingMembers.push({
             id: link.user_id,
             name: profile.full_name || profile.email.split('@')[0],
@@ -63,6 +80,14 @@ export async function GET() {
             relationship: link.relationship,
             direction: 'incoming',
             linkedAt: link.invitation_accepted_at,
+            tier: {
+              id: ownerTier.id,
+              name: tierDisplay.name,
+              color: tierDisplay.color,
+              badge: tierDisplay.badge,
+              canDownload,
+              viewOnly: tierDisplay.viewOnly,
+            },
           })
         }
       }

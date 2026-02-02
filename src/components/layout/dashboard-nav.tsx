@@ -51,7 +51,7 @@ interface DashboardNavProps {
   tier: TierConfig
 }
 
-const navigation = [
+const navigation: Array<{ name: string; href: string; icon: any; feature?: string }> = [
   { name: 'Übersicht', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Dokumente', href: '/dokumente', icon: FileText },
   { name: 'Notfall & Vorsorge', href: '/notfall', icon: Heart },
@@ -388,6 +388,10 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
             </div>
             <nav className="px-4 py-6 space-y-1">
               {navigation.map((item) => {
+                if (item.feature && !hasFeatureAccess(tier, item.feature as any)) {
+                  return null
+                }
+
                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
                 return (
                   <Link

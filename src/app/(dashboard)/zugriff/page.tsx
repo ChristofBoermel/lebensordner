@@ -32,11 +32,16 @@ import {
   Clock,
   Download,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Info,
+  Eye,
+  Lock
 } from 'lucide-react'
 import type { TrustedPerson } from '@/types/database'
-import { SUBSCRIPTION_TIERS, getTierFromSubscription, canPerformAction, type TierConfig } from '@/lib/subscription-tiers'
+import { SUBSCRIPTION_TIERS, getTierFromSubscription, canPerformAction, allowsFamilyDownloads, type TierConfig } from '@/lib/subscription-tiers'
 import Link from 'next/link'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { TierStatusCard, InfoBadge } from '@/components/ui/info-badge'
 
 export default function ZugriffPage() {
   const [trustedPersons, setTrustedPersons] = useState<TrustedPerson[]>([])
@@ -52,7 +57,7 @@ export default function ZugriffPage() {
     name: '',
     email: '',
   })
-  const [generatedLink, setGeneratedLink] = useState<{ url: string; expiresAt: string } | null>(null)
+  const [generatedLink, setGeneratedLink] = useState<{ url: string; expiresAt: string; linkType?: 'view' | 'download' } | null>(null)
   const [isGeneratingLink, setIsGeneratingLink] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
 
@@ -140,6 +145,12 @@ export default function ZugriffPage() {
   }
 
   const handleGenerateDownloadLink = async () => {
+    // Tier gate: Basic and Premium users can create links
+    if (userTier.id === 'free') {
+      setError('Links sind nur mit einem kostenpflichtigen Abo verfügbar. Bitte upgraden Sie Ihr Konto.')
+      return
+    }
+
     if (!downloadLinkForm.name || !downloadLinkForm.email) {
       setError('Bitte füllen Sie Name und E-Mail aus.')
       return
@@ -167,6 +178,7 @@ export default function ZugriffPage() {
       setGeneratedLink({
         url: data.downloadUrl,
         expiresAt: data.expiresAt,
+        linkType: data.linkType || 'download',
       })
     } catch (err: any) {
       setError(err.message)
@@ -311,6 +323,7 @@ export default function ZugriffPage() {
   }
 
   return (
+    <TooltipProvider>
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Header */}
       <div className="page-header">
@@ -322,6 +335,9 @@ export default function ZugriffPage() {
         </p>
       </div>
 
+      {/* Tier Status Card */}
+      <TierStatusCard tier={userTier.id} />
+
       {/* Two Options Cards */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* Option 1: One-Time Download Link */}
@@ -331,8 +347,24 @@ export default function ZugriffPage() {
               <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center">
                 <Link2 className="w-6 h-6 text-sage-600" />
               </div>
-              <div>
-                <CardTitle className="text-lg">Einmal-Download-Link</CardTitle>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-lg">Einmal-Download-Link</CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="w-4 h-4 text-warmgray-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      {userTier.id === 'premium' ? (
+                        <p>Mit Ihrem Premium-Abo können Empfänger alle Dokumente herunterladen</p>
+                      ) : userTier.id === 'basic' ? (
+                        <p>Mit Ihrem Basis-Abo können Empfänger Dokumente nur ansehen, nicht herunterladen</p>
+                      ) : (
+                        <p>Upgraden Sie auf Basis oder Premium, um diese Funktion zu nutzen</p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
                 <CardDescription>Für schnellen Zugriff ohne Anmeldung</CardDescription>
               </div>
             </div>
@@ -344,22 +376,60 @@ export default function ZugriffPage() {
                 <span>Link ist 12 Stunden gültig</span>
               </li>
               <li className="flex items-start gap-2">
-                <Download className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
-                <span>Alle Dokumente als ZIP-Datei</span>
+                {userTier.id === 'premium' ? (
+                  <>
+                    <Download className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
+                    <span>Alle Dokumente als ZIP-Datei</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
+                    <span>Alle Dokumente ansehen (nur Ansicht)</span>
+                  </>
+                )}
               </li>
               <li className="flex items-start gap-2">
                 <Shield className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
                 <span>Keine Registrierung nötig</span>
               </li>
             </ul>
-            <Button
-              onClick={handleOpenDownloadLinkDialog}
-              className="w-full"
-              disabled={maxTrustedPersons === 0}
-            >
-              <Link2 className="w-4 h-4 mr-2" />
-              Download-Link erstellen
-            </Button>
+            {userTier.id === 'premium' ? (
+              <Button
+                onClick={handleOpenDownloadLinkDialog}
+                className="w-full"
+              >
+                <Link2 className="w-4 h-4 mr-2" />
+                Download-Link erstellen
+              </Button>
+            ) : userTier.id === 'basic' ? (
+              <div className="space-y-2">
+                <Button
+                  onClick={handleOpenDownloadLinkDialog}
+                  className="w-full"
+                  variant="outline"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Ansichts-Link erstellen
+                </Button>
+                <p className="text-xs text-center text-warmgray-500">
+                  <Link href="/abo" className="text-sage-600 hover:underline">Upgrade auf Premium</Link> für Download-Links
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Button
+                  disabled
+                  className="w-full opacity-50"
+                  variant="outline"
+                >
+                  <Lock className="w-4 h-4 mr-2" />
+                  Kostenpflichtige Funktion
+                </Button>
+                <p className="text-xs text-center text-warmgray-500">
+                  <Link href="/abo" className="text-sage-600 hover:underline">Jetzt upgraden</Link> um Links zu erstellen
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -370,8 +440,24 @@ export default function ZugriffPage() {
               <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center">
                 <Users className="w-6 h-6 text-sage-600" />
               </div>
-              <div>
-                <CardTitle className="text-lg">Familien-Übersicht</CardTitle>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-lg">Familien-Übersicht</CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="w-4 h-4 text-warmgray-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      {userTier.id === 'premium' ? (
+                        <p>Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen</p>
+                      ) : userTier.id === 'basic' ? (
+                        <p>Ihre Vertrauenspersonen können Dokumente nur ansehen (Upgrade auf Premium für Downloads)</p>
+                      ) : (
+                        <p>Upgraden Sie auf ein kostenpflichtiges Abo, um diese Funktion zu nutzen</p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
                 <CardDescription>Dauerhafter Zugang mit eigenem Konto</CardDescription>
               </div>
             </div>
@@ -426,6 +512,39 @@ export default function ZugriffPage() {
         </Card>
       )}
 
+      {/* Upgrade prompt for Basic tier */}
+      {userTier.id === 'basic' && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-4">
+              <Download className="w-6 h-6 text-orange-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-orange-900 mb-1">Upgrade auf Premium für Download-Zugriff</p>
+                <p className="text-sm text-orange-800 mb-3">
+                  Mit Ihrem Basis-Abo können Ihre Vertrauenspersonen Dokumente nur ansehen. Upgraden Sie auf Premium, damit sie Dokumente auch herunterladen können.
+                </p>
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Eye className="w-4 h-4 text-blue-600" />
+                    <span className="text-orange-800">Aktuell: <strong>Nur Ansicht</strong></span>
+                  </div>
+                  <span className="text-orange-400">→</span>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Download className="w-4 h-4 text-green-600" />
+                    <span className="text-orange-800">Mit Premium: <strong>Ansicht + Download</strong></span>
+                  </div>
+                </div>
+                <Link href="/abo">
+                  <Button size="sm" variant="outline" className="border-orange-300 hover:bg-orange-100">
+                    Auf Premium upgraden
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Trusted Persons List */}
       {trustedPersons.length > 0 && (
         <div className="space-y-4">
@@ -454,7 +573,10 @@ export default function ZugriffPage() {
               {activePersons.length > 0 ? (
                 <div className="space-y-4">
                   {activePersons.map((person) => (
-                    <Card key={person.id}>
+                    <Card key={person.id} className={`border-l-4 ${
+                      userTier.id === 'premium' ? 'border-l-green-500' :
+                      userTier.id === 'basic' ? 'border-l-blue-500' : 'border-l-warmgray-300'
+                    }`}>
                       <CardContent className="pt-6">
                         <div className="flex items-start justify-between">
                           <div className="flex gap-4">
@@ -462,7 +584,10 @@ export default function ZugriffPage() {
                               <Users className="w-6 h-6 text-sage-600" />
                             </div>
                             <div>
-                              <h3 className="font-semibold text-warmgray-900">{person.name}</h3>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-semibold text-warmgray-900">{person.name}</h3>
+                                <InfoBadge type={userTier.id} variant="compact" />
+                              </div>
                               <p className="text-sm text-warmgray-600">{person.relationship}</p>
 
                               <div className="flex items-center gap-4 mt-2 text-sm text-warmgray-500">
@@ -619,29 +744,55 @@ export default function ZugriffPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Link2 className="w-5 h-5 text-sage-600" />
-              Einmal-Download-Link erstellen
+              {userTier.id === 'premium' ? (
+                <>
+                  <Link2 className="w-5 h-5 text-sage-600" />
+                  Einmal-Download-Link erstellen
+                </>
+              ) : (
+                <>
+                  <Eye className="w-5 h-5 text-sage-600" />
+                  Ansichts-Link erstellen
+                </>
+              )}
             </DialogTitle>
             <DialogDescription>
-              Erstellen Sie einen Link, mit dem die Person alle Ihre Dokumente als ZIP-Datei herunterladen kann.
-              Der Link ist 12 Stunden gültig und kann nur einmal verwendet werden.
+              {userTier.id === 'premium' ? (
+                <>Erstellen Sie einen Link, mit dem die Person alle Ihre Dokumente als ZIP-Datei herunterladen kann.
+                Der Link ist 12 Stunden gültig und kann nur einmal verwendet werden.</>
+              ) : (
+                <>Erstellen Sie einen Link, mit dem die Person alle Ihre Dokumente im Browser ansehen kann.
+                Der Link ist 12 Stunden gültig. Upgrade auf Premium für Download-Links.</>
+              )}
             </DialogDescription>
           </DialogHeader>
 
           {generatedLink ? (
             <div className="space-y-4">
-              <div className="p-4 rounded-lg bg-green-50 border border-green-200">
+              <div className={`p-4 rounded-lg ${generatedLink.linkType === 'view' ? 'bg-blue-50 border border-blue-200' : 'bg-green-50 border border-green-200'}`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  <span className="font-medium text-green-800">Link erstellt und per E-Mail gesendet!</span>
+                  <CheckCircle2 className={`w-5 h-5 ${generatedLink.linkType === 'view' ? 'text-blue-600' : 'text-green-600'}`} />
+                  <span className={`font-medium ${generatedLink.linkType === 'view' ? 'text-blue-800' : 'text-green-800'}`}>
+                    {generatedLink.linkType === 'view' ? 'Ansichts-Link erstellt und per E-Mail gesendet!' : 'Download-Link erstellt und per E-Mail gesendet!'}
+                  </span>
                 </div>
-                <p className="text-sm text-green-700">
+                <p className={`text-sm ${generatedLink.linkType === 'view' ? 'text-blue-700' : 'text-green-700'}`}>
                   {downloadLinkForm.name} wurde per E-Mail benachrichtigt.
                 </p>
               </div>
 
+              {generatedLink.linkType === 'view' && (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm">
+                  <Eye className="w-4 h-4 inline mr-1" />
+                  Mit diesem Link kann die Person Ihre Dokumente nur ansehen, nicht herunterladen.
+                  <Link href="/abo" className="block mt-1 text-sage-600 hover:underline">
+                    Upgrade auf Premium für Download-Links
+                  </Link>
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label>Download-Link</Label>
+                <Label>{generatedLink.linkType === 'view' ? 'Ansichts-Link' : 'Download-Link'}</Label>
                 <div className="flex gap-2">
                   <Input
                     value={generatedLink.url}
@@ -819,5 +970,6 @@ export default function ZugriffPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   )
 }

@@ -82,7 +82,7 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
   // Senior Mode View
   if (seniorMode) {
     return (
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6 px-4 sm:px-6">
         {/* Header */}
         <div className="page-header">
           <h1 className="text-3xl font-serif font-semibold text-warmgray-900">
@@ -91,14 +91,14 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
         </div>
 
         {/* Main Action Box */}
-        <Card className="border-sage-200 border-2">
+        <Card className="border-sage-200 border-2 mx-4 sm:mx-0">
           <CardHeader className="pb-4">
             <CardTitle className="text-xl text-center">
               Was möchten Sie als Nächstes erledigen?
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 gap-3 sm:gap-4">
               <Button asChild size="lg" className="w-full min-h-[4rem] h-auto py-3 text-lg justify-start gap-4 whitespace-normal">
                 <Link href="/dokumente?upload=true">
                   <span className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
@@ -131,7 +131,7 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
 
         {/* Reminders - only if there are any */}
         {reminders && reminders.length > 0 && (
-          <Card>
+          <Card className="mx-4 sm:mx-0">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Calendar className="w-5 h-5 text-amber-500" />
@@ -167,7 +167,7 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
         )}
 
         {/* Activities - collapsed by default */}
-        <Card>
+        <Card className="mx-4 sm:mx-0">
           <CardHeader
             className="cursor-pointer hover:bg-warmgray-50 transition-colors rounded-t-lg"
             onClick={() => setActivitiesExpanded(!activitiesExpanded)}
@@ -212,7 +212,7 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
 
   // Normal View (unchanged)
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="page-header">
         <h1 className="text-3xl font-serif font-semibold text-warmgray-900">
@@ -233,7 +233,7 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
                 Wie gut sind Ihre wichtigen Lebensinformationen aktuell organisiert?
               </CardDescription>
             </div>
-            <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${statusInfo.bgColor} ${statusInfo.color}`}>
+            <div className={`flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-sm sm:text-base ${statusInfo.bgColor} ${statusInfo.color}`}>
               <StatusIcon className="w-5 h-5" />
               <span className="font-medium">{statusInfo.label}</span>
             </div>
@@ -247,10 +247,10 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
             </div>
             <Progress value={completionPercentage} className="h-3" />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 pt-4">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${categoriesWithDocs > 0 ? 'bg-sage-100' : 'bg-warmgray-100'}`}>
-                  <FileText className={`w-5 h-5 ${categoriesWithDocs > 0 ? 'text-sage-600' : 'text-warmgray-400'}`} />
+                <div className={`w-12 h-12 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center ${categoriesWithDocs > 0 ? 'bg-sage-100' : 'bg-warmgray-100'}`}>
+                  <FileText className={`w-6 h-6 sm:w-5 sm:h-5 ${categoriesWithDocs > 0 ? 'text-sage-600' : 'text-warmgray-400'}`} />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-warmgray-900">
@@ -261,8 +261,8 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
               </div>
 
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${hasTrustedPersons ? 'bg-sage-100' : 'bg-warmgray-100'}`}>
-                  <Users className={`w-5 h-5 ${hasTrustedPersons ? 'text-sage-600' : 'text-warmgray-400'}`} />
+                <div className={`w-12 h-12 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center ${hasTrustedPersons ? 'bg-sage-100' : 'bg-warmgray-100'}`}>
+                  <Users className={`w-6 h-6 sm:w-5 sm:h-5 ${hasTrustedPersons ? 'text-sage-600' : 'text-warmgray-400'}`} />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-warmgray-900">
@@ -273,8 +273,8 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
               </div>
 
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${profile?.onboarding_completed ? 'bg-sage-100' : 'bg-warmgray-100'}`}>
-                  <CheckCircle2 className={`w-5 h-5 ${profile?.onboarding_completed ? 'text-sage-600' : 'text-warmgray-400'}`} />
+                <div className={`w-12 h-12 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center ${profile?.onboarding_completed ? 'bg-sage-100' : 'bg-warmgray-100'}`}>
+                  <CheckCircle2 className={`w-6 h-6 sm:w-5 sm:h-5 ${profile?.onboarding_completed ? 'text-sage-600' : 'text-warmgray-400'}`} />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-warmgray-900">
@@ -288,7 +288,7 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Quick Actions */}
         <div className="lg:col-span-2">
           <Card>
@@ -297,29 +297,29 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
               <CardDescription>Die wichtigsten Aktionen auf einen Blick</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 <Link href="/dokumente?upload=true" className="block h-full">
-                  <div className="category-card text-center cursor-pointer h-full flex flex-col items-center justify-center py-6">
-                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center mb-3">
-                      <Upload className="w-6 h-6 text-sage-600" />
+                  <div className="category-card text-center cursor-pointer h-full flex flex-col items-center justify-center py-8 sm:py-6">
+                    <div className="w-14 h-14 sm:w-12 sm:h-12 rounded-lg bg-sage-100 flex items-center justify-center mb-3">
+                      <Upload className="w-7 h-7 sm:w-6 sm:h-6 text-sage-600" />
                     </div>
                     <p className="font-medium text-warmgray-900">Dokument hinzufügen</p>
                   </div>
                 </Link>
 
                 <Link href="/zugriff?add=true" className="block h-full">
-                  <div className="category-card text-center cursor-pointer h-full flex flex-col items-center justify-center py-6">
-                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center mb-3">
-                      <Users className="w-6 h-6 text-sage-600" />
+                  <div className="category-card text-center cursor-pointer h-full flex flex-col items-center justify-center py-8 sm:py-6">
+                    <div className="w-14 h-14 sm:w-12 sm:h-12 rounded-lg bg-sage-100 flex items-center justify-center mb-3">
+                      <Users className="w-7 h-7 sm:w-6 sm:h-6 text-sage-600" />
                     </div>
                     <p className="font-medium text-warmgray-900">Person hinzufügen</p>
                   </div>
                 </Link>
 
                 <Link href="/export" className="block h-full">
-                  <div className="category-card text-center cursor-pointer h-full flex flex-col items-center justify-center py-6">
-                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center mb-3">
-                      <Printer className="w-6 h-6 text-sage-600" />
+                  <div className="category-card text-center cursor-pointer h-full flex flex-col items-center justify-center py-8 sm:py-6">
+                    <div className="w-14 h-14 sm:w-12 sm:h-12 rounded-lg bg-sage-100 flex items-center justify-center mb-3">
+                      <Printer className="w-7 h-7 sm:w-6 sm:h-6 text-sage-600" />
                     </div>
                     <p className="font-medium text-warmgray-900">Übersicht drucken</p>
                   </div>
@@ -384,14 +384,14 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-2 sm:gap-3">
             {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
               const docCount = documents?.filter(d => d.category === key).length || 0
               return (
                 <Link key={key} href={`/dokumente?kategorie=${key}`} className="block">
-                  <div className="text-center p-4 rounded-lg border border-warmgray-200 hover:border-sage-300 hover:bg-sage-50 transition-colors cursor-pointer h-full flex flex-col justify-center min-h-[100px]">
-                    <p className="text-xs font-medium text-warmgray-900 mb-1 line-clamp-2">{category.name}</p>
-                    <p className="text-lg font-semibold text-sage-600">{docCount}</p>
+                  <div className="text-center p-3 sm:p-4 rounded-lg border border-warmgray-200 hover:border-sage-300 hover:bg-sage-50 transition-colors cursor-pointer h-full flex flex-col justify-center min-h-[100px] sm:min-h-[110px]">
+                    <p className="text-xs sm:text-sm font-medium text-warmgray-900 mb-1 line-clamp-2">{category.name}</p>
+                    <p className="text-lg sm:text-xl font-semibold text-sage-600">{docCount}</p>
                     <p className="text-xs text-warmgray-500">Dokument{docCount !== 1 ? 'e' : ''}</p>
                   </div>
                 </Link>

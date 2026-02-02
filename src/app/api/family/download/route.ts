@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import JSZip from 'jszip'
+import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscription-tiers'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,12 +45,25 @@ export async function GET(request: Request) {
       )
     }
 
-    // Get owner profile
+    // Get owner profile with subscription info
     const { data: ownerProfile } = await adminClient
       .from('profiles')
-      .select('full_name, email')
+      .select('full_name, email, subscription_status, stripe_price_id')
       .eq('id', ownerId)
       .single()
+
+    // Check owner's tier for download permission
+    const ownerTier = getTierFromSubscription(
+      ownerProfile?.subscription_status || null,
+      ownerProfile?.stripe_price_id || null
+    )
+
+    if (!allowsFamilyDownloads(ownerTier)) {
+      return NextResponse.json(
+        { error: 'Der Besitzer dieses Lebensordners hat ein Basis-Abo. Downloads sind nur mit Premium verfügbar. Bitte kontaktieren Sie den Besitzer für ein Upgrade.' },
+        { status: 403 }
+      )
+    }
 
     const ownerName = ownerProfile?.full_name || ownerProfile?.email || 'Lebensordner'
 

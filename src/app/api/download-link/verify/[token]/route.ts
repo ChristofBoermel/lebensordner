@@ -63,6 +63,7 @@ export async function GET(
       valid: true,
       senderName,
       expiresAt: downloadToken.expires_at,
+      linkType: downloadToken.link_type || 'download',
     })
   } catch (error: any) {
     console.error('Verify token error:', error)
