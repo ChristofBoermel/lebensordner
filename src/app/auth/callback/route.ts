@@ -43,12 +43,23 @@ export async function GET(request: Request) {
 
         // Link any pending trusted person invitations
         if (data.user.email) {
-          await supabaseAdmin
+          console.log('Attempting to link trusted persons for new user email:', data.user.email)
+
+          const { data: updateResult, error: linkError } = await supabaseAdmin
             .from('trusted_persons')
             .update({ linked_user_id: data.user.id })
             .eq('email', data.user.email)
             .eq('invitation_status', 'accepted')
             .is('linked_user_id', null)
+            .select('id, name, user_id')
+
+          if (linkError) {
+            console.error('Error linking trusted persons:', linkError)
+          } else if (updateResult && updateResult.length > 0) {
+            console.log('Successfully linked trusted person records:', updateResult)
+          } else {
+            console.log('No pending trusted person invitations found for email:', data.user.email)
+          }
         }
 
         // Always go to onboarding for new users
@@ -57,12 +68,21 @@ export async function GET(request: Request) {
 
       // For existing users, also check for pending links
       if (data.user.email) {
-        await supabaseAdmin
+        console.log('Checking for pending trusted person links for existing user:', data.user.email)
+
+        const { data: updateResult, error: linkError } = await supabaseAdmin
           .from('trusted_persons')
           .update({ linked_user_id: data.user.id })
           .eq('email', data.user.email)
           .eq('invitation_status', 'accepted')
           .is('linked_user_id', null)
+          .select('id, name, user_id')
+
+        if (linkError) {
+          console.error('Error linking trusted persons for existing user:', linkError)
+        } else if (updateResult && updateResult.length > 0) {
+          console.log('Successfully linked trusted person records for existing user:', updateResult)
+        }
       }
       
       // If onboarding completed, go to dashboard, otherwise onboarding

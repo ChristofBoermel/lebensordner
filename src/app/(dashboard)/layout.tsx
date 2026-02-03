@@ -11,7 +11,7 @@ async function NavWithTier({ user }: { user: any }) {
   // Fetch tier and profile in parallel for speed
   const [tier, { data: profile }] = await Promise.all([
     getUserTier(),
-    supabase.from('profiles').select('full_name, role').eq('id', user.id).single()
+    supabase.from('profiles').select('full_name, role, profile_picture_url').eq('id', user.id).single()
   ])
 
   return (
@@ -19,7 +19,8 @@ async function NavWithTier({ user }: { user: any }) {
       user={{
         email: user.email || '',
         full_name: profile?.full_name,
-        role: profile?.role
+        role: profile?.role,
+        profile_picture_url: profile?.profile_picture_url
       }}
       tier={tier}
     />

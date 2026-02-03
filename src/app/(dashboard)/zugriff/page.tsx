@@ -208,12 +208,30 @@ export default function ZugriffPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
 
+      const normalizedEmail = form.email.toLowerCase().trim()
+
       if (editingPerson) {
+        // Check for duplicate email when editing (exclude current person)
+        // Use case-insensitive comparison with ilike
+        const { data: duplicateCheck } = await supabase
+          .from('trusted_persons')
+          .select('id')
+          .eq('user_id', user.id)
+          .ilike('email', normalizedEmail)
+          .neq('id', editingPerson.id)
+          .maybeSingle()
+
+        if (duplicateCheck) {
+          setError('Diese E-Mail-Adresse wurde bereits hinzugefügt.')
+          setIsSaving(false)
+          return
+        }
+
         const { error } = await supabase
           .from('trusted_persons')
           .update({
             name: form.name,
-            email: form.email,
+            email: normalizedEmail,
             phone: form.phone || null,
             relationship: form.relationship,
             notes: form.notes || null,
@@ -231,12 +249,27 @@ export default function ZugriffPage() {
           return
         }
 
+        // Check for duplicate email when adding new person
+        // Use case-insensitive comparison with ilike
+        const { data: duplicateCheck } = await supabase
+          .from('trusted_persons')
+          .select('id')
+          .eq('user_id', user.id)
+          .ilike('email', normalizedEmail)
+          .maybeSingle()
+
+        if (duplicateCheck) {
+          setError('Diese E-Mail-Adresse wurde bereits hinzugefügt.')
+          setIsSaving(false)
+          return
+        }
+
         const { error } = await supabase
           .from('trusted_persons')
           .insert({
             user_id: user.id,
             name: form.name,
-            email: form.email,
+            email: normalizedEmail,
             phone: form.phone || null,
             relationship: form.relationship,
             access_level: 'immediate', // Default to immediate access for family dashboard

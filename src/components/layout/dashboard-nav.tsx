@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   LayoutDashboard,
   FileText,
@@ -47,6 +47,7 @@ interface DashboardNavProps {
     email: string
     full_name?: string | null
     role?: string | null
+    profile_picture_url?: string | null
   }
   tier: TierConfig
 }
@@ -266,6 +267,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
               <DropdownMenuTrigger asChild>
                 <button className="flex w-full items-center gap-3 rounded-lg px-3 py-3 hover:bg-warmgray-50 dark:hover:bg-warmgray-800 transition-colors">
                   <Avatar className="h-10 w-10 flex-shrink-0">
+                    {user.profile_picture_url && <AvatarImage src={user.profile_picture_url} alt={user.full_name || 'Profilbild'} />}
                     <AvatarFallback>{initials}</AvatarFallback>
                   </Avatar>
                   <span className="flex-1 min-w-0 text-left block">
@@ -345,6 +347,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
           <DropdownMenuTrigger asChild>
             <button className="p-1 flex-shrink-0">
               <Avatar className="h-8 w-8">
+                {user.profile_picture_url && <AvatarImage src={user.profile_picture_url} alt={user.full_name || 'Profilbild'} />}
                 <AvatarFallback className="text-sm">{initials}</AvatarFallback>
               </Avatar>
             </button>

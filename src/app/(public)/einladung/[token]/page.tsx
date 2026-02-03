@@ -10,6 +10,7 @@ import Link from 'next/link'
 interface InvitationData {
   id: string
   name: string
+  email: string
   relationship: string
   access_level: string
   owner_name: string
@@ -62,7 +63,7 @@ export default function InvitationPage() {
       const response = await fetch('/api/invitation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, action: 'accept' }),
+        body: JSON.stringify({ token, action: 'accept', email: invitation?.email }),
       })
 
       if (!response.ok) {
@@ -140,7 +141,7 @@ export default function InvitationPage() {
                 Erstellen Sie ein Konto, um im Notfall auf die freigegebenen Dokumente zugreifen zu können.
               </p>
               <Button asChild>
-                <Link href="/registrieren">Konto erstellen</Link>
+                <Link href={`/registrieren?email=${encodeURIComponent(invitation?.email || '')}&invited=true`}>Konto erstellen</Link>
               </Button>
             </div>
           ) : declined ? (

@@ -28,6 +28,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Vertrauensperson nicht gefunden' }, { status: 404 })
     }
 
+    // Check for duplicate email (another trusted person with the same email for this user)
+    // Use case-insensitive comparison with ilike
+    const { data: existingPerson } = await supabase
+      .from('trusted_persons')
+      .select('id')
+      .eq('user_id', user.id)
+      .ilike('email', trustedPerson.email)
+      .neq('id', trustedPersonId)
+      .maybeSingle()
+
+    if (existingPerson) {
+      return NextResponse.json(
+        { error: 'Diese E-Mail-Adresse wurde bereits als Vertrauensperson hinzugefügt' },
+        { status: 400 }
+      )
+    }
+
     // Get owner profile with subscription info
     const { data: profile } = await supabase
       .from('profiles')

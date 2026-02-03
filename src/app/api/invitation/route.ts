@@ -25,6 +25,7 @@ export async function GET(request: Request) {
       .select(`
         id,
         name,
+        email,
         relationship,
         access_level,
         invitation_status,
@@ -44,6 +45,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       id: data.id,
       name: data.name,
+      email: data.email,
       relationship: data.relationship,
       access_level: data.access_level,
       invitation_status: data.invitation_status,
@@ -57,7 +59,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { token, action } = await request.json()
+    const { token, action, email } = await request.json()
 
     if (!token || !action) {
       return NextResponse.json({ error: 'Token und Aktion erforderlich' }, { status: 400 })
@@ -74,7 +76,48 @@ export async function POST(request: Request) {
     }
 
     if (action === 'accept') {
+      // Validate email is provided for acceptance
+      if (!email || typeof email !== 'string') {
+        return NextResponse.json({ error: 'E-Mail-Adresse erforderlich' }, { status: 400 })
+      }
+
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      const normalizedEmail = email.toLowerCase().trim()
+      if (!emailRegex.test(normalizedEmail)) {
+        return NextResponse.json({ error: 'Ungültige E-Mail-Adresse' }, { status: 400 })
+      }
+
+      // First, get the invitation to find the user_id for duplicate checking
+      const { data: invitation, error: fetchError } = await supabase
+        .from('trusted_persons')
+        .select('id, user_id')
+        .eq('invitation_token', token)
+        .single()
+
+      if (fetchError || !invitation) {
+        console.error('Invitation fetch error:', fetchError)
+        return NextResponse.json({ error: 'Einladung nicht gefunden' }, { status: 404 })
+      }
+
+      // Check for duplicate email (case-insensitive)
+      const { data: existingPerson } = await supabase
+        .from('trusted_persons')
+        .select('id')
+        .eq('user_id', invitation.user_id)
+        .neq('id', invitation.id)
+        .ilike('email', normalizedEmail)
+        .maybeSingle()
+
+      if (existingPerson) {
+        return NextResponse.json(
+          { error: 'Diese E-Mail-Adresse wurde bereits als Vertrauensperson hinzugefügt' },
+          { status: 400 }
+        )
+      }
+
       updateData.invitation_accepted_at = new Date().toISOString()
+      updateData.email = normalizedEmail
     }
 
     const { error } = await supabase

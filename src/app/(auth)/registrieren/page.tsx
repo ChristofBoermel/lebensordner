@@ -1,14 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, CheckCircle2 } from 'lucide-react'
+import { Loader2, CheckCircle2, Mail } from 'lucide-react'
 import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
 
 export default function RegisterPage() {
@@ -19,9 +19,44 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [isCheckingSession, setIsCheckingSession] = useState(false)
   const router = useRouter()
+  const sessionCheckInterval = useRef<NodeJS.Timeout | null>(null)
+  const searchParams = useSearchParams()
+  const invitedEmail = searchParams.get('email')
+  const isInvited = searchParams.get('invited') === 'true'
   const supabase = createClient()
   const { capture } = usePostHog()
+
+  // Pre-fill email from invitation
+  useEffect(() => {
+    if (invitedEmail && !email) {
+      setEmail(invitedEmail)
+    }
+  }, [invitedEmail, email])
+
+  // Cleanup session polling on unmount
+  useEffect(() => {
+    return () => {
+      if (sessionCheckInterval.current) {
+        clearInterval(sessionCheckInterval.current)
+      }
+    }
+  }, [])
+
+  // Poll for session changes (when user confirms email in another tab)
+  const startSessionPolling = () => {
+    sessionCheckInterval.current = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        setIsCheckingSession(true)
+        if (sessionCheckInterval.current) {
+          clearInterval(sessionCheckInterval.current)
+        }
+        router.push('/onboarding')
+      }
+    }, 3000) // Check every 3 seconds
+  }
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,6 +76,13 @@ export default function RegisterPage() {
       return
     }
 
+    // Validate email matches invited email
+    if (isInvited && invitedEmail && email.toLowerCase() !== invitedEmail.toLowerCase()) {
+      setError('Bitte verwenden Sie die E-Mail-Adresse aus Ihrer Einladung.')
+      setIsLoading(false)
+      return
+    }
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -49,6 +91,7 @@ export default function RegisterPage() {
           data: {
             full_name: fullName,
           },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })
 
@@ -71,7 +114,16 @@ export default function RegisterPage() {
         has_name: !!fullName,
       })
 
+      // Handle auto-confirmed accounts (if email confirmation is disabled)
+      if (data.session) {
+        router.push('/onboarding')
+        return
+      }
+
       setIsSuccess(true)
+
+      // Start polling for session changes (in case user confirms in another tab)
+      startSessionPolling()
     } catch (err) {
       setError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.')
     } finally {
@@ -84,22 +136,50 @@ export default function RegisterPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-4">
-            <CheckCircle2 className="w-8 h-8 text-sage-600" />
+            {isCheckingSession ? (
+              <Loader2 className="w-8 h-8 text-sage-600 animate-spin" />
+            ) : (
+              <Mail className="w-8 h-8 text-sage-600" />
+            )}
           </div>
-          <CardTitle className="text-2xl">Fast geschafft!</CardTitle>
+          <CardTitle className="text-2xl">
+            {isCheckingSession ? 'Bestätigung erkannt!' : 'Fast geschafft!'}
+          </CardTitle>
           <CardDescription className="text-base">
-            Wir haben Ihnen eine E-Mail an <strong>{email}</strong> gesendet. 
-            Bitte klicken Sie auf den Link in der E-Mail, um Ihr Konto zu bestätigen.
+            {isCheckingSession ? (
+              'Sie werden weitergeleitet...'
+            ) : (
+              <>
+                Wir haben Ihnen eine E-Mail an <strong>{email}</strong> gesendet.
+                <br /><br />
+                <span className="text-sage-700 font-medium">
+                  Klicken Sie auf den Link in der E-Mail – Sie werden automatisch angemeldet.
+                </span>
+              </>
+            )}
           </CardDescription>
         </CardHeader>
+        <CardContent className="text-center">
+          {!isCheckingSession && (
+            <div className="p-4 rounded-lg bg-cream-50 border border-cream-200 text-sm text-warmgray-600">
+              <p className="mb-2">
+                <strong>Tipp:</strong> Prüfen Sie auch Ihren Spam-Ordner.
+              </p>
+              <p className="text-warmgray-500">
+                Nach dem Klick auf den Bestätigungslink werden Sie automatisch eingeloggt und zur Einrichtung weitergeleitet.
+              </p>
+            </div>
+          )}
+        </CardContent>
         <CardFooter className="flex flex-col gap-4">
-          <Button 
-            variant="outline" 
-            className="w-full"
-            onClick={() => router.push('/anmelden')}
-          >
-            Zur Anmeldung
-          </Button>
+          {!isCheckingSession && (
+            <p className="text-sm text-warmgray-500 text-center">
+              Bereits bestätigt?{' '}
+              <Link href="/onboarding" className="text-sage-600 hover:text-sage-700 font-medium">
+                Weiter zur Einrichtung
+              </Link>
+            </p>
+          )}
         </CardFooter>
       </Card>
     )
@@ -143,8 +223,14 @@ export default function RegisterPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              disabled={isLoading}
+              disabled={isLoading || isInvited}
+              className={isInvited ? 'bg-warmgray-50' : ''}
             />
+            {isInvited && (
+              <p className="text-xs text-sage-600">
+                Diese E-Mail-Adresse stammt aus Ihrer Einladung.
+              </p>
+            )}
           </div>
           
           <div className="space-y-2">
