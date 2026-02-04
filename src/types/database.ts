@@ -300,6 +300,10 @@ export interface Database {
           invitation_sent_at: string | null
           invitation_accepted_at: string | null
           linked_user_id: string | null
+          email_sent_at: string | null
+          email_error: string | null
+          email_retry_count: number
+          email_status: 'pending' | 'sending' | 'sent' | 'failed' | null
         }
         Insert: {
           id?: string
@@ -319,6 +323,10 @@ export interface Database {
           invitation_sent_at?: string | null
           invitation_accepted_at?: string | null
           linked_user_id?: string | null
+          email_sent_at?: string | null
+          email_error?: string | null
+          email_retry_count?: number
+          email_status?: 'pending' | 'sending' | 'sent' | 'failed' | null
         }
         Update: {
           id?: string
@@ -338,6 +346,39 @@ export interface Database {
           invitation_sent_at?: string | null
           invitation_accepted_at?: string | null
           linked_user_id?: string | null
+          email_sent_at?: string | null
+          email_error?: string | null
+          email_retry_count?: number
+          email_status?: 'pending' | 'sending' | 'sent' | 'failed' | null
+        }
+      }
+      email_retry_queue: {
+        Row: {
+          id: string
+          trusted_person_id: string
+          retry_count: number
+          last_error: string | null
+          next_retry_at: string
+          created_at: string
+          status: 'pending' | 'processing' | 'completed' | 'failed'
+        }
+        Insert: {
+          id?: string
+          trusted_person_id: string
+          retry_count?: number
+          last_error?: string | null
+          next_retry_at: string
+          created_at?: string
+          status?: 'pending' | 'processing' | 'completed' | 'failed'
+        }
+        Update: {
+          id?: string
+          trusted_person_id?: string
+          retry_count?: number
+          last_error?: string | null
+          next_retry_at?: string
+          created_at?: string
+          status?: 'pending' | 'processing' | 'completed' | 'failed'
         }
       }
       reminders: {
@@ -449,6 +490,7 @@ export type Document = Database['public']['Tables']['documents']['Row'] & {
 export type TrustedPerson = Database['public']['Tables']['trusted_persons']['Row']
 export type Reminder = Database['public']['Tables']['reminders']['Row']
 export type DownloadToken = Database['public']['Tables']['download_tokens']['Row']
+export type EmailRetryQueue = Database['public']['Tables']['email_retry_queue']['Row']
 
 // Subcategory for folder structure
 export interface Subcategory {

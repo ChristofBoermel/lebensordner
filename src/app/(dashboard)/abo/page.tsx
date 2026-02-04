@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,12 +24,33 @@ interface SubscriptionInfo {
 interface StripePriceIds {
   basic: { monthly: string; yearly: string }
   premium: { monthly: string; yearly: string }
+  family: { monthly: string; yearly: string }
+}
+
+// Map feature keys to human-readable German descriptions
+const FEATURE_LABELS: Record<string, string> = {
+  twoFactorAuth: 'Zwei-Faktor-Authentifizierung',
+  emailReminders: 'E-Mail-Erinnerungen',
+  documentExpiry: 'Dokument-Ablaufdatum',
+  prioritySupport: 'Prioritäts-Support',
+  smsNotifications: 'SMS-Benachrichtigungen',
+  familyDashboard: 'Familien-Dashboard',
+  customCategories: 'Eigene Kategorien',
 }
 
 export default function AboPage() {
   const searchParams = useSearchParams()
   const success = searchParams.get('success')
   const canceled = searchParams.get('canceled')
+  // Handle upgrade context from tier-guard redirects
+  const upgradeFeature = searchParams.get('upgrade')
+  // Backward compatibility: support old param names
+  const legacyRequired = searchParams.get('required')
+  const legacyTier = searchParams.get('tier')
+
+  // Determine the feature that triggered the upgrade redirect
+  const requiredFeature = upgradeFeature || legacyRequired
+  const requiredFeatureLabel = requiredFeature ? FEATURE_LABELS[requiredFeature] || requiredFeature : null
 
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState<string | null>(null)
@@ -38,7 +59,7 @@ export default function AboPage() {
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [priceIds, setPriceIds] = useState<StripePriceIds | null>(null)
 
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const { capture } = usePostHog()
 
   // Track page view
@@ -62,24 +83,31 @@ export default function AboPage() {
 
   const fetchSubscription = useCallback(async () => {
     setIsLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    try {
+      const userResult = await supabase.auth.getUser()
+      const user = userResult?.data?.user
+      if (!user) return
 
-    const { data } = await supabase
-      .from('profiles')
-      .select('subscription_status, subscription_current_period_end, stripe_customer_id, stripe_price_id')
-      .eq('id', user.id)
-      .single()
+      const result = await supabase
+        .from('profiles')
+        .select('subscription_status, subscription_current_period_end, stripe_customer_id, stripe_price_id')
+        .eq('id', user.id)
+        .single()
 
-    if (data) {
-      setSubscription({
-        status: data.subscription_status,
-        current_period_end: data.subscription_current_period_end,
-        stripe_customer_id: data.stripe_customer_id,
-        price_id: data.stripe_price_id
-      })
+      const data = result?.data
+      if (data) {
+        setSubscription({
+          status: data.subscription_status,
+          current_period_end: data.subscription_current_period_end,
+          stripe_customer_id: data.stripe_customer_id,
+          price_id: data.stripe_price_id
+        })
+      }
+    } catch (err) {
+      console.error('Failed to fetch subscription:', err)
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }, [supabase])
 
   useEffect(() => { fetchSubscription() }, [fetchSubscription])
@@ -154,16 +182,40 @@ export default function AboPage() {
   const isSubscribed = subscription?.status === 'active' || subscription?.status === 'trialing'
 
   // Determine current tier based on price ID
+  // This mirrors the server-side getTierFromSubscription logic exactly
   const getCurrentTier = (): SubscriptionTier => {
-    if (!isSubscribed || !priceIds || !subscription?.price_id) return 'free'
+    const status = subscription?.status ?? null
 
-    const priceId = subscription.price_id
+    // No status or canceled → free (matches server logic)
+    if (!status || status === 'canceled') return 'free'
+
+    // Only active/trialing subscriptions continue
+    const isActiveOrTrialing = status === 'active' || status === 'trialing'
+    if (!isActiveOrTrialing) return 'free'
+
+    // If priceIds not loaded yet, return 'basic' as safe temporary fallback
+    if (!priceIds) return 'basic'
+
+    const priceId = subscription?.price_id ?? null
+
+    // Check basic tier price IDs
     if (priceId === priceIds.basic.monthly || priceId === priceIds.basic.yearly) return 'basic'
-    if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) return 'premium'
+
+    // Check premium tier price IDs
     if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) return 'premium'
 
-    // Default to premium for legacy/unknown subscriptions
-    return 'premium'
+    // Family tier price IDs are treated as premium tier for feature access
+    if (priceId === priceIds.family.monthly || priceId === priceIds.family.yearly) return 'premium'
+
+    // Null or unknown price_id with active subscription → basic (matches server logic)
+    if (!priceId) {
+      console.warn(`[Abo Page] Missing price_id for ${status} subscription. Defaulting to basic tier.`)
+      return 'basic'
+    }
+
+    // Unrecognized price_id → basic (matches server logic)
+    console.warn(`[Abo Page] Unrecognized price ID: ${priceId}. Defaulting to basic tier.`)
+    return 'basic'
   }
 
   const currentTier = getCurrentTier()
@@ -192,11 +244,11 @@ export default function AboPage() {
     )
   }
 
-  // Feature comparison data
+  // Feature comparison data - synced with SUBSCRIPTION_TIERS constants
   const featureComparison = [
     { name: 'Dokumente', free: '10', basic: '50', premium: 'Unbegrenzt' },
-    { name: 'Speicherplatz', free: '100 MB', basic: '500 MB', premium: '10 GB' },
-    { name: 'Vertrauenspersonen', free: '1', basic: '3', premium: '10' },
+    { name: 'Speicherplatz', free: '100 MB', basic: '500 MB', premium: '4 GB' },
+    { name: 'Vertrauenspersonen', free: '1', basic: '3', premium: '5' },
     { name: 'Ordner', free: '3', basic: '10', premium: 'Unbegrenzt' },
     { name: 'E-Mail-Erinnerungen', free: false, basic: true, premium: true },
     { name: 'Dokument-Ablaufdatum', free: false, basic: true, premium: true },
@@ -232,6 +284,16 @@ export default function AboPage() {
         </div>
       )}
 
+      {requiredFeature && (
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-800">
+          <Crown className="w-5 h-5" />
+          <span>
+            <strong>{requiredFeatureLabel || 'Diese Funktion'}</strong> erfordert ein Upgrade.
+            Wählen Sie unten einen passenden Tarif.
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="flex items-center gap-3 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800">
           <AlertTriangle className="w-5 h-5" />
@@ -250,7 +312,9 @@ export default function AboPage() {
                 </div>
                 <div>
                   <p className="font-semibold text-warmgray-900">
-                    {subscription?.status === 'trialing' ? 'Testphase aktiv' : 'Premium aktiv'}
+                    {subscription?.status === 'trialing'
+                      ? 'Testphase aktiv'
+                      : `${SUBSCRIPTION_TIERS[currentTier].name} aktiv`}
                   </p>
                   {subscription?.current_period_end && (
                     <p className="text-sm text-warmgray-600">
@@ -455,6 +519,44 @@ export default function AboPage() {
           Sie können jederzeit wechseln oder kündigen. Keine versteckten Kosten.
         </p>
       </div>
+
+      {/* Debug Panel - Only visible in development */}
+      {process.env.NODE_ENV === 'development' && subscription && (
+        <details className="mt-8 p-4 bg-warmgray-100 rounded-lg text-sm">
+          <summary className="cursor-pointer font-medium text-warmgray-700 mb-2">
+            Debug: Subscription Details
+          </summary>
+          <div className="mt-3 space-y-2 font-mono text-xs">
+            <p>Status: <span className="text-warmgray-500">{subscription.status || 'null'}</span></p>
+            <p>Price ID: <span className="text-warmgray-500">{subscription.price_id || 'null'}</span></p>
+            <p>Customer ID: <span className="text-warmgray-500">{subscription.stripe_customer_id || 'null'}</span></p>
+            <p>Period End: <span className="text-warmgray-500">{subscription.current_period_end || 'null'}</span></p>
+            <p>Detected Tier: <span className="text-warmgray-500">{currentTier}</span></p>
+            <p>Tier Name: <span className="text-warmgray-500">{SUBSCRIPTION_TIERS[currentTier].name}</span></p>
+            {priceIds && (
+              <div className="mt-2 pt-2 border-t border-warmgray-300">
+                <p className="text-warmgray-500 mb-1">Known Price IDs:</p>
+                <p>Basic Monthly: {priceIds.basic.monthly || 'not set'}</p>
+                <p>Basic Yearly: {priceIds.basic.yearly || 'not set'}</p>
+                <p>Premium Monthly: {priceIds.premium.monthly || 'not set'}</p>
+                <p>Premium Yearly: {priceIds.premium.yearly || 'not set'}</p>
+                <p>Family Monthly: {priceIds.family.monthly || 'not set'}</p>
+                <p>Family Yearly: {priceIds.family.yearly || 'not set'}</p>
+              </div>
+            )}
+            <div className="mt-2 pt-2 border-t border-warmgray-300">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchSubscription}
+                className="text-xs"
+              >
+                Refresh Subscription Data
+              </Button>
+            </div>
+          </div>
+        </details>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -83,8 +83,14 @@ export default function EinstellungenPage() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
 
   const router = useRouter()
-  const supabase = createClient()
+  const routerRef = useRef(router)
+  const supabase = useMemo(() => createClient(), [])
   const { seniorMode, setSeniorMode } = useTheme()
+  const profileVersion = (globalThis as typeof globalThis & { __PROFILE_VERSION__?: number }).__PROFILE_VERSION__ ?? 0
+
+  useEffect(() => {
+    routerRef.current = router
+  }, [router])
 
   const handlePasswordChange = async () => {
     setPasswordError(null)
@@ -155,7 +161,7 @@ export default function EinstellungenPage() {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
-      router.push('/anmelden')
+      routerRef.current.push('/anmelden')
       return
     }
 
@@ -166,18 +172,25 @@ export default function EinstellungenPage() {
       .single()
 
     if (!error && data) {
-      setProfile(data)
-      setIs2FAEnabled(data.two_factor_enabled || false)
+      setProfile((prev) => {
+        const prevJson = JSON.stringify(prev)
+        const nextJson = JSON.stringify(data)
+        return prevJson === nextJson ? prev : data
+      })
+
+      const nextIs2FAEnabled = data.two_factor_enabled || false
+      setIs2FAEnabled((prev) => (prev === nextIs2FAEnabled ? prev : nextIs2FAEnabled))
+
       // Set user tier based on subscription
-      const tier = getTierFromSubscription(data.subscription_status, null)
-      setUserTier(tier)
+      const tier = getTierFromSubscription(data.subscription_status, data.stripe_price_id || null)
+      setUserTier((prev) => (prev.id === tier.id ? prev : tier))
     }
     setIsLoading(false)
-  }, [supabase, router])
+  }, [supabase])
 
   useEffect(() => {
     fetchProfile()
-  }, [fetchProfile])
+  }, [fetchProfile, profileVersion])
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -745,9 +758,14 @@ export default function EinstellungenPage() {
     <div className="max-w-2xl mx-auto space-y-8">
       {/* Header */}
       <div className="page-header">
-        <h1 className="text-3xl font-serif font-semibold text-warmgray-900">
-          Einstellungen
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-serif font-semibold text-warmgray-900">
+            Einstellungen
+          </h1>
+          <span className="rounded-full bg-sage-100 px-3 py-1 text-sm font-semibold text-sage-700">
+            {userTier.name}
+          </span>
+        </div>
         <p className="text-lg text-warmgray-600 mt-2">
           Verwalten Sie Ihr Profil und Ihre Kontoeinstellungen
         </p>
@@ -1221,6 +1239,16 @@ export default function EinstellungenPage() {
                     style={{ width: `${Math.min(usagePercent, 100)}%` }}
                   />
                 </div>
+                {userTier.id !== 'premium' && (
+                  <div className="mt-4 rounded-lg border border-sage-200 bg-sage-50 p-3 text-sm text-sage-700">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Mehr Speicherplatz und Funktionen freischalten.</span>
+                      <Link href="/abo" className="underline">
+                        Upgrade
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </>
             )
           })()}

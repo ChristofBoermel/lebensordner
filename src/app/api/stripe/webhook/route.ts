@@ -96,55 +96,65 @@ export async function POST(request: Request) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
-        console.log('Checkout session completed:', session.id)
-        console.log('Customer:', session.customer)
-        console.log('Subscription:', session.subscription)
-        
+        console.log('[Webhook] Checkout session completed:', session.id)
+        console.log('[Webhook] Customer:', session.customer)
+        console.log('[Webhook] Subscription:', session.subscription)
+
         // Get subscription details
         if (session.subscription) {
           const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
+
+          // Extract price ID with validation
           const priceId = subscription.items.data[0]?.price?.id || null
+          if (!priceId) {
+            console.error('[Webhook] WARNING: No price ID found in subscription items. Items data:',
+              JSON.stringify(subscription.items.data, null, 2))
+          }
+
           const periodEnd = safeTimestampToISO((subscription as any).current_period_end)
-          
-          console.log('Subscription details:', {
+
+          console.log('[Webhook] Subscription details:', {
             id: subscription.id,
             status: subscription.status,
             priceId,
-            periodEnd
+            periodEnd,
+            itemsCount: subscription.items.data.length,
           })
-          
+
           // Find user
           const userId = await findUserProfile(
             session.customer as string,
             subscription.id,
             subscription.metadata as Record<string, string>
           )
-          
-          console.log('Found user ID:', userId)
-          
+
+          console.log('[Webhook] Found user ID:', userId)
+
           if (userId) {
             const updateData: Record<string, any> = {
               stripe_subscription_id: subscription.id,
               stripe_price_id: priceId,
               subscription_status: subscription.status,
             }
-            
+
             if (periodEnd) {
               updateData.subscription_current_period_end = periodEnd
             }
-            
+
+            console.log('[Webhook] Updating profile with data:', JSON.stringify(updateData, null, 2))
+
             const { error } = await supabase
               .from('profiles')
               .update(updateData)
               .eq('id', userId)
-            
+
             if (error) {
-              console.error('Failed to update profile:', error)
+              console.error('[Webhook] Failed to update profile:', error.message, error.details, error.code)
             } else {
-              console.log('Profile updated successfully')
+              console.log('[Webhook] Profile updated successfully for user:', userId, 'with price ID:', priceId)
             }
           } else {
-            console.error('Could not find user for checkout session')
+            console.error('[Webhook] Could not find user for checkout session. Customer:', session.customer)
           }
         }
         break
@@ -153,19 +163,34 @@ export async function POST(request: Request) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
+
+        // Extract price ID with validation
         const priceId = subscription.items.data[0]?.price?.id || null
+        if (!priceId) {
+          console.error('[Webhook] WARNING: No price ID found in subscription items for event:', event.type,
+            'Subscription ID:', subscription.id,
+            'Items data:', JSON.stringify(subscription.items.data, null, 2))
+        }
+
         const periodEnd = safeTimestampToISO((subscription as any).current_period_end)
-        
-        console.log('Subscription event:', event.type)
-        console.log('Subscription:', subscription.id, 'status:', subscription.status)
+
+        console.log('[Webhook] Subscription event:', event.type)
+        console.log('[Webhook] Subscription details:', {
+          id: subscription.id,
+          status: subscription.status,
+          priceId,
+          periodEnd,
+          customer: subscription.customer,
+          itemsCount: subscription.items.data.length,
+        })
 
         const userId = await findUserProfile(
           subscription.customer as string,
           subscription.id,
           subscription.metadata as Record<string, string>
         )
-        
-        console.log('Found user ID:', userId)
+
+        console.log('[Webhook] Found user ID:', userId)
 
         if (userId) {
           const updateData: Record<string, any> = {
@@ -173,30 +198,38 @@ export async function POST(request: Request) {
             stripe_price_id: priceId,
             subscription_status: subscription.status,
           }
-          
+
           if (periodEnd) {
             updateData.subscription_current_period_end = periodEnd
           }
-          
+
+          console.log('[Webhook] Updating profile with data:', JSON.stringify(updateData, null, 2))
+
           const { error } = await supabase
             .from('profiles')
             .update(updateData)
             .eq('id', userId)
-          
+
           if (error) {
-            console.error('Failed to update subscription:', error)
+            console.error('[Webhook] Failed to update subscription:', error.message, error.details, error.code)
           } else {
-            console.log('Subscription updated successfully')
+            console.log('[Webhook] Subscription updated successfully for user:', userId, 'with price ID:', priceId)
           }
         } else {
-          console.error('Could not find user for subscription:', subscription.id)
+          console.error('[Webhook] Could not find user for subscription:', subscription.id, 'Customer:', subscription.customer)
         }
         break
       }
 
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription
-        
+
+        console.log('[Webhook] Subscription deleted event received:', {
+          subscriptionId: subscription.id,
+          customer: subscription.customer,
+          previousPriceId: subscription.items.data[0]?.price?.id || 'unknown',
+        })
+
         const userId = await findUserProfile(
           subscription.customer as string,
           subscription.id,
@@ -204,16 +237,26 @@ export async function POST(request: Request) {
         )
 
         if (userId) {
-          await supabase
+          const updateData = {
+            subscription_status: 'canceled',
+            stripe_subscription_id: null,
+            stripe_price_id: null,
+          }
+
+          console.log('[Webhook] Clearing subscription data for user:', userId, 'Update data:', updateData)
+
+          const { error } = await supabase
             .from('profiles')
-            .update({
-              subscription_status: 'canceled',
-              stripe_subscription_id: null,
-              stripe_price_id: null,
-            })
+            .update(updateData)
             .eq('id', userId)
-          
-          console.log('Subscription canceled for user:', userId)
+
+          if (error) {
+            console.error('[Webhook] Failed to cancel subscription:', error.message, error.details, error.code)
+          } else {
+            console.log('[Webhook] Subscription canceled successfully for user:', userId)
+          }
+        } else {
+          console.error('[Webhook] Could not find user for subscription deletion:', subscription.id)
         }
         break
       }

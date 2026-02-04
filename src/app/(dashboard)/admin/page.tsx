@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,7 +44,7 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null)
   
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const checkAdminAccess = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -117,10 +117,13 @@ export default function AdminPage() {
     }
   }
 
-  const filteredUsers = users.filter(user => 
-    user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  const filteredUsers = normalizedQuery
+    ? users.filter(user => 
+        user.email.toLowerCase().includes(normalizedQuery) ||
+        user.full_name?.toLowerCase().includes(normalizedQuery)
+      )
+    : users
 
   const formatDate = (date: string) => new Date(date).toLocaleDateString('de-DE', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'

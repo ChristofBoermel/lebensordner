@@ -48,8 +48,8 @@ export async function requireFeature(
     const tier = await getUserTier()
 
     if (!hasFeatureAccess(tier, feature)) {
-        // Redirect to upgrade page with context
-        redirect(`/abo?required=${String(feature)}&tier=${tier.id}`)
+        // Redirect to upgrade page with context (matches vp-dashboard upgrade flow)
+        redirect(`/abo?upgrade=${String(feature)}`)
     }
 
     return { user, tier }

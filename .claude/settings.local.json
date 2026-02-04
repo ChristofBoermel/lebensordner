@@ -9,7 +9,10 @@
       "Bash(npm run build:*)",
       "Bash(npx next build)",
       "Bash(npm install:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(npm i:*)",
+      "Bash(npm test:*)",
+      "Bash(npx vitest:*)"
     ]
   }
 }

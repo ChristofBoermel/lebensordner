@@ -84,7 +84,20 @@ export default function ZugriffPage() {
         .single()
 
       if (profile) {
+        // Log tier detection in development for debugging
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Zugriff Page] Profile data:', {
+            subscription_status: profile.subscription_status,
+            stripe_price_id: profile.stripe_price_id,
+          })
+        }
+
         const tier = getTierFromSubscription(profile.subscription_status, profile.stripe_price_id)
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Zugriff Page] Detected tier:', tier.id, tier.name)
+        }
+
         setUserTier(tier)
       }
     }

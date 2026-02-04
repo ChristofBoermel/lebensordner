@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { Resend } from 'resend'
 import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscription-tiers'
-
-const getResend = () => new Resend(process.env.RESEND_API_KEY)
+import {
+  sendEmailWithTimeout,
+  addToRetryQueue,
+  updateEmailStatus,
+  DEFAULT_EMAIL_TIMEOUT_MS,
+} from '@/lib/email/resend-service'
 
 export async function POST(request: Request) {
   try {
@@ -62,13 +65,17 @@ export async function POST(request: Request) {
     // Generate invitation token if not exists
     const invitationToken = trustedPerson.invitation_token || crypto.randomUUID()
 
-    // Update trusted person with invitation details
+    const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.lebensordner.org'}/einladung/${invitationToken}`
+    const ownerName = profile?.full_name || 'Jemand'
+
+    // Update trusted person with invitation details and set email_status to 'sending'
     const { error: updateError } = await supabase
       .from('trusted_persons')
       .update({
         invitation_token: invitationToken,
         invitation_sent_at: new Date().toISOString(),
         invitation_status: 'sent',
+        email_status: 'sending',
       })
       .eq('id', trustedPersonId)
 
@@ -76,12 +83,10 @@ export async function POST(request: Request) {
       throw updateError
     }
 
-    const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.lebensordner.org'}/einladung/${invitationToken}`
-    const ownerName = profile?.full_name || 'Jemand'
-
-    // Send invitation email via Resend
-    try {
-      await getResend().emails.send({
+    // Send invitation email with timeout handling
+    // Pass a callback to handle background completion when timeout fires but send is still in-flight
+    const emailResult = await sendEmailWithTimeout(
+      {
         from: 'Lebensordner <einladung@lebensordner.org>',
         to: trustedPerson.email,
         subject: `${ownerName} hat Sie als Vertrauensperson eingeladen`,
@@ -93,20 +98,142 @@ export async function POST(request: Request) {
           ownerTier: ownerTier.id,
           canDownload,
         }),
-      })
-      
-      console.log('Invitation email sent to:', trustedPerson.email)
-    } catch (emailError: any) {
-      console.error('Failed to send invitation email:', emailError)
-      // Don't fail the request if email fails, just log it
-      // The invitation link is still valid
-    }
+      },
+      DEFAULT_EMAIL_TIMEOUT_MS,
+      // Callback when send completes after timeout (background completion)
+      async (backgroundResult) => {
+        if (backgroundResult.success) {
+          // Send succeeded in background - update status to sent
+          await updateEmailStatus(trustedPersonId, 'sent', {
+            email_sent_at: new Date().toISOString(),
+            email_error: null,
+          })
+          console.log(JSON.stringify({
+            event: 'invitation_email_sent_background',
+            trusted_person_id: trustedPersonId,
+            email: trustedPerson.email,
+            message_id: backgroundResult.messageId,
+            timestamp: new Date().toISOString(),
+          }))
+        } else {
+          // Send failed in background - now we can safely queue for retry
+          const retryCount = trustedPerson.email_retry_count || 0
+          await updateEmailStatus(trustedPersonId, 'failed', {
+            email_error: backgroundResult.error,
+            email_retry_count: retryCount + 1,
+          })
+          await addToRetryQueue(
+            trustedPersonId,
+            backgroundResult.error || 'Background email send failed',
+            retryCount
+          )
+          console.log(JSON.stringify({
+            event: 'invitation_email_failed_background',
+            trusted_person_id: trustedPersonId,
+            email: trustedPerson.email,
+            error: backgroundResult.error,
+            timestamp: new Date().toISOString(),
+          }))
+        }
+      }
+    )
 
-    return NextResponse.json({ 
-      success: true, 
-      invitationLink,
-      message: 'Einladung wurde gesendet'
-    })
+    // Handle email result
+    if (emailResult.success) {
+      // Email sent successfully
+      await updateEmailStatus(trustedPersonId, 'sent', {
+        email_sent_at: new Date().toISOString(),
+        email_error: null,
+      })
+
+      console.log(JSON.stringify({
+        event: 'invitation_email_sent',
+        trusted_person_id: trustedPersonId,
+        email: trustedPerson.email,
+        message_id: emailResult.messageId,
+        timestamp: new Date().toISOString(),
+      }))
+
+      return NextResponse.json({
+        success: true,
+        invitationLink,
+        message: 'Einladung wurde gesendet'
+      })
+    } else if (emailResult.timedOut) {
+      // Email timed out - check if send is still in-flight
+      if (emailResult.pendingInFlight) {
+        // Send is still in-flight, don't queue retry to avoid duplicates
+        // The background callback will handle the result when it completes
+        console.log(JSON.stringify({
+          event: 'invitation_email_timeout_pending',
+          trusted_person_id: trustedPersonId,
+          email: trustedPerson.email,
+          timestamp: new Date().toISOString(),
+        }))
+
+        // Return success - the invitation link is valid, send is still in progress
+        return NextResponse.json({
+          success: true,
+          invitationLink,
+          message: 'Einladung wird gesendet'
+        })
+      }
+
+      // Send was actually aborted/canceled - safe to queue for retry
+      await updateEmailStatus(trustedPersonId, 'pending', {
+        email_error: emailResult.error || 'Email sending timed out',
+      })
+
+      await addToRetryQueue(
+        trustedPersonId,
+        emailResult.error || 'Email sending timed out',
+        0
+      )
+
+      console.log(JSON.stringify({
+        event: 'invitation_email_timeout',
+        trusted_person_id: trustedPersonId,
+        email: trustedPerson.email,
+        timestamp: new Date().toISOString(),
+      }))
+
+      // Return success - the invitation link is valid, email will be retried
+      return NextResponse.json({
+        success: true,
+        invitationLink,
+        message: 'Einladung wird gesendet'
+      })
+    } else {
+      // Email failed - queue for retry
+      const currentRetryCount = trustedPerson.email_retry_count || 0
+
+      await updateEmailStatus(trustedPersonId, 'failed', {
+        email_error: emailResult.error,
+        email_retry_count: currentRetryCount + 1,
+      })
+
+      await addToRetryQueue(
+        trustedPersonId,
+        emailResult.error || 'Unknown email error',
+        currentRetryCount
+      )
+
+      console.log(JSON.stringify({
+        event: 'invitation_email_failed',
+        trusted_person_id: trustedPersonId,
+        email: trustedPerson.email,
+        error: emailResult.error,
+        retry_count: currentRetryCount + 1,
+        timestamp: new Date().toISOString(),
+      }))
+
+      // Return success - the invitation link is valid, email will be retried
+      return NextResponse.json({
+        success: true,
+        invitationLink,
+        message: 'Einladung wird gesendet'
+      })
+    }
   } catch (error: any) {
     console.error('Invitation error:', error)
     return NextResponse.json(
