@@ -44,20 +44,27 @@ const createMockSupabaseClient = (overrides: { trustedPerson?: any } = {}) => {
     from: vi.fn((table: string) => {
       if (table === 'trusted_persons') {
         return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
+          select: vi.fn((_: string, options?: { count?: string; head?: boolean }) => {
+            if (options?.count === 'exact') {
+              return {
+                eq: vi.fn().mockResolvedValue({ count: 0, error: null }),
+              }
+            }
+            return {
               eq: vi.fn().mockReturnValue({
-                single: vi.fn().mockResolvedValue({
-                  data: mockTrustedPerson,
-                  error: null,
+                eq: vi.fn().mockReturnValue({
+                  single: vi.fn().mockResolvedValue({
+                    data: mockTrustedPerson,
+                    error: null,
+                  }),
+                }),
+                ilike: vi.fn().mockReturnValue({
+                  neq: vi.fn().mockReturnValue({
+                    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+                  }),
                 }),
               }),
-              ilike: vi.fn().mockReturnValue({
-                neq: vi.fn().mockReturnValue({
-                  maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-                }),
-              }),
-            }),
+            }
           }),
           update: mockSupabaseUpdate.mockReturnValue({
             eq: vi.fn().mockResolvedValue({ error: null }),
@@ -133,8 +140,14 @@ vi.mock('@supabase/supabase-js', () => ({
 
 // Mock subscription tiers
 vi.mock('@/lib/subscription-tiers', () => ({
-  getTierFromSubscription: vi.fn(() => ({ id: 'premium', name: 'Premium' })),
+  getTierFromSubscription: vi.fn(() => ({
+    id: 'premium',
+    name: 'Premium',
+    limits: { maxTrustedPersons: 10 },
+  })),
   allowsFamilyDownloads: vi.fn(() => true),
+  hasFeatureAccess: vi.fn(() => true),
+  canPerformAction: vi.fn(() => true),
 }))
 
 describe('Email Invitation API', () => {

@@ -15,6 +15,7 @@ interface FamilyMember {
   relationship: string
   direction: 'incoming' | 'outgoing' // incoming = they added me, outgoing = I added them
   linkedAt: string | null
+  docsCount?: number
   tier?: {
     id: string
     name: string
@@ -73,6 +74,12 @@ export async function GET() {
           const tierDisplay = getTierDisplayInfo(ownerTier)
           const canDownload = allowsFamilyDownloads(ownerTier)
 
+          // Get document count for this member
+          const { count: docsCount } = await adminClient
+            .from('documents')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', link.user_id)
+
           incomingMembers.push({
             id: link.user_id,
             name: profile.full_name || profile.email.split('@')[0],
@@ -80,6 +87,7 @@ export async function GET() {
             relationship: link.relationship,
             direction: 'incoming',
             linkedAt: link.invitation_accepted_at,
+            docsCount: docsCount ?? 0,
             tier: {
               id: ownerTier.id,
               name: tierDisplay.name,

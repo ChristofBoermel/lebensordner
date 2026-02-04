@@ -61,14 +61,13 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     features: [
       'Bis zu 10 Dokumente',
       '100 MB Speicherplatz',
-      '1 Vertrauensperson',
       '3 Ordner',
       'Basis-Dashboard',
     ],
     limits: {
       maxDocuments: 10,
       maxStorageMB: 100,
-      maxTrustedPersons: 1,
+      maxTrustedPersons: 0,
       maxSubcategories: 3,
       maxCustomCategories: 0,
       emailReminders: false,

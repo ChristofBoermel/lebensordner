@@ -46,16 +46,31 @@ export async function GET(request: Request) {
     }
 
     // Get owner profile with subscription info
-    const { data: ownerProfile } = await adminClient
+    const { data: ownerProfile, error: profileError } = await adminClient
       .from('profiles')
       .select('full_name, email, subscription_status, stripe_price_id')
       .eq('id', ownerId)
       .single()
 
+    if (profileError) {
+      console.error('Error fetching owner profile:', profileError)
+      return NextResponse.json(
+        { error: 'Fehler beim Laden des Benutzerprofils' },
+        { status: 500 }
+      )
+    }
+
+    if (!ownerProfile) {
+      return NextResponse.json(
+        { error: 'Besitzer nicht gefunden' },
+        { status: 404 }
+      )
+    }
+
     // Check owner's tier for download permission
     const ownerTier = getTierFromSubscription(
-      ownerProfile?.subscription_status || null,
-      ownerProfile?.stripe_price_id || null
+      ownerProfile.subscription_status || null,
+      ownerProfile.stripe_price_id || null
     )
 
     if (!allowsFamilyDownloads(ownerTier)) {

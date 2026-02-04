@@ -198,13 +198,31 @@ export function DocumentViewer({
 
       {/* Info Banner */}
       {showInfoBanner && (
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className={`${
+          ownerTier === 'premium' ? 'border-green-200 bg-green-50' :
+          ownerTier === 'basic' ? 'border-blue-200 bg-blue-50' :
+          'border-warmgray-200 bg-warmgray-50'
+        }`}>
           <CardContent className="py-4">
             <div className="flex items-center gap-3">
-              <Eye className="w-5 h-5 text-blue-600 shrink-0" aria-hidden="true" />
-              <p className="text-sm text-blue-800">
-                Sie haben Nur-Ansicht-Zugriff auf diese Dokumente. Downloads sind nur verfügbar, wenn der Besitzer ein Premium-Abo hat.
-              </p>
+              <Eye className={`w-5 h-5 shrink-0 ${
+                ownerTier === 'premium' ? 'text-green-600' :
+                ownerTier === 'basic' ? 'text-blue-600' :
+                'text-warmgray-500'
+              }`} aria-hidden="true" />
+              {ownerTier === 'premium' ? (
+                <p className="text-sm text-green-800">
+                  Sie haben vollen Zugriff auf diese Dokumente. Sie können alle Dokumente als ZIP-Datei herunterladen.
+                </p>
+              ) : ownerTier === 'basic' ? (
+                <p className="text-sm text-blue-800">
+                  Sie haben Nur-Ansicht-Zugriff auf diese Dokumente. Downloads sind nur verfügbar, wenn der Besitzer ein Premium-Abo hat.
+                </p>
+              ) : (
+                <p className="text-sm text-warmgray-600">
+                  Der Besitzer benötigt ein kostenpflichtiges Abo, um Ihnen Zugriff zu gewähren.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

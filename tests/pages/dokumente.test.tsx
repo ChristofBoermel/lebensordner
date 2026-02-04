@@ -1,0 +1,675 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import DocumentsPage from '@/app/(dashboard)/dokumente/page'
+import {
+  STRIPE_PRICE_BASIC_MONTHLY,
+  STRIPE_PRICE_PREMIUM_MONTHLY,
+} from '../fixtures/stripe'
+import { setMockProfile, resetMockProfile } from '../mocks/supabase'
+
+type MockDocument = {
+  id: string
+  title: string
+  file_name: string
+  file_path: string
+  file_type: string
+  file_size: number
+  category: string
+  subcategory_id: string | null
+  custom_category_id: string | null
+  expiry_date: string | null
+  notes: string | null
+  created_at: string
+}
+
+type MockTrustedPerson = {
+  id: string
+  name: string
+  email: string
+  linked_user_id: string | null
+}
+
+const mockTrustedPersons: MockTrustedPerson[] = [
+  { id: 'tp-1', name: 'Anna Schmidt', email: 'anna@example.com', linked_user_id: 'linked-1' },
+  { id: 'tp-2', name: 'Max Mustermann', email: 'max@example.com', linked_user_id: 'linked-2' },
+]
+
+const mockPendingTrustedPersons: MockTrustedPerson[] = [
+  { id: 'tp-pending-1', name: 'Pending User', email: 'pending@example.com', linked_user_id: null },
+]
+
+const mockTables = {
+  documents: [] as MockDocument[],
+  trusted_persons: [] as MockTrustedPerson[],
+  subcategories: [] as { id: string; name: string; parent_category: string }[],
+  custom_categories: [] as { id: string; name: string }[],
+}
+
+let lastInsertPayload: Record<string, unknown> | null = null
+let lastUploadFormData: FormData | null = null
+let lastUploadDocument: Record<string, unknown> | null = null
+let mockUploadDocument: Record<string, unknown> | null = null
+let trustedPersonsQueryCount = 0
+
+const createMockBuilder = (tableName: string) => {
+  const builder: Record<string, any> = {}
+
+  builder.select = vi.fn(() => builder)
+  builder.eq = vi.fn(() => builder)
+  builder.not = vi.fn(() => builder)
+  builder.order = vi.fn(() => builder)
+  builder.ilike = vi.fn(() => builder)
+
+  builder.single = vi.fn(async () => {
+    const { mockProfileData } = await import('../mocks/supabase-state')
+    if (tableName === 'profiles') {
+      return { data: mockProfileData, error: null }
+    }
+    return { data: null, error: null }
+  })
+
+  builder.insert = vi.fn((payload: Record<string, unknown>) => {
+    lastInsertPayload = payload
+    const insertedRow = { id: `inserted-${tableName}`, ...payload }
+    return {
+      select: vi.fn(() => ({
+        single: vi.fn().mockResolvedValue({ data: insertedRow, error: null }),
+      })),
+    }
+  })
+
+  builder.update = vi.fn().mockReturnValue({
+    eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+  })
+  builder.delete = vi.fn().mockResolvedValue({ data: null, error: null })
+
+  builder.then = (
+    onFulfilled?: ((value: { data: unknown[]; error: null }) => unknown) | null,
+    onRejected?: ((reason: unknown) => unknown) | null
+  ) => {
+    let data: unknown[] = []
+    if (tableName === 'documents') data = mockTables.documents
+    if (tableName === 'subcategories') data = mockTables.subcategories
+    if (tableName === 'custom_categories') data = mockTables.custom_categories
+    if (tableName === 'trusted_persons') {
+      data = mockTables.trusted_persons.filter((tp) => tp.linked_user_id)
+    }
+    return Promise.resolve({ data, error: null }).then(onFulfilled, onRejected)
+  }
+
+  return builder
+}
+
+const mockGetUser = async () => ({
+  data: { user: { id: 'test-user-id', email: 'test@example.com' } },
+  error: null,
+})
+
+const mockSupabaseClient = {
+  auth: { getUser: mockGetUser },
+  from: (tableName: string) => {
+    if (tableName === 'trusted_persons') {
+      trustedPersonsQueryCount += 1
+    }
+    return createMockBuilder(tableName)
+  },
+}
+
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => mockSupabaseClient,
+}))
+
+vi.mock('@/lib/posthog', () => ({
+  usePostHog: () => ({ capture: vi.fn() }),
+  ANALYTICS_EVENTS: {
+    DOCUMENT_UPLOADED: 'document_uploaded',
+    ERROR_OCCURRED: 'error_occurred',
+  },
+}))
+
+vi.mock('@/components/ui/file-upload', () => ({
+  FileUpload: ({ onFileSelect }: { onFileSelect: (file: File) => void }) => (
+    <input
+      type="file"
+      data-testid="file-input"
+      onChange={(event) => {
+        const file = (event.target as HTMLInputElement).files?.[0]
+        if (file) onFileSelect(file)
+      }}
+    />
+  ),
+}))
+
+vi.mock('@/components/ui/date-picker', () => ({
+  DatePicker: ({
+    value,
+    onChange,
+  }: {
+    value: string
+    onChange: (value: string) => void
+  }) => (
+    <input
+      data-testid="expiry-date-input"
+      value={value}
+      onChange={(event) => onChange((event.target as HTMLInputElement).value)}
+    />
+  ),
+}))
+
+const setMockFetch = () => {
+  global.fetch = vi.fn((input: RequestInfo, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString()
+    if (url.includes('/api/documents/upload')) {
+      const body = init?.body
+      if (body instanceof FormData) {
+        lastUploadFormData = body
+      }
+      const reminderWatcherId =
+        lastUploadFormData?.get('reminder_watcher_id')?.toString() ?? null
+      const responseDocument =
+        mockUploadDocument ?? {
+          id: 'doc-1',
+          reminder_watcher_id: reminderWatcherId,
+        }
+      lastUploadDocument = responseDocument
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          path: 'test/path/file.pdf',
+          size: 1024,
+          document: responseDocument,
+        }),
+      } as Response)
+    }
+    if (url.includes('/api/reminder-watcher/notify')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ success: true }),
+      } as Response)
+    }
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({}),
+    } as Response)
+  }) as unknown as typeof fetch
+}
+
+const renderPage = async () => {
+  render(<DocumentsPage />)
+  await waitFor(() => {
+    expect(
+      screen.getByRole('heading', { name: /Dokumente/i })
+    ).toBeInTheDocument()
+  })
+}
+
+const openUploadDialog = async () => {
+  await waitFor(() => {
+    expect(
+      screen.getAllByRole('button', { name: /Dokument hinzufügen/i }).length
+    ).toBeGreaterThan(0)
+  })
+  await userEvent.click(
+    screen.getAllByRole('button', { name: /Dokument hinzufügen/i })[0]
+  )
+  await waitFor(() => {
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+}
+
+const setExpiryDate = async (value: string) => {
+  const input = await screen.findByTestId('expiry-date-input')
+  fireEvent.change(input, { target: { value } })
+  await waitFor(() => {
+    expect(input).toHaveValue(value)
+  })
+}
+
+const uploadTestFile = async () => {
+  const fileInput = screen.getByTestId('file-input')
+  const file = new File(['test'], 'test.pdf', { type: 'application/pdf' })
+  await userEvent.upload(fileInput, file)
+}
+
+describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
+  beforeEach(() => {
+    resetMockProfile()
+    mockTables.documents = []
+    mockTables.trusted_persons = []
+    mockTables.subcategories = []
+    mockTables.custom_categories = []
+    lastInsertPayload = null
+    lastUploadFormData = null
+    lastUploadDocument = null
+    mockUploadDocument = null
+    trustedPersonsQueryCount = 0
+    setMockFetch()
+    Object.defineProperty(window, 'innerWidth', { value: 1024, writable: true })
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('Free-User sieht Upgrade-Hinweis bei Ablaufdatum', async () => {
+    setMockProfile({ subscription_status: null, stripe_price_id: null })
+
+    await renderPage()
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+
+    expect(screen.getByTestId('reminder-watcher-upgrade-hint')).toBeInTheDocument()
+  })
+
+  it('Free-User sieht keine Watcher-Auswahl', async () => {
+    setMockProfile({ subscription_status: null, stripe_price_id: null })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+
+    expect(screen.queryByTestId('reminder-watcher-select')).not.toBeInTheDocument()
+  })
+
+  it('Basic-User sieht Watcher-Auswahl bei Ablaufdatum', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
+    })
+  })
+
+  it('Premium-User sieht Watcher-Auswahl bei Ablaufdatum', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_PREMIUM_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
+    })
+  })
+
+  it('Watcher-Auswahl bleibt ohne Ablaufdatum verborgen (alle Tiers)', async () => {
+    const tiers = [
+      { status: null, price: null },
+      { status: 'active', price: STRIPE_PRICE_BASIC_MONTHLY },
+      { status: 'active', price: STRIPE_PRICE_PREMIUM_MONTHLY },
+    ]
+
+    for (const tier of tiers) {
+      resetMockProfile()
+      setMockProfile({ subscription_status: tier.status, stripe_price_id: tier.price })
+      mockTables.trusted_persons = mockTrustedPersons
+
+      const { unmount } = render(<DocumentsPage />)
+      await waitFor(() => {
+        expect(
+          screen.getByRole('heading', { name: /Dokumente/i })
+        ).toBeInTheDocument()
+      })
+      await openUploadDialog()
+
+      expect(screen.queryByTestId('reminder-watcher-select')).not.toBeInTheDocument()
+
+      unmount()
+    }
+  })
+
+  it('Watcher-Auswahl bleibt bei fehlenden Familienmitgliedern verborgen (Basic/Premium)', async () => {
+    const tiers = [
+      { status: 'active', price: STRIPE_PRICE_BASIC_MONTHLY },
+      { status: 'active', price: STRIPE_PRICE_PREMIUM_MONTHLY },
+    ]
+
+    for (const tier of tiers) {
+      resetMockProfile()
+      setMockProfile({ subscription_status: tier.status, stripe_price_id: tier.price })
+      mockTables.trusted_persons = []
+
+      const { unmount } = render(<DocumentsPage />)
+      await waitFor(() => {
+        expect(
+          screen.getByRole('heading', { name: /Dokumente/i })
+        ).toBeInTheDocument()
+      })
+      await openUploadDialog()
+      await setExpiryDate('2030-01-01')
+
+      expect(screen.queryByTestId('reminder-watcher-select')).not.toBeInTheDocument()
+
+      unmount()
+    }
+  })
+
+  it('Basic-User kann Watcher auswählen und Dokument hochladen', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await uploadTestFile()
+    await setExpiryDate('2030-01-01')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
+    })
+    await userEvent.selectOptions(screen.getByTestId('reminder-watcher-select'), 'tp-1')
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toHaveValue('tp-1')
+    })
+    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
+
+    await waitFor(() => {
+      expect(lastUploadFormData?.get('reminder_watcher_id')).toBe('tp-1')
+    })
+  })
+
+  it('Premium-User kann Watcher auswählen und Dokument hochladen', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_PREMIUM_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await uploadTestFile()
+    await setExpiryDate('2030-01-01')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
+    })
+    await userEvent.selectOptions(screen.getByTestId('reminder-watcher-select'), 'tp-2')
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toHaveValue('tp-2')
+    })
+    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
+
+    await waitFor(() => {
+      expect(lastUploadFormData?.get('reminder_watcher_id')).toBe('tp-2')
+    })
+  })
+
+  it('Watcher-Notification API wird nach erfolgreichem Upload aufgerufen', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await uploadTestFile()
+    await setExpiryDate('2030-01-01')
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
+    })
+    await userEvent.selectOptions(screen.getByTestId('reminder-watcher-select'), 'tp-1')
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toHaveValue('tp-1')
+    })
+    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/reminder-watcher/notify',
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
+  })
+
+  it('Dokument wird mit korrekter reminder_watcher_id gespeichert', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await uploadTestFile()
+    await setExpiryDate('2030-01-01')
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
+    })
+    await userEvent.selectOptions(screen.getByTestId('reminder-watcher-select'), 'tp-2')
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toHaveValue('tp-2')
+    })
+    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
+
+    await waitFor(() => {
+      expect(lastUploadDocument?.reminder_watcher_id).toBe('tp-2')
+    })
+  })
+
+  it('Free-User Insert setzt reminder_watcher_id auf null', async () => {
+    setMockProfile({ subscription_status: null, stripe_price_id: null })
+
+    await renderPage()
+    await openUploadDialog()
+    await uploadTestFile()
+    await setExpiryDate('2030-01-01')
+    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
+
+    await waitFor(() => {
+      expect(lastUploadFormData?.get('reminder_watcher_id')).toBeNull()
+    })
+  })
+
+  it('Client-Gate verhindert Watcher-Auswahl für Free-User', async () => {
+    setMockProfile({ subscription_status: null, stripe_price_id: null })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+
+    expect(screen.queryByTestId('reminder-watcher-select')).not.toBeInTheDocument()
+  })
+
+  it('Watcher-Select ist auf Mobile nutzbar', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 375, writable: true })
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
+    })
+    const select = screen.getByTestId('reminder-watcher-select')
+    expect(select).toHaveClass('w-full')
+    expect(select).toHaveClass('h-10')
+  })
+
+  it('Upgrade-Hinweis ist auf Mobile lesbar', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 375, writable: true })
+    setMockProfile({ subscription_status: null, stripe_price_id: null })
+
+    await renderPage()
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+
+    expect(screen.getByTestId('reminder-watcher-upgrade-hint')).toBeInTheDocument()
+  })
+
+  it('Upload-Dialog ist auf Mobile vollhöhe (h-[100dvh])', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 375, writable: true })
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+
+    await renderPage()
+    await openUploadDialog()
+
+    expect(screen.getByRole('dialog')).toHaveClass('h-[100dvh]')
+  })
+
+  it('Tier-Upgrade von Free auf Basic zeigt Watcher-Auswahl', async () => {
+    setMockProfile({ subscription_status: null, stripe_price_id: null })
+
+    const { rerender } = render(<DocumentsPage />)
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /Dokumente/i })
+      ).toBeInTheDocument()
+    })
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+    expect(screen.queryByTestId('reminder-watcher-select')).not.toBeInTheDocument()
+
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    rerender(<DocumentsPage key="tier-basic" />)
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /Dokumente/i })
+      ).toBeInTheDocument()
+    })
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
+    })
+  })
+
+  it('Tier-Downgrade von Basic auf Free versteckt Watcher-Auswahl', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    const { rerender } = render(<DocumentsPage />)
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /Dokumente/i })
+      ).toBeInTheDocument()
+    })
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
+    })
+
+    setMockProfile({ subscription_status: null, stripe_price_id: null })
+    rerender(<DocumentsPage key="tier-free" />)
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /Dokumente/i })
+      ).toBeInTheDocument()
+    })
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+    expect(screen.queryByTestId('reminder-watcher-select')).not.toBeInTheDocument()
+  })
+
+  it('Leere Familienmitglied-Liste versteckt Watcher-Auswahl', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockPendingTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+
+    expect(screen.queryByTestId('reminder-watcher-select')).not.toBeInTheDocument()
+  })
+
+  it('Watcher-Auswahl wird zurückgesetzt, wenn Ablaufdatum gelöscht wird', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+    await openUploadDialog()
+    await setExpiryDate('2030-01-01')
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
+    })
+    await userEvent.selectOptions(screen.getByTestId('reminder-watcher-select'), 'tp-1')
+    await waitFor(() => {
+      expect(screen.getByTestId('reminder-watcher-select')).toHaveValue('tp-1')
+    })
+
+    await setExpiryDate('')
+    await setExpiryDate('2030-01-02')
+
+    expect(screen.getByTestId('reminder-watcher-select')).toHaveValue('_none')
+  })
+
+  it('Familienmitglieder werden nur einmal geladen', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    await renderPage()
+
+    await waitFor(() => {
+      expect(trustedPersonsQueryCount).toBe(1)
+    })
+  })
+
+  it('Tier-Updates verursachen keine erneute Familienmitglieder-Abfrage', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+    mockTables.trusted_persons = mockTrustedPersons
+
+    const { rerender } = render(<DocumentsPage />)
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /Dokumente/i })
+      ).toBeInTheDocument()
+    })
+
+    const initialCount = trustedPersonsQueryCount
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_PREMIUM_MONTHLY })
+    rerender(<DocumentsPage />)
+
+    expect(trustedPersonsQueryCount).toBe(initialCount)
+  })
+
+  it('Free-User kann manipulierte Watcher-ID nicht speichern', async () => {
+    setMockProfile({ subscription_status: null, stripe_price_id: null })
+    mockTables.trusted_persons = mockTrustedPersons
+    mockUploadDocument = { id: 'doc-1', reminder_watcher_id: null }
+
+    vi.resetModules()
+    vi.doMock('react', async () => {
+      const actual = await vi.importActual<typeof import('react')>('react')
+      let callIndex = 0
+      return {
+        ...actual,
+        useState: (initial: unknown) => {
+          callIndex += 1
+          if (callIndex === 42) {
+            const [state, setState] = actual.useState('tp-1')
+            const wrappedSetState = () => setState('tp-1')
+            return [state, wrappedSetState]
+          }
+          return actual.useState(initial)
+        },
+      }
+    })
+    vi.doMock('@/lib/supabase/client', () => ({
+      createClient: () => mockSupabaseClient,
+    }))
+
+    const { default: DocumentsPageWithManipulatedWatcher } = await import('@/app/(dashboard)/dokumente/page')
+
+    render(<DocumentsPageWithManipulatedWatcher />)
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /Dokumente/i })
+      ).toBeInTheDocument()
+    })
+    await openUploadDialog()
+    await uploadTestFile()
+    await setExpiryDate('2030-01-01')
+    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
+
+    await waitFor(() => {
+      expect(lastUploadFormData?.get('reminder_watcher_id')).toBe('tp-1')
+      expect(lastUploadDocument?.reminder_watcher_id).toBeNull()
+    })
+
+    vi.doUnmock('react')
+    vi.doUnmock('@/lib/supabase/client')
+  })
+})

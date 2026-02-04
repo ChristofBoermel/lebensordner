@@ -4,7 +4,7 @@ I have the following user query that I want you to help me with. Please implemen
 
 - Fix role-based redirects in `src/app/(dashboard)/layout.tsx` for family vs owners.
 - Verify/update `getFamilyPermissions()` & `requireFamilyPermission()` in `src/lib/permissions/family-permissions.ts`.
-- Ensure VP dashboard access in `src/app/(dashboard)/vp-dashboard/page.tsx`.
+- Redirect legacy VP dashboard access to `/zugriff#familie`.
 - Test family APIs: `src/app/api/family/documents/download-url/route.ts`, `src/app/api/family/download/route.ts`.
 
 Relevant Files:
@@ -15,8 +15,10 @@ Relevant Files:
 
 - `d:\Projects\Lebensordner\src\app(family)\family\page.tsx`
 
-- `d:\Projects\Lebensordner\src\app(dashboard)\vp-dashboard\page.tsx`
-
 - `d:\Projects\Lebensordner\src\app\api\family\documents\download-url\route.ts`
 
 - `d:\Projects\Lebensordner\src\app\api\family\download\route.ts`
+
+Note:
+- `/vp-dashboard` redirects to `/zugriff#familie`.
+- Alle Familien-Funktionen sind im Zugriff-Tab konsolidiert.

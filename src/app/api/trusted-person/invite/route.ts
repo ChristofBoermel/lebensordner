@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscription-tiers'
+import { getTierFromSubscription, allowsFamilyDownloads, hasFeatureAccess, canPerformAction } from '@/lib/subscription-tiers'
 import {
   sendEmailWithTimeout,
   addToRetryQueue,
@@ -15,6 +15,46 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
+    }
+
+    // Get user's tier and validate invitation permission
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('subscription_status, stripe_price_id')
+      .eq('id', user.id)
+      .single()
+
+    const userTier = getTierFromSubscription(
+      userProfile?.subscription_status || null,
+      userProfile?.stripe_price_id || null
+    )
+
+    // Check if user has familyDashboard feature (Basic or Premium)
+    if (!hasFeatureAccess(userTier, 'familyDashboard')) {
+      return NextResponse.json(
+        { error: 'Vertrauenspersonen-Einladungen erfordern ein kostenpflichtiges Abo' },
+        { status: 403 }
+      )
+    }
+
+    // Get current trusted person count to validate limit
+    const { count: trustedPersonCount, error: countError } = await supabase
+      .from('trusted_persons')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+
+    if (countError || trustedPersonCount === null || trustedPersonCount === undefined) {
+      return NextResponse.json(
+        { error: 'Limitprüfung fehlgeschlagen' },
+        { status: 500 }
+      )
+    }
+
+    if (!canPerformAction(userTier, 'addTrustedPerson', trustedPersonCount)) {
+      return NextResponse.json(
+        { error: `Sie können maximal ${userTier.limits.maxTrustedPersons} Vertrauenspersonen einladen` },
+        { status: 403 }
+      )
     }
 
     const { trustedPersonId } = await request.json()

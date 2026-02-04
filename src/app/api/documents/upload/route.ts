@@ -1,6 +1,6 @@
 
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { getUserTier, requireFeature } from '@/lib/auth/tier-guard'
+import { getUserTier } from '@/lib/auth/tier-guard'
 import { canUploadFile } from '@/lib/subscription-tiers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -18,7 +18,12 @@ export async function POST(req: NextRequest) {
         const formData = await req.formData()
         const file = formData.get('file') as File | null
         const path = formData.get('path') as string // folder path e.g. 'identitaet/ausweis'
-        const bucket = formData.get('bucket') as string || 'documents'
+        const bucket = (formData.get('bucket') as string) || 'documents'
+        const reminderWatcherIdRaw = formData.get('reminder_watcher_id') as string | null
+        const reminderWatcherId =
+            reminderWatcherIdRaw && reminderWatcherIdRaw.trim().length > 0
+                ? reminderWatcherIdRaw
+                : null
 
         if (!file || !path) {
             return NextResponse.json({ error: 'Keine Datei oder Pfad angegeben' }, { status: 400 })
@@ -61,6 +66,13 @@ export async function POST(req: NextRequest) {
         const storageCheck = canUploadFile(tier, currentStorageMB, fileSizeMB)
         if (!storageCheck.allowed) {
             return NextResponse.json({ error: storageCheck.reason }, { status: 403 })
+        }
+
+        if (reminderWatcherId && !tier.limits.familyDashboard) {
+            return NextResponse.json(
+                { error: 'Diese Funktion ist nur für Basic- und Premium-Nutzer verfügbar' },
+                { status: 403 }
+            )
         }
 
         // 6. Upload to Supabase Storage (Server-Side)
@@ -136,11 +148,74 @@ export async function POST(req: NextRequest) {
             updated_at: new Date().toISOString()
         }).eq('id', user.id)
 
+        let insertedDocument: unknown = null
+
+        if (bucket === 'documents') {
+            const category = (formData.get('category') as string) || null
+            const subcategoryId = (formData.get('subcategory_id') as string) || null
+            const customCategoryId = (formData.get('custom_category_id') as string) || null
+            const title = (formData.get('title') as string) || ''
+            const notes = (formData.get('notes') as string) || null
+            const expiryDate = (formData.get('expiry_date') as string) || null
+            const customReminderDaysRaw = (formData.get('custom_reminder_days') as string) || null
+            const fileName = (formData.get('file_name') as string) || file.name
+            const fileType = (formData.get('file_type') as string) || file.type || 'application/octet-stream'
+
+            const customReminderDays = customReminderDaysRaw
+                ? Number(customReminderDaysRaw)
+                : null
+
+            if (!category || !title.trim()) {
+                return NextResponse.json(
+                    { error: 'Fehlende Dokument-Metadaten' },
+                    { status: 400 }
+                )
+            }
+
+            if (customReminderDaysRaw && Number.isNaN(customReminderDays)) {
+                return NextResponse.json(
+                    { error: 'Ungültige Erinnerungsoption' },
+                    { status: 400 }
+                )
+            }
+
+            const { data: documentData, error: documentError } = await supabase
+                .from('documents')
+                .insert({
+                    user_id: user.id,
+                    category,
+                    subcategory_id: subcategoryId || null,
+                    custom_category_id: customCategoryId || null,
+                    title: title.trim(),
+                    notes: notes && notes.trim().length > 0 ? notes : null,
+                    file_name: fileName,
+                    file_path: fullPath,
+                    file_size: file.size,
+                    file_type: fileType,
+                    expiry_date: expiryDate || null,
+                    custom_reminder_days: customReminderDays,
+                    reminder_watcher_id: reminderWatcherId,
+                })
+                .select()
+                .single()
+
+            if (documentError) {
+                console.error('Document Insert Error:', documentError)
+                return NextResponse.json(
+                    { error: 'Fehler beim Speichern des Dokuments' },
+                    { status: 500 }
+                )
+            }
+
+            insertedDocument = documentData
+        }
+
         // Success
         return NextResponse.json({
             success: true,
             path: fullPath,
             size: file.size,
+            document: insertedDocument,
             message: 'Upload erfolgreich'
         })
 

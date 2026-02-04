@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import {
   Card,
@@ -14,8 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { DatePicker } from "@/components/ui/date-picker";
-import { FileUpload } from "@/components/ui/file-upload";
+ 
 import {
   Dialog,
   DialogContent,
@@ -115,6 +115,11 @@ const categoryColorMap: Record<string, string> = {
 };
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+
+const UploadDialog = dynamic(() => import("./UploadDialog"), {
+  ssr: false,
+  loading: () => null,
+});
 
 export default function DocumentsPage() {
   const searchParams = useSearchParams();
@@ -512,15 +517,43 @@ export default function DocumentsPage() {
     setIsUploading(true);
     setUploadError(null);
 
-    setIsUploading(true);
-    setUploadError(null);
-
     try {
       // 1. Upload via Server-Side API
       const formData = new FormData();
       formData.append("file", uploadFile);
       formData.append("path", uploadCategory || "sonstige"); // Use category as path folder
       formData.append("bucket", "documents");
+      formData.append("category", uploadCategory);
+      formData.append("title", uploadTitle.trim());
+      formData.append("file_name", uploadFile.name);
+      formData.append("file_type", uploadFile.type || "application/octet-stream");
+
+      if (uploadNotes.trim()) {
+        formData.append("notes", uploadNotes.trim());
+      }
+
+      if (uploadSubcategory) {
+        formData.append("subcategory_id", uploadSubcategory);
+      }
+
+      if (uploadCustomCategory) {
+        formData.append("custom_category_id", uploadCustomCategory);
+      }
+
+      if (uploadExpiryDate) {
+        formData.append("expiry_date", uploadExpiryDate);
+      }
+
+      if (uploadCustomReminderDays !== null) {
+        formData.append(
+          "custom_reminder_days",
+          uploadCustomReminderDays.toString(),
+        );
+      }
+
+      if (uploadReminderWatcher) {
+        formData.append("reminder_watcher_id", uploadReminderWatcher);
+      }
 
       const uploadRes = await fetch("/api/documents/upload", {
         method: "POST",
@@ -533,35 +566,7 @@ export default function DocumentsPage() {
       }
 
       const uploadData = await uploadRes.json();
-      const { path: filePath, size: fileSize } = uploadData;
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Nicht angemeldet");
-
-      // 2. Create document record
-      const { data: insertedDoc, error: insertError } = await supabase
-        .from("documents")
-        .insert({
-          user_id: user.id,
-          category: uploadCategory,
-          subcategory_id: uploadSubcategory || null,
-          custom_category_id: uploadCustomCategory || null,
-          title: uploadTitle.trim(),
-          notes: uploadNotes || null,
-          file_name: uploadFile.name,
-          file_path: filePath,
-          file_size: fileSize,
-          file_type: uploadFile.type || "application/octet-stream",
-          expiry_date: uploadExpiryDate || null,
-          custom_reminder_days: uploadCustomReminderDays,
-          reminder_watcher_id: uploadReminderWatcher || null,
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
+      const { size: fileSize, document: insertedDoc } = uploadData;
 
       // Send notification to reminder watcher if selected
       if (uploadReminderWatcher && uploadExpiryDate && insertedDoc) {
@@ -1901,262 +1906,41 @@ export default function DocumentsPage() {
       )}
       {/* Upload Dialog */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
-        <DialogContent className="w-full h-[100dvh] sm:h-auto sm:max-w-lg p-0 overflow-hidden flex flex-col">
-          <DialogHeader className="p-6 pb-2">
-            <DialogTitle>Neues Dokument</DialogTitle>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => {
-                    setUploadCategory(key as DocumentCategory);
-                    setUploadCustomCategory(null);
-                    setUploadSubcategory(null);
-                    setIsCreatingSubcategory(false);
-                  }}
-                  className={`p-3 text-left rounded-lg border-2 transition-colors ${
-                    uploadCategory === key && !uploadCustomCategory
-                      ? "border-sage-500 bg-sage-50 text-sage-800"
-                      : "border-warmgray-200 hover:border-warmgray-400 text-warmgray-700"
-                  }`}
-                >
-                  <span className="text-sm font-medium">{category.name}</span>
-                </button>
-              ))}
-              {/* Custom Categories */}
-              {customCategories.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => {
-                    setUploadCategory("sonstige");
-                    setUploadCustomCategory(cat.id);
-                    setUploadSubcategory(null);
-                    setIsCreatingSubcategory(false);
-                  }}
-                  className={`p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-2 ${
-                    uploadCustomCategory === cat.id
-                      ? "border-sage-500 bg-sage-50 text-sage-800"
-                      : "border-warmgray-200 hover:border-warmgray-400 text-warmgray-700"
-                  }`}
-                >
-                  <Tag className="w-4 h-4 flex-shrink-0" />
-                  <span className="text-sm font-medium">{cat.name}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Subcategory Selection - Dropdown (only for standard categories) */}
-            {uploadCategory && !uploadCustomCategory && (
-              <div className="space-y-2">
-                <Label>Unterordner (optional)</Label>
-                <div className="space-y-2">
-                  <select
-                    value={uploadSubcategory || "_none"}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value === "_new") {
-                        setIsCreatingSubcategory(true);
-                        setUploadSubcategory(null);
-                      } else if (value === "_none") {
-                        setUploadSubcategory(null);
-                        setIsCreatingSubcategory(false);
-                      } else {
-                        setUploadSubcategory(value);
-                        setIsCreatingSubcategory(false);
-                      }
-                    }}
-                    className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
-                  >
-                    <option value="_none">Kein Unterordner</option>
-                    {getCategorySubcategoriesForUpload().map((sub) => (
-                      <option key={sub.id} value={sub.id}>
-                        📁 {sub.name}
-                      </option>
-                    ))}
-                    <option value="_new">
-                      + Neuen Unterordner erstellen...
-                    </option>
-                  </select>
-
-                  {/* Create new subcategory inline */}
-                  {isCreatingSubcategory && (
-                    <div className="flex gap-2 mt-2">
-                      <Input
-                        placeholder="Name des Unterordners"
-                        value={newSubcategoryName}
-                        onChange={(e) => setNewSubcategoryName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleCreateSubcategory();
-                          }
-                        }}
-                        autoFocus
-                      />
-                      <Button
-                        size="sm"
-                        onClick={handleCreateSubcategory}
-                        disabled={!newSubcategoryName.trim()}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setIsCreatingSubcategory(false);
-                          setNewSubcategoryName("");
-                        }}
-                      >
-                        Abbrechen
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* File Selection - Drag & Drop */}
-            <div className="space-y-2">
-              <Label>Datei</Label>
-              <FileUpload
-                selectedFile={uploadFile}
-                onFileSelect={validateAndSetFile}
-                onClear={() => setUploadFile(null)}
-              />
-            </div>
-
-            {/* Title */}
-            <div className="space-y-2">
-              <Label htmlFor="title">Titel</Label>
-              <Input
-                id="title"
-                placeholder="z.B. Personalausweis"
-                value={uploadTitle}
-                onChange={(e) => setUploadTitle(e.target.value)}
-              />
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notiz (optional)</Label>
-              <Input
-                id="notes"
-                placeholder="z.B. Gültig bis 2028"
-                value={uploadNotes}
-                onChange={(e) => setUploadNotes(e.target.value)}
-              />
-            </div>
-
-            {/* Expiry Date */}
-            <div className="space-y-2">
-              <Label>Ablaufdatum (optional)</Label>
-              <DatePicker
-                value={uploadExpiryDate}
-                onChange={setUploadExpiryDate}
-                minDate={new Date().toISOString().split("T")[0]}
-                placeholder="Ablaufdatum wählen"
-              />
-              <p className="text-xs text-warmgray-500">
-                Sie werden automatisch erinnert, wenn das Dokument bald abläuft
-              </p>
-            </div>
-
-            {/* Custom Reminder - only show when expiry date is set */}
-            {uploadExpiryDate && (
-              <div className="space-y-2">
-                <Label>Erinnerung (optional)</Label>
-                <select
-                  value={
-                    uploadCustomReminderDays === null
-                      ? "_default"
-                      : uploadCustomReminderDays.toString()
-                  }
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === "_default") {
-                      setUploadCustomReminderDays(null);
-                    } else {
-                      setUploadCustomReminderDays(parseInt(value));
-                    }
-                  }}
-                  className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
-                >
-                  <option value="_default">Standard (aus Einstellungen)</option>
-                  <option value="1">1 Tag vorher</option>
-                  <option value="3">3 Tage vorher</option>
-                  <option value="7">7 Tage vorher</option>
-                  <option value="14">14 Tage vorher</option>
-                  <option value="30">1 Monat vorher</option>
-                  <option value="60">2 Monate vorher</option>
-                  <option value="90">3 Monate vorher</option>
-                  <option value="180">6 Monate vorher</option>
-                </select>
-                <p className="text-xs text-warmgray-500">
-                  Überschreibt die allgemeine Erinnerungseinstellung für dieses
-                  Dokument
-                </p>
-              </div>
-            )}
-
-            {/* Reminder Watcher - only show when expiry date is set and family members exist */}
-            {uploadExpiryDate && familyMembers.length > 0 && (
-              <div className="space-y-2">
-                <Label>
-                  Soll eine weitere Person den Termin im Blick haben?
-                </Label>
-                <select
-                  value={uploadReminderWatcher || "_none"}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setUploadReminderWatcher(value === "_none" ? null : value);
-                  }}
-                  className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
-                >
-                  <option value="_none">Nein, nur ich</option>
-                  {familyMembers.map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.name} ({member.email})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-warmgray-500">
-                  Diese Person erhält eine Bestätigung und wird ebenfalls an den
-                  Termin erinnert
-                </p>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUploadOpen(false)}>
-              Abbrechen
-            </Button>
-            <Button
-              onClick={handleUpload}
-              disabled={
-                !uploadFile ||
-                !uploadCategory ||
-                !uploadTitle.trim() ||
-                isUploading
-              }
-            >
-              {isUploading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Hinzufügen...
-                </>
-              ) : (
-                "Hinzufügen"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+        {isUploadOpen ? (
+          <UploadDialog
+            customCategories={customCategories}
+            familyMembers={familyMembers}
+            getCategorySubcategoriesForUpload={getCategorySubcategoriesForUpload}
+            handleCreateSubcategory={handleCreateSubcategory}
+            handleUpload={handleUpload}
+            isCreatingSubcategory={isCreatingSubcategory}
+            isUploading={isUploading}
+            newSubcategoryName={newSubcategoryName}
+            onClose={() => setIsUploadOpen(false)}
+            setIsCreatingSubcategory={setIsCreatingSubcategory}
+            setNewSubcategoryName={setNewSubcategoryName}
+            setUploadCategory={setUploadCategory}
+            setUploadCustomCategory={setUploadCustomCategory}
+            setUploadCustomReminderDays={setUploadCustomReminderDays}
+            setUploadExpiryDate={setUploadExpiryDate}
+            setUploadFile={setUploadFile}
+            setUploadNotes={setUploadNotes}
+            setUploadReminderWatcher={setUploadReminderWatcher}
+            setUploadSubcategory={setUploadSubcategory}
+            setUploadTitle={setUploadTitle}
+            uploadCategory={uploadCategory}
+            uploadCustomCategory={uploadCustomCategory}
+            uploadCustomReminderDays={uploadCustomReminderDays}
+            uploadExpiryDate={uploadExpiryDate}
+            uploadFile={uploadFile}
+            uploadNotes={uploadNotes}
+            uploadReminderWatcher={uploadReminderWatcher}
+            uploadSubcategory={uploadSubcategory}
+            uploadTitle={uploadTitle}
+            userTier={userTier}
+            validateAndSetFile={validateAndSetFile}
+          />
+        ) : null}
       </Dialog>
 
       {/* Document Preview */}

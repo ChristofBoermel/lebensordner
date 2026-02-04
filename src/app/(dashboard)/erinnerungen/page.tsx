@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,7 @@ import {
   Users
 } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
+import { getTierFromSubscription, SUBSCRIPTION_TIERS, type TierConfig } from '@/lib/subscription-tiers'
 
 interface Reminder {
   id: string
@@ -76,6 +77,7 @@ export default function ErinnerungenPage() {
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [userTier, setUserTier] = useState<TierConfig>(SUBSCRIPTION_TIERS.free)
 
   const [form, setForm] = useState({
     title: '',
@@ -89,6 +91,26 @@ export default function ErinnerungenPage() {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
 
   const supabase = createClient()
+  const canUseWatcher = useMemo(() => userTier.limits.familyDashboard, [userTier])
+
+  useEffect(() => {
+    async function fetchTier() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_status, stripe_price_id')
+        .eq('id', user.id)
+        .single()
+
+      if (profile) {
+        const tier = getTierFromSubscription(profile.subscription_status, profile.stripe_price_id)
+        setUserTier(tier)
+      }
+    }
+    fetchTier()
+  }, [supabase])
 
   const fetchReminders = useCallback(async () => {
     setIsLoading(true)
@@ -130,8 +152,10 @@ export default function ErinnerungenPage() {
 
   useEffect(() => {
     fetchReminders()
-    fetchFamilyMembers()
-  }, [fetchReminders, fetchFamilyMembers])
+    if (canUseWatcher) {
+      fetchFamilyMembers()
+    }
+  }, [fetchReminders, fetchFamilyMembers, canUseWatcher])
 
   const handleOpenDialog = (reminder?: Reminder) => {
     if (reminder) {
@@ -173,8 +197,9 @@ export default function ErinnerungenPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
 
-      const isNewWatcher = form.reminder_watcher_id &&
-        (!editingReminder || editingReminder.reminder_watcher_id !== form.reminder_watcher_id)
+      const watcherId = canUseWatcher ? form.reminder_watcher_id : null
+      const isNewWatcher = watcherId &&
+        (!editingReminder || editingReminder.reminder_watcher_id !== watcherId)
 
       if (editingReminder) {
         const { error } = await supabase
@@ -184,7 +209,7 @@ export default function ErinnerungenPage() {
             description: form.description || null,
             due_date: form.due_date,
             reminder_type: form.reminder_type,
-            reminder_watcher_id: form.reminder_watcher_id,
+            reminder_watcher_id: watcherId,
           })
           .eq('id', editingReminder.id)
 
@@ -198,7 +223,7 @@ export default function ErinnerungenPage() {
             description: form.description || null,
             due_date: form.due_date,
             reminder_type: form.reminder_type,
-            reminder_watcher_id: form.reminder_watcher_id,
+            reminder_watcher_id: watcherId,
           })
 
         if (error) throw error
@@ -206,7 +231,7 @@ export default function ErinnerungenPage() {
 
       // Send notification to new watcher
       if (isNewWatcher) {
-        const watcher = familyMembers.find(m => m.id === form.reminder_watcher_id)
+        const watcher = familyMembers.find(m => m.id === watcherId)
         if (watcher) {
           try {
             await fetch('/api/reminder-watcher/notify-reminder', {
@@ -592,8 +617,22 @@ export default function ErinnerungenPage() {
               </div>
             </div>
 
+            {!canUseWatcher && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2 text-warmgray-500">
+                  <Users className="w-4 h-4" />
+                  Weitere Person hinzufügen
+                </Label>
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <p className="text-sm text-amber-800">
+                    Upgraden Sie auf Basic oder Premium, um Vertrauenspersonen zu Erinnerungen hinzuzufügen.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Reminder Watcher - only show if family members exist */}
-            {familyMembers.length > 0 && (
+            {canUseWatcher && familyMembers.length > 0 && (
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Users className="w-4 h-4" />

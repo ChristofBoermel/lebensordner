@@ -70,7 +70,7 @@ The plan addresses both issues systematically: First, fix the permission system 
 - Add a prop `userType: 'owner' | 'family_member'` to the `DashboardNavProps` interface
 - Filter the navigation array based on `userType`:
   - For `'owner'`: show all navigation items
-  - For `'family_member'`: show only `/family`, `/vp-dashboard`, `/einstellungen`, `/feedback`
+  - For `'family_member'`: show only `/family`, `/einstellungen`, `/feedback`
 - Update the navigation rendering logic (lines 141-162) to conditionally render based on user type
 
 **File: `file:src/app/(dashboard)/dashboard/page.tsx`**
@@ -252,27 +252,7 @@ The plan addresses both issues systematically: First, fix the permission system 
   - Update to: `grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7`
   - Ensure minimum card height is maintained: `min-h-[100px] sm:min-h-[120px]`
 
-#### **2.6 Fix VP Dashboard Overflow**
-
-**File: `file:src/app/(dashboard)/vp-dashboard/client.tsx`**
-
-**Container (line 110):**
-- Add responsive padding: `px-4 sm:px-6 lg:px-0`
-- Ensure max-width doesn't cause overflow
-
-**Member Cards (lines 151-196, 213-238):**
-- Update flex direction to be responsive:
-  ```
-  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6"
-  ```
-- Member info section (lines 154-174):
-  - Ensure email truncates properly on mobile
-  - Add `truncate` class to email span
-- Download button (lines 176-192):
-  - Make full width on mobile: `w-full sm:w-auto sm:min-w-[180px]`
-  - Ensure minimum touch target: `min-h-[48px] sm:min-h-[56px]`
-
-#### **2.7 Global CSS Updates**
+#### **2.6 Global CSS Updates**
 
 **File: `file:src/app/globals.css`**
 
@@ -427,3 +407,7 @@ graph TD
     style E2A fill:#f3e5f5
     style E2B fill:#f3e5f5
 ```
+
+Note:
+- `/vp-dashboard` redirects to `/zugriff#familie`.
+- Alle Familien-Funktionen sind im Zugriff-Tab konsolidiert.

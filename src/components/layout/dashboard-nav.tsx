@@ -57,7 +57,6 @@ const navigation: Array<{ name: string; href: string; icon: any; feature?: strin
   { name: 'Dokumente', href: '/dokumente', icon: FileText },
   { name: 'Notfall & Vorsorge', href: '/notfall', icon: Heart },
   { name: 'Zugriff & Familie', href: '/zugriff', icon: Users },
-  { name: 'Familien-Übersicht', href: '/vp-dashboard', icon: Users, feature: 'familyDashboard' },
   { name: 'Erinnerungen', href: '/erinnerungen', icon: Bell },
   { name: 'Export', href: '/export', icon: FileDown },
   { name: 'Abonnement', href: '/abo', icon: CreditCard },

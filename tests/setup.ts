@@ -23,6 +23,7 @@ vi.mock('next/navigation', () => ({
     forward: vi.fn(),
     refresh: vi.fn(),
   }),
+  redirect: vi.fn(),
   usePathname: () => '/zugriff',
   useSearchParams: () => new URLSearchParams(),
 }))

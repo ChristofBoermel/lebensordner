@@ -140,6 +140,16 @@ End-to-end tests for the tier detection flow:
 - Free subscription displays "Kostenlos" in UI
 - **Bug reproduction test**: Verifies Premium subscriptions do NOT incorrectly display as "Basis"
 
+### Dokumente Upload Tests
+
+Tests for tier-gated reminder watcher feature in document upload:
+- Tier-based UI visibility (Free/Basic/Premium)
+- Security validation (client + server)
+- Mobile responsiveness
+- API tier validation
+
+Run: `npm test tests/pages/dokumente.test.tsx`
+
 ## Test Fixtures
 
 ### Stripe Price IDs (`fixtures/stripe.ts`)

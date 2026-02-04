@@ -236,7 +236,7 @@ describe('Tier Detection Integration Flow', () => {
 
       expect(tier.limits.maxDocuments).toBe(10)
       expect(tier.limits.maxStorageMB).toBe(100)
-      expect(tier.limits.maxTrustedPersons).toBe(1)
+      expect(tier.limits.maxTrustedPersons).toBe(0)
       expect(tier.limits.emailReminders).toBe(false)
       expect(tier.limits.documentExpiry).toBe(false)
       expect(tier.limits.twoFactorAuth).toBe(false)

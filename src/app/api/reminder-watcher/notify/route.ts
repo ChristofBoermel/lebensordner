@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getUserTier } from '@/lib/auth/tier-guard'
 import { Resend } from 'resend'
 
 const getResend = () => new Resend(process.env.RESEND_API_KEY)
@@ -35,6 +36,14 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
+    }
+
+    const tier = await getUserTier()
+    if (!tier.limits.familyDashboard) {
+      return NextResponse.json(
+        { error: 'Diese Funktion ist nur für Basic- und Premium-Nutzer verfügbar' },
+        { status: 403 }
+      )
     }
 
     const {
