@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-4 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
@@ -16,9 +16,10 @@ const buttonVariants = cva(
         link: "text-sage-600 underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-12 px-6 py-3",
-        sm: "h-10 rounded-md px-4 text-sm",
+        default: "h-14 px-7 py-3.5",
+        sm: "h-12 rounded-md px-5 text-base",
         lg: "h-14 rounded-md px-8 text-lg",
+        onboarding: "h-14 px-8 py-4 text-lg",
         icon: "h-12 w-12",
       },
     },
@@ -38,10 +39,18 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
+    const isIconOnly =
+      size === "icon" &&
+      React.Children.count(props.children) === 1 &&
+      typeof props.children !== "string"
+    const ariaLabel = isIconOnly
+      ? props["aria-label"] || (typeof props.title === "string" ? props.title : undefined)
+      : props["aria-label"]
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
+        aria-label={ariaLabel}
         {...props}
       />
     )

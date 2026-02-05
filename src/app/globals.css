@@ -455,3 +455,79 @@ html.senior-mode {
   width: 1.5rem;
   height: 1.5rem;
 }
+
+/* =================================================================
+   ONBOARDING ACCESSIBILITY MODE
+   Applied via .onboarding-accessible class on <html> element
+   ================================================================= */
+
+html.onboarding-accessible {
+  font-size: 18px;
+  letter-spacing: 0.015em;
+  line-height: 1.7;
+}
+
+.onboarding-accessible body {
+  @apply text-warmgray-900;
+  line-height: 1.7;
+}
+
+.onboarding-accessible h1 {
+  font-size: 32px;
+  line-height: 1.4;
+}
+
+.onboarding-accessible h2 {
+  font-size: 28px;
+  line-height: 1.4;
+}
+
+.onboarding-accessible h3 {
+  font-size: 24px;
+  line-height: 1.4;
+}
+
+.onboarding-accessible *:focus-visible {
+  @apply ring-[3px] ring-offset-4 ring-sage-600 ring-offset-background;
+}
+
+.onboarding-accessible button,
+.onboarding-accessible [role="button"],
+.onboarding-accessible input[type="submit"],
+.onboarding-accessible input[type="button"],
+.onboarding-accessible a {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+.onboarding-accessible input:not([type="checkbox"]):not([type="radio"]),
+.onboarding-accessible textarea,
+.onboarding-accessible select {
+  min-height: 56px;
+}
+
+.onboarding-accessible .text-warmgray-600 {
+  @apply text-warmgray-800;
+}
+
+.onboarding-accessible .text-warmgray-500 {
+  @apply text-warmgray-700;
+}
+
+.onboarding-accessible .text-sage-600 {
+  @apply text-sage-700;
+}
+
+.onboarding-accessible .bg-cream-50 {
+  @apply bg-white;
+}
+
+.onboarding-accessible .border-cream-200,
+.onboarding-accessible .border-warmgray-200 {
+  @apply border-warmgray-300;
+}
+
+.onboarding-accessible .card-content {
+  padding: 2rem;
+  padding-top: 0;
+}
