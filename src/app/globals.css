@@ -531,3 +531,63 @@ html.onboarding-accessible {
   padding: 2rem;
   padding-top: 0;
 }
+
+/* =================================================================
+   PRINT STYLESHEET
+   Clean printing for onboarding and general pages
+   ================================================================= */
+
+@media print {
+  /* Hide navigation, buttons, and non-essential elements */
+  .dashboard-nav,
+  .floating-help-button,
+  .step-feedback-widget,
+  button:not(.print-include),
+  .no-print {
+    display: none !important;
+  }
+
+  /* Optimize text for printing */
+  body {
+    font-size: 14pt;
+    line-height: 1.6;
+    color: #000;
+    background: #fff;
+  }
+
+  /* Ensure proper page breaks */
+  .onboarding-step {
+    page-break-inside: avoid;
+  }
+
+  /* Show URLs for links */
+  a[href]:after {
+    content: " (" attr(href) ")";
+    font-size: 10pt;
+    color: #666;
+  }
+
+  /* Don't show URL for internal links or buttons */
+  a[href^="/"]:after,
+  a[href^="#"]:after,
+  button a[href]:after {
+    content: "";
+  }
+
+  /* Remove shadows and borders for cleaner print */
+  .card-elevated,
+  [class*="shadow"] {
+    box-shadow: none !important;
+  }
+
+  /* Ensure images print correctly */
+  img {
+    max-width: 100% !important;
+  }
+
+  /* Hide fixed/floating elements */
+  [class*="fixed"],
+  [class*="sticky"] {
+    position: static !important;
+  }
+}

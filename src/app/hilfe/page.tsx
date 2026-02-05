@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import Link from 'next/link'
-import { ArrowLeft, ChevronDown, ChevronUp, Search, FileText, Users, Shield, Bell, Download, CreditCard } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronUp, Search, FileText, Users, Shield, Bell, Download, CreditCard, PlayCircle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
 interface FAQItem {
@@ -110,6 +110,24 @@ const categories = [
   { name: 'Export', icon: Download },
 ]
 
+const videoTutorials = [
+  {
+    title: 'Profil einrichten',
+    description: 'Die wichtigsten persönlichen Daten in wenigen Minuten erfassen.',
+    duration: '3 Min',
+  },
+  {
+    title: 'Notfallkontakt anlegen',
+    description: 'Vertrauenspersonen hinzufügen und Zugriffe erklären.',
+    duration: '2 Min',
+  },
+  {
+    title: 'Dokumente hochladen',
+    description: 'Dokumente scannen, hochladen und kategorisieren.',
+    duration: '4 Min',
+  },
+]
+
 export default function HilfePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [openItems, setOpenItems] = useState<Set<number>>(new Set())
@@ -151,6 +169,35 @@ export default function HilfePage() {
           <p className="text-warmgray-600">
             Finden Sie Antworten auf häufig gestellte Fragen
           </p>
+        </div>
+
+        {/* Video Tutorials */}
+        <div id="video-tutorials" className="mb-10">
+          <h2 className="text-2xl font-serif font-semibold text-warmgray-900 mb-2">
+            Video-Tutorials
+          </h2>
+          <p className="text-warmgray-600 mb-6">
+            Kurze Schritt-für-Schritt-Videos begleiten Sie durch die wichtigsten Aufgaben.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {videoTutorials.map((video) => (
+              <Card key={video.title} className="border-2 border-warmgray-200">
+                <CardHeader className="pb-3">
+                  <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center mb-3">
+                    <PlayCircle className="w-5 h-5 text-sage-700" />
+                  </div>
+                  <CardTitle className="text-lg">{video.title}</CardTitle>
+                  <CardDescription className="text-sm text-warmgray-600">
+                    {video.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-between text-sm text-warmgray-500">
+                  <span>Dauer: {video.duration}</span>
+                  <span>In Vorbereitung</span>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
 
         {/* Search */}

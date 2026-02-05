@@ -68,3 +68,17 @@ Thumbs.db
 
 # Remove or comment out if you want to commit docs:
 # *.md
+# Windows reserved filenames
+nul
+con
+prn
+aux
+com[1-9]
+lpt[1-9]
+
+# Development artifacts (if not already present)
+.DS_Store
+Thumbs.db
+*.log
+.env.local
+.env.*.local

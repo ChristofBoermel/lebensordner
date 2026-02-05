@@ -12,7 +12,8 @@
       "Bash(npm ls:*)",
       "Bash(npm i:*)",
       "Bash(npm test:*)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "Bash(if not exist \"D:\\\\Projects\\\\Lebensordner\\\\src\\\\app\\\\api\\\\onboarding\\\\feedback\" mkdir \"D:\\\\Projects\\\\Lebensordner\\\\src\\\\app\\\\api\\\\onboarding\\\\feedback\")"
     ]
   }
 }

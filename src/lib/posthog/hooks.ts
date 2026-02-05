@@ -68,7 +68,10 @@ export const ANALYTICS_EVENTS = {
   ONBOARDING_STEP_COMPLETED: 'onboarding_step_completed',
   ONBOARDING_COMPLETED: 'onboarding_completed',
   ONBOARDING_SKIPPED: 'onboarding_skipped',
-  
+  ONBOARDING_FEEDBACK_SUBMITTED: 'onboarding_feedback_submitted',
+  ONBOARDING_FEEDBACK_SKIPPED: 'onboarding_feedback_skipped',
+  ONBOARDING_EXIT_SURVEY_SUBMITTED: 'onboarding_exit_survey_submitted',
+
   // Document events
   DOCUMENT_UPLOADED: 'document_uploaded',
   DOCUMENT_DOWNLOADED: 'document_downloaded',
