@@ -13,7 +13,8 @@
       "Bash(npm i:*)",
       "Bash(npm test:*)",
       "Bash(npx vitest:*)",
-      "Bash(if not exist \"D:\\\\Projects\\\\Lebensordner\\\\src\\\\app\\\\api\\\\onboarding\\\\feedback\" mkdir \"D:\\\\Projects\\\\Lebensordner\\\\src\\\\app\\\\api\\\\onboarding\\\\feedback\")"
+      "Bash(if not exist \"D:\\\\Projects\\\\Lebensordner\\\\src\\\\app\\\\api\\\\onboarding\\\\feedback\" mkdir \"D:\\\\Projects\\\\Lebensordner\\\\src\\\\app\\\\api\\\\onboarding\\\\feedback\")",
+      "Bash(if not exist \"%USERPROFILE%\\\\.traycer\\\\yolo_artifacts\" mkdir \"%USERPROFILE%\\\\.traycer\\\\yolo_artifacts\")"
     ]
   }
 }

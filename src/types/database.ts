@@ -135,6 +135,10 @@ export interface Database {
           profile_picture_url: string | null
           upgrade_email_7d_sent_at: string | null
           upgrade_email_30d_sent_at: string | null
+          role: string
+          phone_encrypted: boolean
+          address_encrypted: boolean
+          date_of_birth_encrypted: boolean
         }
         Insert: {
           id: string
@@ -163,6 +167,10 @@ export interface Database {
           profile_picture_url?: string | null
           upgrade_email_7d_sent_at?: string | null
           upgrade_email_30d_sent_at?: string | null
+          role?: string
+          phone_encrypted?: boolean
+          address_encrypted?: boolean
+          date_of_birth_encrypted?: boolean
         }
         Update: {
           id?: string
@@ -191,6 +199,10 @@ export interface Database {
           profile_picture_url?: string | null
           upgrade_email_7d_sent_at?: string | null
           upgrade_email_30d_sent_at?: string | null
+          role?: string
+          phone_encrypted?: boolean
+          address_encrypted?: boolean
+          date_of_birth_encrypted?: boolean
         }
       }
       documents: {
@@ -462,6 +474,10 @@ export interface Database {
           recipient_name: string | null
           recipient_email: string | null
           link_type: 'view' | 'download'
+          created_ip: string | null
+          access_count: number
+          last_accessed_at: string | null
+          last_accessed_ip: string | null
         }
         Insert: {
           id?: string
@@ -473,6 +489,10 @@ export interface Database {
           recipient_name?: string | null
           recipient_email?: string | null
           link_type?: 'view' | 'download'
+          created_ip?: string | null
+          access_count?: number
+          last_accessed_at?: string | null
+          last_accessed_ip?: string | null
         }
         Update: {
           id?: string
@@ -484,6 +504,117 @@ export interface Database {
           recipient_name?: string | null
           recipient_email?: string | null
           link_type?: 'view' | 'download'
+          created_ip?: string | null
+          access_count?: number
+          last_accessed_at?: string | null
+          last_accessed_ip?: string | null
+        }
+      }
+      rate_limits: {
+        Row: {
+          id: string
+          identifier: string
+          endpoint: string
+          window_start: string
+          request_count: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          identifier: string
+          endpoint: string
+          window_start: string
+          request_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          identifier?: string
+          endpoint?: string
+          window_start?: string
+          request_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      auth_lockouts: {
+        Row: {
+          id: string
+          email: string
+          locked_at: string
+          unlocked_at: string | null
+          reason: string | null
+        }
+        Insert: {
+          id?: string
+          email: string
+          locked_at?: string
+          unlocked_at?: string | null
+          reason?: string | null
+        }
+        Update: {
+          id?: string
+          email?: string
+          locked_at?: string
+          unlocked_at?: string | null
+          reason?: string | null
+        }
+      }
+      consent_ledger: {
+        Row: {
+          id: string
+          user_id: string
+          consent_type: string
+          granted: boolean
+          version: string
+          timestamp: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          consent_type: string
+          granted: boolean
+          version: string
+          timestamp?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          consent_type?: string
+          granted?: boolean
+          version?: string
+          timestamp?: string
+        }
+      }
+      security_audit_log: {
+        Row: {
+          id: string
+          user_id: string | null
+          event_type: string
+          event_data: Record<string, unknown> | null
+          ip_address: string | null
+          user_agent: string | null
+          timestamp: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          event_type: string
+          event_data?: Record<string, unknown> | null
+          ip_address?: string | null
+          user_agent?: string | null
+          timestamp?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          event_type?: string
+          event_data?: Record<string, unknown> | null
+          ip_address?: string | null
+          user_agent?: string | null
+          timestamp?: string
         }
       }
     }
@@ -627,6 +758,10 @@ export type Reminder = Database['public']['Tables']['reminders']['Row']
 export type DownloadToken = Database['public']['Tables']['download_tokens']['Row']
 export type EmailRetryQueue = Database['public']['Tables']['email_retry_queue']['Row']
 export type OnboardingFeedback = Database['public']['Tables']['onboarding_feedback']['Row']
+export type RateLimit = Database['public']['Tables']['rate_limits']['Row']
+export type AuthLockout = Database['public']['Tables']['auth_lockouts']['Row']
+export type ConsentLedger = Database['public']['Tables']['consent_ledger']['Row']
+export type SecurityAuditLog = Database['public']['Tables']['security_audit_log']['Row']
 
 // Subcategory for folder structure
 export interface Subcategory {

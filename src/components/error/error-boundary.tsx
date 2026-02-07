@@ -3,7 +3,7 @@
 import { Component, ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
+import { AlertTriangle, RefreshCw, Home, MessageSquare } from 'lucide-react'
 
 interface Props {
   children: ReactNode
@@ -13,6 +13,7 @@ interface Props {
 interface State {
   hasError: boolean
   error?: Error
+  errorId?: string
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -22,12 +23,14 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error }
+    // Generate a timestamp-based error ID for support tracking
+    const errorId = `ERR-${Date.now()}`
+    return { hasError: true, error, errorId }
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo)
-    
+
     // Track error in PostHog if available
     if (typeof window !== 'undefined' && (window as any).posthog) {
       (window as any).posthog.capture('error_boundary_triggered', {
@@ -36,10 +39,31 @@ export class ErrorBoundary extends Component<Props, State> {
         component_stack: errorInfo.componentStack,
       })
     }
+
+    // Send error details to server-side logging in production
+    if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
+      try {
+        fetch('/api/errors/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error_message: error.message,
+            component_stack: errorInfo.componentStack,
+            timestamp: new Date().toISOString(),
+            user_agent: navigator.userAgent,
+            error_id: this.state.errorId,
+          }),
+        }).catch(() => {
+          // Silently ignore logging failures - don't break the app
+        })
+      } catch {
+        // Silently ignore logging failures
+      }
+    }
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: undefined })
+    this.setState({ hasError: false, error: undefined, errorId: undefined })
   }
 
   render() {
@@ -61,7 +85,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <p className="text-warmgray-600 mb-6">
                 Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.
               </p>
-              
+
               {process.env.NODE_ENV === 'development' && this.state.error && (
                 <div className="mb-4 p-3 bg-warmgray-100 rounded-lg text-left">
                   <p className="text-xs font-mono text-red-600 break-all">
@@ -70,7 +94,13 @@ export class ErrorBoundary extends Component<Props, State> {
                 </div>
               )}
 
-              <div className="flex gap-3 justify-center">
+              {process.env.NODE_ENV === 'production' && this.state.errorId && (
+                <p className="text-xs text-warmgray-400 mb-4">
+                  Fehler-ID: {this.state.errorId}
+                </p>
+              )}
+
+              <div className="flex gap-3 justify-center flex-wrap">
                 <Button onClick={this.handleReset} variant="outline">
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Erneut versuchen
@@ -79,6 +109,17 @@ export class ErrorBoundary extends Component<Props, State> {
                   <Home className="w-4 h-4 mr-2" />
                   Zur Startseite
                 </Button>
+                {process.env.NODE_ENV === 'production' && this.state.errorId && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      window.location.href = `mailto:support@lebensordner.de?subject=Fehlerbericht ${this.state.errorId}&body=Fehler-ID: ${this.state.errorId}%0A%0ABitte beschreiben Sie, was Sie getan haben, als der Fehler aufgetreten ist:`
+                    }}
+                  >
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Problem melden
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
