@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import JSZip from 'jszip'
+import { logSecurityEvent, EVENT_DOWNLOAD_LINK_VIEWED } from '@/lib/security/audit-log'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,7 +9,7 @@ const getSupabaseAdmin = () => createClient(
 )
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ token: string }> }
 ) {
   try {
@@ -137,6 +138,20 @@ export async function GET(
 
     // Generate ZIP
     const zipBlob = await zip.generateAsync({ type: 'arraybuffer' })
+
+    // Log security event for download link access
+    logSecurityEvent({
+      user_id: downloadToken.user_id,
+      event_type: EVENT_DOWNLOAD_LINK_VIEWED,
+      event_data: {
+        owner_id: downloadToken.user_id,
+        recipient_email: downloadToken.recipient_email,
+        document_count: documents?.length || 0,
+        download_link_token: token,
+        link_type: 'download',
+      },
+      request: request as NextRequest,
+    })
 
     // Mark token as used
     await adminClient

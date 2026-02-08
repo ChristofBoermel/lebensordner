@@ -1,6 +1,8 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { recordConsent } from '@/lib/consent/manager'
 
 // Admin client for profile creation
 const getSupabaseAdmin = () => {
@@ -8,6 +10,29 @@ const getSupabaseAdmin = () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+}
+
+async function syncConsentFromCookie(userId: string) {
+  try {
+    const cookieStore = await cookies()
+    const consentCookie = cookieStore.get('lebensordner_consent')
+    if (!consentCookie?.value) return
+
+    const consent = JSON.parse(consentCookie.value)
+    const version = consent.version || '1.0'
+
+    const promises = []
+    if (typeof consent.analytics === 'boolean') {
+      promises.push(recordConsent(userId, 'analytics', consent.analytics, version))
+    }
+    if (typeof consent.marketing === 'boolean') {
+      promises.push(recordConsent(userId, 'marketing', consent.marketing, version))
+    }
+
+    await Promise.allSettled(promises)
+  } catch (error) {
+    console.error('[AUTH] Consent sync error:', error)
+  }
 }
 
 export async function GET(request: Request) {
@@ -62,6 +87,9 @@ export async function GET(request: Request) {
           }
         }
 
+        // Sync cookie consent to server ledger
+        await syncConsentFromCookie(data.user.id)
+
         // Always go to onboarding for new users
         return NextResponse.redirect(`${origin}/onboarding`)
       }
@@ -85,6 +113,9 @@ export async function GET(request: Request) {
         }
       }
       
+      // Sync cookie consent to server ledger
+      await syncConsentFromCookie(data.user.id)
+
       // If onboarding completed, go to dashboard, otherwise onboarding
       if (existingProfile.onboarding_completed) {
         return NextResponse.redirect(`${origin}/dashboard`)

@@ -16,11 +16,16 @@ export interface RateLimitResult {
 }
 
 // --- Default limit constants ---
+// These limits apply to both per-user and per-IP rate limiting.
+// Intentional deviations from Core Flows §1.3 spec are documented inline.
 
 export const RATE_LIMIT_LOGIN = { maxRequests: 5, windowMs: 15 * 60 * 1000 }
 export const RATE_LIMIT_PASSWORD_RESET = { maxRequests: 3, windowMs: 60 * 60 * 1000 }
 export const RATE_LIMIT_API = { maxRequests: 100, windowMs: 60 * 60 * 1000 }
-export const RATE_LIMIT_UPLOAD = { maxRequests: 10, windowMs: 60 * 60 * 1000 }
+export const RATE_LIMIT_UPLOAD = { maxRequests: 10, windowMs: 60 * 1000 } // Matches Core Flows §1.3: 10/min
+export const RATE_LIMIT_2FA = { maxRequests: 5, windowMs: 15 * 60 * 1000 } // Not in spec, intentional: 5/15min for security
+export const RATE_LIMIT_INVITE = { maxRequests: 5, windowMs: 60 * 60 * 1000 } // Matches spec: 5/hour
+export const RATE_LIMIT_DOWNLOAD_LINK = { maxRequests: 10, windowMs: 60 * 60 * 1000 } // Not in spec, intentional: 10/hour
 
 // --- Helper ---
 

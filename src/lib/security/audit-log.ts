@@ -18,9 +18,17 @@ export const EVENT_PASSWORD_CHANGED = 'password_changed'
 export const EVENT_PASSWORD_RESET_REQUESTED = 'password_reset_requested'
 export const EVENT_TWO_FACTOR_ENABLED = 'two_factor_enabled'
 export const EVENT_TWO_FACTOR_DISABLED = 'two_factor_disabled'
+export const EVENT_TWO_FACTOR_VERIFIED = 'two_factor_verified'
 export const EVENT_UNAUTHORIZED_ACCESS = 'unauthorized_access'
 export const EVENT_ACCOUNT_LOCKED = 'account_locked'
 export const EVENT_SUSPICIOUS_ACTIVITY = 'suspicious_activity'
+export const EVENT_ADMIN_STATS_VIEWED = 'admin_stats_viewed'
+export const EVENT_ADMIN_USERS_VIEWED = 'admin_users_viewed'
+export const EVENT_ADMIN_ROLE_CHANGED = 'admin_role_changed'
+export const EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED = 'trusted_person_document_viewed'
+export const EVENT_DOWNLOAD_LINK_CREATED = 'download_link_created'
+export const EVENT_DOWNLOAD_LINK_VIEWED = 'download_link_viewed'
+export const EVENT_GDPR_EXPORT_REQUESTED = 'gdpr_export_requested'
 
 // --- Helper ---
 
@@ -63,7 +71,7 @@ export async function logSecurityEvent(event: AuditLogEvent): Promise<void> {
     const supabase = createServiceClient()
 
     const forwarded = event.request?.headers.get('x-forwarded-for') || ''
-    const ip = forwarded.split(',')[0]?.trim() || event.request?.ip || null
+    const ip = forwarded.split(',')[0]?.trim() || null
     const maskedIp = ip ? maskIpAddress(ip) : null
     const userAgent = extractUserAgent(event.request)
 

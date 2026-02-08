@@ -1,9 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { randomBytes } from 'crypto'
 import { getTierFromSubscription, getDownloadLinkType, canCreateDownloadLinks } from '@/lib/subscription-tiers'
+import { logSecurityEvent, EVENT_DOWNLOAD_LINK_CREATED } from '@/lib/security/audit-log'
+import { checkRateLimit, incrementRateLimit, RATE_LIMIT_DOWNLOAD_LINK } from '@/lib/security/rate-limit'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,6 +60,46 @@ export async function POST(request: Request) {
       )
     }
 
+    // Extract client IP
+    const forwarded = request.headers.get('x-forwarded-for') || ''
+    const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
+
+    // IP-based rate limiting
+    const ipRateLimitConfig = {
+      identifier: `download_link_ip:${clientIp}`,
+      endpoint: '/api/download-link/create',
+      ...RATE_LIMIT_DOWNLOAD_LINK,
+    }
+
+    const ipRateLimit = await checkRateLimit(ipRateLimitConfig)
+    if (!ipRateLimit.allowed) {
+      const retryAfterSeconds = Math.ceil(
+        (ipRateLimit.resetAt.getTime() - Date.now()) / 1000
+      )
+      return NextResponse.json(
+        { error: 'Too many requests', retryAfterSeconds },
+        { status: 429 }
+      )
+    }
+
+    // Per-user rate limiting
+    const rateLimitConfig = {
+      identifier: `download_link:${user.id}`,
+      endpoint: '/api/download-link/create',
+      ...RATE_LIMIT_DOWNLOAD_LINK,
+    }
+
+    const rateLimit = await checkRateLimit(rateLimitConfig)
+    if (!rateLimit.allowed) {
+      const retryAfterSeconds = Math.ceil(
+        (rateLimit.resetAt.getTime() - Date.now()) / 1000
+      )
+      return NextResponse.json(
+        { error: 'Too many requests', retryAfterSeconds },
+        { status: 429 }
+      )
+    }
+
     // Get link type based on tier
     const linkType = getDownloadLinkType(userTier)!
 
@@ -86,6 +128,19 @@ export async function POST(request: Request) {
         { status: 500 }
       )
     }
+
+    // Log security event for download link creation
+    logSecurityEvent({
+      user_id: user.id,
+      event_type: EVENT_DOWNLOAD_LINK_CREATED,
+      event_data: {
+        recipient_email: recipientEmail,
+        recipient_name: recipientName,
+        link_type: linkType,
+        expires_at: expiresAt.toISOString(),
+      },
+      request: request as NextRequest,
+    })
 
     // Create the download URL
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://lebensordner.org'
@@ -181,6 +236,9 @@ export async function POST(request: Request) {
       console.error('Error sending download link email:', emailError)
       // Continue anyway - the link was created
     }
+
+    await incrementRateLimit(rateLimitConfig)
+    await incrementRateLimit(ipRateLimitConfig)
 
     return NextResponse.json({
       success: true,

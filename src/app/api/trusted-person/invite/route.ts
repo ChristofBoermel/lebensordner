@@ -7,6 +7,7 @@ import {
   updateEmailStatus,
   DEFAULT_EMAIL_TIMEOUT_MS,
 } from '@/lib/email/resend-service'
+import { checkRateLimit, incrementRateLimit, RATE_LIMIT_INVITE } from '@/lib/security/rate-limit'
 
 export async function POST(request: Request) {
   try {
@@ -16,6 +17,10 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
     }
+
+    // Extract client IP
+    const forwarded = request.headers.get('x-forwarded-for') || ''
+    const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
 
     // Get user's tier and validate invitation permission
     const { data: userProfile } = await supabase
@@ -54,6 +59,42 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: `Sie können maximal ${userTier.limits.maxTrustedPersons} Vertrauenspersonen einladen` },
         { status: 403 }
+      )
+    }
+
+    // IP-based rate limiting
+    const ipRateLimitConfig = {
+      identifier: `invite_ip:${clientIp}`,
+      endpoint: '/api/trusted-person/invite',
+      ...RATE_LIMIT_INVITE,
+    }
+
+    const ipRateLimit = await checkRateLimit(ipRateLimitConfig)
+    if (!ipRateLimit.allowed) {
+      const retryAfterSeconds = Math.ceil(
+        (ipRateLimit.resetAt.getTime() - Date.now()) / 1000
+      )
+      return NextResponse.json(
+        { error: 'Too many requests', retryAfterSeconds },
+        { status: 429 }
+      )
+    }
+
+    // Per-user rate limiting
+    const rateLimitConfig = {
+      identifier: `invite:${user.id}`,
+      endpoint: '/api/trusted-person/invite',
+      ...RATE_LIMIT_INVITE,
+    }
+
+    const rateLimit = await checkRateLimit(rateLimitConfig)
+    if (!rateLimit.allowed) {
+      const retryAfterSeconds = Math.ceil(
+        (rateLimit.resetAt.getTime() - Date.now()) / 1000
+      )
+      return NextResponse.json(
+        { error: 'Too many requests', retryAfterSeconds },
+        { status: 429 }
       )
     }
 
@@ -194,6 +235,9 @@ export async function POST(request: Request) {
         timestamp: new Date().toISOString(),
       }))
 
+      await incrementRateLimit(rateLimitConfig)
+      await incrementRateLimit(ipRateLimitConfig)
+
       return NextResponse.json({
         success: true,
         invitationLink,
@@ -212,6 +256,9 @@ export async function POST(request: Request) {
         }))
 
         // Return success - the invitation link is valid, send is still in progress
+        await incrementRateLimit(rateLimitConfig)
+        await incrementRateLimit(ipRateLimitConfig)
+
         return NextResponse.json({
           success: true,
           invitationLink,
@@ -238,6 +285,9 @@ export async function POST(request: Request) {
       }))
 
       // Return success - the invitation link is valid, email will be retried
+      await incrementRateLimit(rateLimitConfig)
+      await incrementRateLimit(ipRateLimitConfig)
+
       return NextResponse.json({
         success: true,
         invitationLink,
@@ -268,6 +318,9 @@ export async function POST(request: Request) {
       }))
 
       // Return success - the invitation link is valid, email will be retried
+      await incrementRateLimit(rateLimitConfig)
+      await incrementRateLimit(ipRateLimitConfig)
+
       return NextResponse.json({
         success: true,
         invitationLink,

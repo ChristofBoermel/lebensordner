@@ -46,7 +46,7 @@ export default function PasswordResetPage() {
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({
+      const { data: { user }, error } = await supabase.auth.updateUser({
         password: password,
       })
 
@@ -55,8 +55,21 @@ export default function PasswordResetPage() {
         return
       }
 
+      // Unlock account after successful password reset
+      if (user?.email) {
+        try {
+          await fetch('/api/auth/unlock-after-reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email }),
+          })
+        } catch {
+          // Non-critical: unlock failure shouldn't block password reset success
+        }
+      }
+
       setIsSuccess(true)
-      
+
       // Redirect to dashboard after 3 seconds
       setTimeout(() => {
         router.push('/dashboard')

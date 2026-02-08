@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { getTierFromSubscription } from '@/lib/subscription-tiers'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -158,6 +159,21 @@ export async function GET(request: Request) {
         { status: 500 }
       )
     }
+
+    // Log security event for trusted person document stream
+    logSecurityEvent({
+      user_id: ownerId,
+      event_type: EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED,
+      event_data: {
+        owner_id: ownerId,
+        document_id: docId,
+        trusted_person_id: trustedPerson.id,
+        trusted_person_user_id: user.id,
+        file_type: document.file_type,
+        action: 'stream',
+      },
+      request: request as NextRequest,
+    })
 
     // Get file as array buffer for streaming
     const arrayBuffer = await fileData.arrayBuffer()

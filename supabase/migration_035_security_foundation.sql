@@ -153,6 +153,21 @@ CREATE POLICY "Service role can read all audit records"
   TO service_role
   USING (true);
 
+-- Service role can update audit records (for maintenance/retention operations)
+CREATE POLICY "Service role can update audit records"
+  ON security_audit_log
+  FOR UPDATE
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- Service role can delete audit records (for log retention/purging)
+CREATE POLICY "Service role can delete audit records"
+  ON security_audit_log
+  FOR DELETE
+  TO service_role
+  USING (true);
+
 -- ============================================================================
 -- 5. MODIFY TABLE: profiles
 -- Purpose: Add role-based access control and encryption tracking flags

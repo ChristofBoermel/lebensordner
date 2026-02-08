@@ -1,21 +1,40 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
+import Cookies from 'js-cookie'
 import { initPostHog, posthog } from '@/lib/posthog/client'
+
+const CONSENT_COOKIE = 'lebensordner_consent'
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(false)
 
-  // Initialize PostHog on mount
+  // Check consent cookie on mount
   useEffect(() => {
-    initPostHog()
+    const consent = Cookies.get(CONSENT_COOKIE)
+    if (consent) {
+      try {
+        const parsed = JSON.parse(consent)
+        setAnalyticsEnabled(parsed.analytics === true)
+      } catch {
+        setAnalyticsEnabled(false)
+      }
+    }
   }, [])
 
-  // Track page views on route change
+  // Initialize PostHog only when analytics consent is granted
   useEffect(() => {
-    if (pathname && posthog.__loaded) {
+    if (analyticsEnabled) {
+      initPostHog()
+    }
+  }, [analyticsEnabled])
+
+  // Track page views on route change (only if analytics enabled)
+  useEffect(() => {
+    if (analyticsEnabled && pathname && posthog.__loaded) {
       let url = window.origin + pathname
       if (searchParams.toString()) {
         url += '?' + searchParams.toString()
@@ -24,7 +43,7 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
         $current_url: url,
       })
     }
-  }, [pathname, searchParams])
+  }, [pathname, searchParams, analyticsEnabled])
 
   return <>{children}</>
 }

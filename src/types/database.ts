@@ -139,6 +139,7 @@ export interface Database {
           phone_encrypted: boolean
           address_encrypted: boolean
           date_of_birth_encrypted: boolean
+          two_factor_secret_encrypted: boolean
         }
         Insert: {
           id: string
@@ -171,6 +172,7 @@ export interface Database {
           phone_encrypted?: boolean
           address_encrypted?: boolean
           date_of_birth_encrypted?: boolean
+          two_factor_secret_encrypted?: boolean
         }
         Update: {
           id?: string
@@ -203,6 +205,7 @@ export interface Database {
           phone_encrypted?: boolean
           address_encrypted?: boolean
           date_of_birth_encrypted?: boolean
+          two_factor_secret_encrypted?: boolean
         }
       }
       documents: {
@@ -617,6 +620,269 @@ export interface Database {
           timestamp?: string
         }
       }
+      medical_info: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          conditions: string | null
+          medications: string | null
+          allergies: string | null
+          blood_type: string | null
+          doctor_name: string | null
+          doctor_phone: string | null
+          insurance_number: string | null
+          additional_notes: string | null
+          organ_donor: boolean | null
+          organ_donor_card_location: string | null
+          organ_donor_notes: string | null
+          conditions_encrypted: boolean
+          medications_encrypted: boolean
+          allergies_encrypted: boolean
+          blood_type_encrypted: boolean
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          user_id: string
+          conditions?: string | null
+          medications?: string | null
+          allergies?: string | null
+          blood_type?: string | null
+          doctor_name?: string | null
+          doctor_phone?: string | null
+          insurance_number?: string | null
+          additional_notes?: string | null
+          organ_donor?: boolean | null
+          organ_donor_card_location?: string | null
+          organ_donor_notes?: string | null
+          conditions_encrypted?: boolean
+          medications_encrypted?: boolean
+          allergies_encrypted?: boolean
+          blood_type_encrypted?: boolean
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+          conditions?: string | null
+          medications?: string | null
+          allergies?: string | null
+          blood_type?: string | null
+          doctor_name?: string | null
+          doctor_phone?: string | null
+          insurance_number?: string | null
+          additional_notes?: string | null
+          organ_donor?: boolean | null
+          organ_donor_card_location?: string | null
+          organ_donor_notes?: string | null
+          conditions_encrypted?: boolean
+          medications_encrypted?: boolean
+          allergies_encrypted?: boolean
+          blood_type_encrypted?: boolean
+        }
+      }
+      emergency_contacts: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          name: string
+          phone: string
+          email: string | null
+          relationship: string
+          is_primary: boolean
+          notes: string | null
+          phone_encrypted: boolean
+          relationship_encrypted: boolean
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          user_id: string
+          name: string
+          phone: string
+          email?: string | null
+          relationship: string
+          is_primary?: boolean
+          notes?: string | null
+          phone_encrypted?: boolean
+          relationship_encrypted?: boolean
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+          name?: string
+          phone?: string
+          email?: string | null
+          relationship?: string
+          is_primary?: boolean
+          notes?: string | null
+          phone_encrypted?: boolean
+          relationship_encrypted?: boolean
+        }
+      }
+      advance_directives: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          has_patient_decree: boolean
+          patient_decree_location: string | null
+          patient_decree_date: string | null
+          patient_decree_document_id: string | null
+          has_power_of_attorney: boolean
+          power_of_attorney_location: string | null
+          power_of_attorney_holder: string | null
+          power_of_attorney_date: string | null
+          power_of_attorney_document_id: string | null
+          has_care_directive: boolean
+          care_directive_location: string | null
+          care_directive_date: string | null
+          care_directive_document_id: string | null
+          has_bank_power_of_attorney: boolean
+          bank_power_of_attorney_holder: string | null
+          bank_power_of_attorney_banks: string | null
+          bank_power_of_attorney_document_id: string | null
+          notes: string | null
+          patient_decree_location_encrypted: boolean
+          power_of_attorney_holder_encrypted: boolean
+          care_directive_location_encrypted: boolean
+          bank_power_of_attorney_holder_encrypted: boolean
+          notes_encrypted: boolean
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          user_id: string
+          has_patient_decree?: boolean
+          patient_decree_location?: string | null
+          patient_decree_date?: string | null
+          patient_decree_document_id?: string | null
+          has_power_of_attorney?: boolean
+          power_of_attorney_location?: string | null
+          power_of_attorney_holder?: string | null
+          power_of_attorney_date?: string | null
+          power_of_attorney_document_id?: string | null
+          has_care_directive?: boolean
+          care_directive_location?: string | null
+          care_directive_date?: string | null
+          care_directive_document_id?: string | null
+          has_bank_power_of_attorney?: boolean
+          bank_power_of_attorney_holder?: string | null
+          bank_power_of_attorney_banks?: string | null
+          bank_power_of_attorney_document_id?: string | null
+          notes?: string | null
+          patient_decree_location_encrypted?: boolean
+          power_of_attorney_holder_encrypted?: boolean
+          care_directive_location_encrypted?: boolean
+          bank_power_of_attorney_holder_encrypted?: boolean
+          notes_encrypted?: boolean
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+          has_patient_decree?: boolean
+          patient_decree_location?: string | null
+          patient_decree_date?: string | null
+          patient_decree_document_id?: string | null
+          has_power_of_attorney?: boolean
+          power_of_attorney_location?: string | null
+          power_of_attorney_holder?: string | null
+          power_of_attorney_date?: string | null
+          power_of_attorney_document_id?: string | null
+          has_care_directive?: boolean
+          care_directive_location?: string | null
+          care_directive_date?: string | null
+          care_directive_document_id?: string | null
+          has_bank_power_of_attorney?: boolean
+          bank_power_of_attorney_holder?: string | null
+          bank_power_of_attorney_banks?: string | null
+          bank_power_of_attorney_document_id?: string | null
+          notes?: string | null
+          patient_decree_location_encrypted?: boolean
+          power_of_attorney_holder_encrypted?: boolean
+          care_directive_location_encrypted?: boolean
+          bank_power_of_attorney_holder_encrypted?: boolean
+          notes_encrypted?: boolean
+        }
+      }
+      funeral_wishes: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          burial_type: string | null
+          burial_location: string | null
+          ceremony_type: string | null
+          ceremony_wishes: string | null
+          music_wishes: string | null
+          flowers_wishes: string | null
+          additional_wishes: string | null
+          has_funeral_insurance: boolean
+          funeral_insurance_provider: string | null
+          funeral_insurance_number: string | null
+          burial_location_encrypted: boolean
+          ceremony_wishes_encrypted: boolean
+          music_wishes_encrypted: boolean
+          flowers_wishes_encrypted: boolean
+          additional_wishes_encrypted: boolean
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          user_id: string
+          burial_type?: string | null
+          burial_location?: string | null
+          ceremony_type?: string | null
+          ceremony_wishes?: string | null
+          music_wishes?: string | null
+          flowers_wishes?: string | null
+          additional_wishes?: string | null
+          has_funeral_insurance?: boolean
+          funeral_insurance_provider?: string | null
+          funeral_insurance_number?: string | null
+          burial_location_encrypted?: boolean
+          ceremony_wishes_encrypted?: boolean
+          music_wishes_encrypted?: boolean
+          flowers_wishes_encrypted?: boolean
+          additional_wishes_encrypted?: boolean
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+          burial_type?: string | null
+          burial_location?: string | null
+          ceremony_type?: string | null
+          ceremony_wishes?: string | null
+          music_wishes?: string | null
+          flowers_wishes?: string | null
+          additional_wishes?: string | null
+          has_funeral_insurance?: boolean
+          funeral_insurance_provider?: string | null
+          funeral_insurance_number?: string | null
+          burial_location_encrypted?: boolean
+          ceremony_wishes_encrypted?: boolean
+          music_wishes_encrypted?: boolean
+          flowers_wishes_encrypted?: boolean
+          additional_wishes_encrypted?: boolean
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -762,6 +1028,10 @@ export type RateLimit = Database['public']['Tables']['rate_limits']['Row']
 export type AuthLockout = Database['public']['Tables']['auth_lockouts']['Row']
 export type ConsentLedger = Database['public']['Tables']['consent_ledger']['Row']
 export type SecurityAuditLog = Database['public']['Tables']['security_audit_log']['Row']
+export type MedicalInfo = Database['public']['Tables']['medical_info']['Row']
+export type EmergencyContact = Database['public']['Tables']['emergency_contacts']['Row']
+export type AdvanceDirective = Database['public']['Tables']['advance_directives']['Row']
+export type FuneralWishes = Database['public']['Tables']['funeral_wishes']['Row']
 
 // Subcategory for folder structure
 export interface Subcategory {

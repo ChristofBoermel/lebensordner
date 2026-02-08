@@ -5,6 +5,12 @@ import { Resend } from 'resend'
 // This endpoint should be called by a cron job (e.g., Vercel Cron, GitHub Actions, or external service)
 // Recommended: Call daily at 8:00 AM
 
+// Validate required environment variables at module load
+const CRON_SECRET = process.env.CRON_SECRET
+if (!CRON_SECRET) {
+  console.error('[CRON] CRITICAL: CRON_SECRET not configured')
+}
+
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -61,36 +67,24 @@ interface ExpiringDocument {
 }
 
 export async function GET(request: Request) {
-  // Verify authorization - allow cron secret OR authenticated user
+  // Fail-closed: CRON_SECRET must be set
+  if (!CRON_SECRET) {
+    console.error('[CRON] Request rejected: CRON_SECRET is not configured')
+    return NextResponse.json(
+      { error: 'Cron endpoint not configured' },
+      { status: 500 }
+    )
+  }
+
+  // Check authorization: either Bearer token or Vercel cron header
   const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const vercelCronHeader = request.headers.get('x-vercel-cron')
 
-  let isAuthorized = false
+  const isAuthorizedByBearer = authHeader === `Bearer ${CRON_SECRET}`
+  const isAuthorizedByVercel = vercelCronHeader === '1'
 
-  // Check cron secret
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
-    isAuthorized = true
-  }
-
-  // If no cron secret configured, allow the request (for development)
-  if (!cronSecret) {
-    isAuthorized = true
-  }
-
-  // Also allow authenticated Supabase users (for manual testing)
-  if (!isAuthorized && authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.replace('Bearer ', '')
-    try {
-      const { data: { user } } = await getSupabaseAdmin().auth.getUser(token)
-      if (user) {
-        isAuthorized = true
-      }
-    } catch (e) {
-      // Token invalid, continue
-    }
-  }
-
-  if (!isAuthorized) {
+  if (!isAuthorizedByBearer && !isAuthorizedByVercel) {
+    console.warn('[CRON] Unauthorized request attempt')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

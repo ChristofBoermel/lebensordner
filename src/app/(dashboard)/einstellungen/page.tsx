@@ -41,14 +41,23 @@ import {
   ChevronLeft,
   CreditCard,
   Settings,
-  ArrowRight
+  ArrowRight,
+  History,
+  Eye,
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { useTheme } from '@/components/theme/theme-provider'
 import { TwoFactorSetup } from '@/components/auth/two-factor-setup'
+import { DeleteAccountModal } from '@/components/settings/delete-account-modal'
 import { SUBSCRIPTION_TIERS, getTierFromSubscription, type TierConfig } from '@/lib/subscription-tiers'
 import type { Profile } from '@/types/database'
+import type { ConsentRecord } from '@/lib/consent/manager'
+import Cookies from 'js-cookie'
+import { CONSENT_VERSION } from '@/components/consent/cookie-consent'
+import { initPostHog, posthog } from '@/lib/posthog'
 import Link from 'next/link'
+import { SecurityActivityLog } from '@/components/settings/security-activity-log'
+import { GDPRExportDialog } from '@/components/settings/gdpr-export-dialog'
 
 type SeniorSection = 'profil' | 'sicherheit' | 'zahlung' | 'weitere' | null
 
@@ -80,7 +89,13 @@ export default function EinstellungenPage() {
   const [isUploadingPicture, setIsUploadingPicture] = useState(false)
 
   // Account deletion state
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+
+  // Privacy & consent state
+  const [analyticsConsent, setAnalyticsConsent] = useState(false)
+  const [consentHistory, setConsentHistory] = useState<ConsentRecord[]>([])
+  const [showConsentHistory, setShowConsentHistory] = useState(false)
+  const [isLoadingConsent, setIsLoadingConsent] = useState(false)
 
   const router = useRouter()
   const routerRef = useRef(router)
@@ -140,6 +155,15 @@ export default function EinstellungenPage() {
 
       if (error) throw error
 
+      // Send security notification for password change
+      fetch('/api/auth/security-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: 'password_changed' }),
+      }).catch(() => {
+        // Don't block UI for notification failures
+      })
+
       setPasswordSuccess(true)
       setCurrentPassword('')
       setNewPassword('')
@@ -165,6 +189,7 @@ export default function EinstellungenPage() {
       return
     }
 
+    // Fetch non-PII profile data from Supabase
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -172,11 +197,32 @@ export default function EinstellungenPage() {
       .single()
 
     if (!error && data) {
-      setProfile((prev) => {
-        const prevJson = JSON.stringify(prev)
-        const nextJson = JSON.stringify(data)
-        return prevJson === nextJson ? prev : data
-      })
+      // Fetch decrypted PII from server API
+      try {
+        const piiResponse = await fetch('/api/profile')
+        if (piiResponse.ok) {
+          const { profile: piiData } = await piiResponse.json()
+          const merged = { ...data, ...piiData }
+          setProfile((prev) => {
+            const prevJson = JSON.stringify(prev)
+            const nextJson = JSON.stringify(merged)
+            return prevJson === nextJson ? prev : merged
+          })
+        } else {
+          setProfile((prev) => {
+            const prevJson = JSON.stringify(prev)
+            const nextJson = JSON.stringify(data)
+            return prevJson === nextJson ? prev : data
+          })
+        }
+      } catch {
+        // Fallback to raw data if API fails
+        setProfile((prev) => {
+          const prevJson = JSON.stringify(prev)
+          const nextJson = JSON.stringify(data)
+          return prevJson === nextJson ? prev : data
+        })
+      }
 
       const nextIs2FAEnabled = data.two_factor_enabled || false
       setIs2FAEnabled((prev) => (prev === nextIs2FAEnabled ? prev : nextIs2FAEnabled))
@@ -201,13 +247,26 @@ export default function EinstellungenPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
 
+      // Save PII fields via encrypted API
+      const piiResponse = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: profile.phone || null,
+          address: profile.address || null,
+          date_of_birth: profile.date_of_birth || null,
+        }),
+      })
+
+      if (!piiResponse.ok) {
+        throw new Error('Fehler beim Speichern der persönlichen Daten')
+      }
+
+      // Save non-PII fields directly
       const { error } = await supabase
         .from('profiles')
         .update({
           full_name: profile.full_name,
-          phone: profile.phone,
-          date_of_birth: profile.date_of_birth,
-          address: profile.address,
           onboarding_completed: true,
           email_reminders_enabled: profile.email_reminders_enabled ?? true,
           email_reminder_days_before: profile.email_reminder_days_before ?? 30,
@@ -256,43 +315,9 @@ export default function EinstellungenPage() {
     }
   }
 
-  const handleDeleteAccount = async () => {
-    const confirmed = confirm(
-      'Sind Sie sicher, dass Sie Ihr Konto löschen möchten? ' +
-      'Alle Ihre Daten werden unwiderruflich gelöscht. ' +
-      'Diese Aktion kann nicht rückgängig gemacht werden.'
-    )
-
-    if (!confirmed) return
-
-    const doubleConfirmed = confirm(
-      'Letzte Warnung: Möchten Sie wirklich Ihr Konto und alle Daten dauerhaft löschen?'
-    )
-
-    if (!doubleConfirmed) return
-
-    setIsDeletingAccount(true)
-    setError(null)
-
-    try {
-      const response = await fetch('/api/account/delete', {
-        method: 'POST',
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Fehler beim Löschen')
-      }
-
-      // Redirect to home page
-      router.push('/')
-      router.refresh()
-    } catch (err: any) {
-      setError(err.message || 'Fehler beim Löschen des Kontos. Bitte kontaktieren Sie den Support.')
-      console.error('Delete error:', err)
-    } finally {
-      setIsDeletingAccount(false)
-    }
+  const handleAccountDeleted = () => {
+    router.push('/')
+    router.refresh()
   }
 
   // Profile picture upload
@@ -395,6 +420,92 @@ export default function EinstellungenPage() {
       console.error('Remove error:', err)
     } finally {
       setIsUploadingPicture(false)
+    }
+  }
+
+  // Fetch consent state on mount
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    const fetchConsent = async () => {
+      try {
+        // Read current state from cookie first
+        const consentCookie = Cookies.get('lebensordner_consent')
+        if (consentCookie) {
+          const parsed = JSON.parse(consentCookie)
+          setAnalyticsConsent(parsed.analytics === true)
+        }
+
+        // Fetch history from server
+        const res = await fetch('/api/consent/history')
+        if (res.ok) {
+          const data = await res.json()
+          setConsentHistory(data.history || [])
+          // Set analytics consent from latest server record if available
+          const latestAnalytics = (data.history || []).find(
+            (r: ConsentRecord) => r.consent_type === 'analytics'
+          )
+          if (latestAnalytics) {
+            setAnalyticsConsent(latestAnalytics.granted)
+          }
+        }
+      } catch {
+        // Silently handle - consent state falls back to cookie
+      }
+    }
+    fetchConsent()
+  }, [])
+
+  const handleAnalyticsConsentToggle = async (enabled: boolean) => {
+    setAnalyticsConsent(enabled)
+    setIsLoadingConsent(true)
+
+    // Update cookie
+    const consentCookie = Cookies.get('lebensordner_consent')
+    const current = consentCookie ? JSON.parse(consentCookie) : { necessary: true, analytics: false, marketing: false, version: CONSENT_VERSION }
+    const updated = { ...current, analytics: enabled }
+    Cookies.set('lebensordner_consent', JSON.stringify(updated), { expires: 365, sameSite: 'strict' })
+
+    // Update PostHog
+    if (enabled) {
+      initPostHog()
+    } else if (posthog.__loaded) {
+      posthog.opt_out_capturing()
+    }
+
+    // Record to server
+    try {
+      await fetch('/api/consent/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          consentType: 'analytics',
+          granted: enabled,
+          version: updated.version || CONSENT_VERSION,
+        }),
+      })
+      // Refresh history
+      const res = await fetch('/api/consent/history')
+      if (res.ok) {
+        const data = await res.json()
+        setConsentHistory(data.history || [])
+      }
+    } catch {
+      // Silently handle
+    } finally {
+      setIsLoadingConsent(false)
+    }
+  }
+
+  const handleViewConsentHistory = async () => {
+    setShowConsentHistory(true)
+    try {
+      const res = await fetch('/api/consent/history')
+      if (res.ok) {
+        const data = await res.json()
+        setConsentHistory(data.history || [])
+      }
+    } catch {
+      // Silently handle
     }
   }
 
@@ -717,6 +828,16 @@ export default function EinstellungenPage() {
                     <LogOut className="mr-2 h-4 w-4" />Abmelden
                   </Button>
                 </div>
+                <Separator />
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="font-medium text-red-600">Konto löschen</p>
+                    <p className="text-sm text-warmgray-500">Ihr Konto und alle Daten unwiderruflich löschen</p>
+                  </div>
+                  <Button variant="outline" size="lg" onClick={() => setIsDeleteDialogOpen(true)} className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
+                    <Trash2 className="mr-2 h-4 w-4" />Konto löschen
+                  </Button>
+                </div>
               </CardContent>
             </Card>
             <Button onClick={handleSave} disabled={isSaving} size="lg" className="w-full">
@@ -749,11 +870,12 @@ export default function EinstellungenPage() {
           </DialogContent>
         </Dialog>
         <TwoFactorSetup isOpen={is2FADialogOpen} onClose={() => setIs2FADialogOpen(false)} isEnabled={is2FAEnabled} onStatusChange={setIs2FAEnabled} />
+        <DeleteAccountModal open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen} onDeleted={handleAccountDeleted} />
       </div>
     )
   }
 
-  // Normal View (unchanged)
+  // Normal View
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       {/* Header */}
@@ -1061,6 +1183,95 @@ export default function EinstellungenPage() {
         </CardContent>
       </Card>
 
+      {/* Security & Activity */}
+      <SecurityActivityLog />
+
+      {/* Privacy & Data */}
+      <Card id="privacy">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-sage-600" />
+            Datenschutz & Privatsphäre
+          </CardTitle>
+          <CardDescription>
+            Verwalten Sie Ihre Einwilligungen für Datenverarbeitung
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Analyse-Cookies</p>
+              <p className="text-sm text-warmgray-500">
+                Helfen uns, die Website zu verbessern (PostHog)
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={analyticsConsent}
+                onChange={(e) => handleAnalyticsConsentToggle(e.target.checked)}
+                disabled={isLoadingConsent}
+                className="sr-only peer"
+              />
+              <div className={cn(
+                "w-11 h-6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all",
+                isLoadingConsent
+                  ? "bg-warmgray-100 cursor-not-allowed"
+                  : "bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 peer-checked:bg-sage-600"
+              )}></div>
+            </label>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Marketing-Cookies</p>
+              <p className="text-sm text-warmgray-500">
+                Für personalisierte Inhalte
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-warmgray-400">Demnächst</span>
+              <label className="relative inline-flex items-center cursor-not-allowed">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  disabled
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-warmgray-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+              </label>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Einwilligungsverlauf</p>
+              <p className="text-sm text-warmgray-500">
+                Alle Änderungen Ihrer Datenschutzeinstellungen einsehen
+              </p>
+            </div>
+            <Button variant="outline" onClick={handleViewConsentHistory}>
+              <History className="mr-2 h-4 w-4" />
+              Verlauf
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="py-3">
+            <p className="font-medium text-warmgray-900">Datenportabilität</p>
+            <p className="text-sm text-warmgray-500 mb-3">
+              Laden Sie eine Kopie Ihrer Daten im maschinenlesbaren Format herunter (GDPR Artikel 20)
+            </p>
+            <GDPRExportDialog />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Security */}
       <Card>
         <CardHeader>
@@ -1193,7 +1404,7 @@ export default function EinstellungenPage() {
             </div>
             <Button
               variant="outline"
-              onClick={handleDeleteAccount}
+              onClick={() => setIsDeleteDialogOpen(true)}
               className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
             >
               <Trash2 className="mr-2 h-4 w-4" />
@@ -1343,6 +1554,73 @@ export default function EinstellungenPage() {
         isEnabled={is2FAEnabled}
         onStatusChange={setIs2FAEnabled}
       />
+
+      {/* Delete Account Modal */}
+      <DeleteAccountModal
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onDeleted={handleAccountDeleted}
+      />
+
+      {/* Consent History Dialog */}
+      <Dialog open={showConsentHistory} onOpenChange={setShowConsentHistory}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Einwilligungsverlauf</DialogTitle>
+            <DialogDescription>
+              Alle Änderungen Ihrer Datenschutzeinstellungen
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {consentHistory.length === 0 ? (
+              <p className="text-sm text-warmgray-500 text-center py-4">
+                Noch keine Einträge vorhanden.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-warmgray-200">
+                      <th className="text-left py-2 px-2 font-medium text-warmgray-700">Typ</th>
+                      <th className="text-left py-2 px-2 font-medium text-warmgray-700">Status</th>
+                      <th className="text-left py-2 px-2 font-medium text-warmgray-700">Version</th>
+                      <th className="text-left py-2 px-2 font-medium text-warmgray-700">Datum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {consentHistory.map((record) => (
+                      <tr key={record.id} className="border-b border-warmgray-100">
+                        <td className="py-2 px-2 text-warmgray-900">
+                          {record.consent_type === 'analytics' ? 'Analyse' : 'Marketing'}
+                        </td>
+                        <td className="py-2 px-2">
+                          <span className={cn(
+                            "px-2 py-0.5 text-xs font-medium rounded-full",
+                            record.granted
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          )}>
+                            {record.granted ? 'Erlaubt' : 'Abgelehnt'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-warmgray-500">{record.version}</td>
+                        <td className="py-2 px-2 text-warmgray-500">
+                          {new Date(record.timestamp).toLocaleString('de-DE')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConsentHistory(false)}>
+              Schließen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

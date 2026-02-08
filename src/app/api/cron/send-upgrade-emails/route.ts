@@ -9,6 +9,12 @@ import { Resend } from 'resend'
 // - Haven't received this email yet
 // - Don't have an active subscription
 
+// Validate required environment variables at module load
+const CRON_SECRET = process.env.CRON_SECRET
+if (!CRON_SECRET) {
+  console.error('[CRON] CRITICAL: CRON_SECRET not configured')
+}
+
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -175,22 +181,24 @@ function generateUpgradeEmailHtml(name: string, documentCount: number): string {
 }
 
 export async function GET(request: Request) {
-  // Verify authorization
+  // Fail-closed: CRON_SECRET must be set
+  if (!CRON_SECRET) {
+    console.error('[CRON] Request rejected: CRON_SECRET is not configured')
+    return NextResponse.json(
+      { error: 'Cron endpoint not configured' },
+      { status: 500 }
+    )
+  }
+
+  // Check authorization: either Bearer token or Vercel cron header
   const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
+  const vercelCronHeader = request.headers.get('x-vercel-cron')
 
-  let isAuthorized = false
+  const isAuthorizedByBearer = authHeader === `Bearer ${CRON_SECRET}`
+  const isAuthorizedByVercel = vercelCronHeader === '1'
 
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
-    isAuthorized = true
-  }
-
-  // Allow in development without secret
-  if (!cronSecret) {
-    isAuthorized = true
-  }
-
-  if (!isAuthorized) {
+  if (!isAuthorizedByBearer && !isAuthorizedByVercel) {
+    console.warn('[CRON] Unauthorized request attempt')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { getTierFromSubscription } from '@/lib/subscription-tiers'
 import { generateStreamToken } from './stream/route'
+import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -204,6 +205,19 @@ export async function GET(request: Request) {
     console.log('[Family View API] Documents fetched:', documents?.length || 0)
 
     if (!documents || documents.length === 0) {
+      logSecurityEvent({
+        user_id: ownerId,
+        event_type: EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED,
+        event_data: {
+          owner_id: ownerId,
+          trusted_person_id: trustedPerson.id,
+          trusted_person_user_id: user.id,
+          document_count: 0,
+          access_level: trustedPerson.access_level,
+        },
+        request: request as NextRequest,
+      })
+
       return NextResponse.json({
         ownerName,
         ownerTier: ownerTier.id,
@@ -231,6 +245,20 @@ export async function GET(request: Request) {
         created_at: doc.created_at,
         streamToken,
       }
+    })
+
+    // Log security event for trusted person document view
+    logSecurityEvent({
+      user_id: ownerId,
+      event_type: EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED,
+      event_data: {
+        owner_id: ownerId,
+        trusted_person_id: trustedPerson.id,
+        trusted_person_user_id: user.id,
+        document_count: documentsWithTokens.length,
+        access_level: trustedPerson.access_level,
+      },
+      request: request as NextRequest,
     })
 
     return NextResponse.json({

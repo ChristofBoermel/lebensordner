@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { getUserTier } from '@/lib/auth/tier-guard'
 import { canUploadFile } from '@/lib/subscription-tiers'
 import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, incrementRateLimit, RATE_LIMIT_UPLOAD } from '@/lib/security/rate-limit'
 
 // New endpoint for secure server-side uploads
 export async function POST(req: NextRequest) {
@@ -12,6 +13,46 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
         return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
+    }
+
+    // Extract client IP
+    const forwarded = req.headers.get('x-forwarded-for') || ''
+    const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
+
+    // IP-based rate limiting
+    const ipRateLimitConfig = {
+        identifier: `upload_ip:${clientIp}`,
+        endpoint: '/api/documents/upload',
+        ...RATE_LIMIT_UPLOAD,
+    }
+
+    const ipRateLimit = await checkRateLimit(ipRateLimitConfig)
+    if (!ipRateLimit.allowed) {
+        const retryAfterSeconds = Math.ceil(
+            (ipRateLimit.resetAt.getTime() - Date.now()) / 1000
+        )
+        return NextResponse.json(
+            { error: 'Too many requests', retryAfterSeconds },
+            { status: 429 }
+        )
+    }
+
+    // Per-user rate limiting
+    const rateLimitConfig = {
+        identifier: `upload:${user.id}`,
+        endpoint: '/api/documents/upload',
+        ...RATE_LIMIT_UPLOAD,
+    }
+
+    const rateLimit = await checkRateLimit(rateLimitConfig)
+    if (!rateLimit.allowed) {
+        const retryAfterSeconds = Math.ceil(
+            (rateLimit.resetAt.getTime() - Date.now()) / 1000
+        )
+        return NextResponse.json(
+            { error: 'Too many requests', retryAfterSeconds },
+            { status: 429 }
+        )
     }
 
     try {
@@ -209,6 +250,9 @@ export async function POST(req: NextRequest) {
 
             insertedDocument = documentData
         }
+
+        await incrementRateLimit(rateLimitConfig)
+        await incrementRateLimit(ipRateLimitConfig)
 
         // Success
         return NextResponse.json({

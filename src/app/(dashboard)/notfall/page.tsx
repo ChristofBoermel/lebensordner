@@ -199,41 +199,64 @@ export default function NotfallPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: contacts } = await supabase
-      .from('emergency_contacts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('is_primary', { ascending: false }) as { data: EmergencyContact[] | null }
-    if (contacts) setEmergencyContacts(contacts)
+    // Fetch decrypted Notfall data from server API
+    try {
+      const response = await fetch('/api/notfall')
+      if (response.ok) {
+        const data = await response.json()
 
-    const { data: medical } = await supabase
-      .from('medical_info')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    if (medical) {
-      setMedicalInfo({ ...defaultMedicalInfo, ...medical })
-      setMedicalForm({ ...defaultMedicalInfo, ...medical })
-    }
+        if (data.emergencyContacts) {
+          setEmergencyContacts(data.emergencyContacts)
+        }
+        if (data.medicalInfo) {
+          setMedicalInfo({ ...defaultMedicalInfo, ...data.medicalInfo })
+          setMedicalForm({ ...defaultMedicalInfo, ...data.medicalInfo })
+        }
+        if (data.directives) {
+          setAdvanceDirectives({ ...defaultAdvanceDirectives, ...data.directives })
+          setDirectivesForm({ ...defaultAdvanceDirectives, ...data.directives })
+        }
+        if (data.funeralWishes) {
+          setFuneralWishes({ ...defaultFuneralWishes, ...data.funeralWishes })
+          setFuneralForm({ ...defaultFuneralWishes, ...data.funeralWishes })
+        }
 
-    const { data: directives } = await supabase
-      .from('advance_directives')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    if (directives) {
-      setAdvanceDirectives({ ...defaultAdvanceDirectives, ...directives })
-      setDirectivesForm({ ...defaultAdvanceDirectives, ...directives })
-    }
+        // Fetch uploaded documents for Vollmachten
+        if (data.directives) {
+          const directives = data.directives
+          const docIds = [
+            directives.patient_decree_document_id,
+            directives.power_of_attorney_document_id,
+            directives.care_directive_document_id,
+            directives.bank_power_of_attorney_document_id,
+          ].filter(Boolean)
 
-    const { data: funeral } = await supabase
-      .from('funeral_wishes')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    if (funeral) {
-      setFuneralWishes({ ...defaultFuneralWishes, ...funeral })
-      setFuneralForm({ ...defaultFuneralWishes, ...funeral })
+          if (docIds.length > 0) {
+            const { data: docs } = await supabase
+              .from('documents')
+              .select('id, title, file_path')
+              .in('id', docIds)
+
+            if (docs) {
+              const docMap: Record<string, UploadedDocument | null> = {
+                patient_decree: null,
+                power_of_attorney: null,
+                care_directive: null,
+                bank_power_of_attorney: null,
+              }
+              docs.forEach(doc => {
+                if (doc.id === directives.patient_decree_document_id) docMap.patient_decree = doc
+                if (doc.id === directives.power_of_attorney_document_id) docMap.power_of_attorney = doc
+                if (doc.id === directives.care_directive_document_id) docMap.care_directive = doc
+                if (doc.id === directives.bank_power_of_attorney_document_id) docMap.bank_power_of_attorney = doc
+              })
+              setUploadedDocuments(docMap)
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch Notfall data:', err)
     }
 
     // Fetch user tier
@@ -245,39 +268,6 @@ export default function NotfallPage() {
     if (profile) {
       const tier = getTierFromSubscription(profile.subscription_status, null)
       setUserTier(tier)
-    }
-
-    // Fetch uploaded documents for Vollmachten
-    if (directives) {
-      const docIds = [
-        directives.patient_decree_document_id,
-        directives.power_of_attorney_document_id,
-        directives.care_directive_document_id,
-        directives.bank_power_of_attorney_document_id,
-      ].filter(Boolean)
-
-      if (docIds.length > 0) {
-        const { data: docs } = await supabase
-          .from('documents')
-          .select('id, title, file_path')
-          .in('id', docIds)
-
-        if (docs) {
-          const docMap: Record<string, UploadedDocument | null> = {
-            patient_decree: null,
-            power_of_attorney: null,
-            care_directive: null,
-            bank_power_of_attorney: null,
-          }
-          docs.forEach(doc => {
-            if (doc.id === directives.patient_decree_document_id) docMap.patient_decree = doc
-            if (doc.id === directives.power_of_attorney_document_id) docMap.power_of_attorney = doc
-            if (doc.id === directives.care_directive_document_id) docMap.care_directive = doc
-            if (doc.id === directives.bank_power_of_attorney_document_id) docMap.bank_power_of_attorney = doc
-          })
-          setUploadedDocuments(docMap)
-        }
-      }
     }
 
     setIsLoading(false)
@@ -316,20 +306,23 @@ export default function NotfallPage() {
         await supabase.from('emergency_contacts').update({ is_primary: false }).eq('user_id', user.id)
       }
 
-      if (editingContact) {
-        const { error } = await supabase.from('emergency_contacts').update({
-          name: contactForm.name, phone: contactForm.phone, email: contactForm.email || null,
-          relationship: contactForm.relationship, is_primary: contactForm.is_primary, notes: contactForm.notes || null,
-        }).eq('id', editingContact.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from('emergency_contacts').insert({
-          user_id: user.id, name: contactForm.name, phone: contactForm.phone, email: contactForm.email || null,
-          relationship: contactForm.relationship, is_primary: contactForm.is_primary,
-          notes: contactForm.notes || null,
-        })
-        if (error) throw error
+      const contactToSave = {
+        ...(editingContact ? { id: editingContact.id } : {}),
+        name: contactForm.name,
+        phone: contactForm.phone,
+        email: contactForm.email || null,
+        relationship: contactForm.relationship,
+        is_primary: contactForm.is_primary,
+        notes: contactForm.notes || null,
       }
+
+      const response = await fetch('/api/notfall', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emergencyContacts: [contactToSave] }),
+      })
+      if (!response.ok) throw new Error('Fehler beim Speichern')
+
       setIsContactDialogOpen(false)
       fetchData()
     } catch (err) {
@@ -438,11 +431,8 @@ export default function NotfallPage() {
     setIsSaving(true)
     setError(null)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Nicht angemeldet')
-
       const medicalData = {
-        user_id: user.id,
+        ...(medicalInfo.id ? { id: medicalInfo.id } : {}),
         blood_type: medicalForm.blood_type || null,
         allergies: medicalForm.allergies.filter(Boolean),
         medications: medicalForm.medications.filter(Boolean),
@@ -456,13 +446,13 @@ export default function NotfallPage() {
         organ_donor_notes: medicalForm.organ_donor_notes || null,
       }
 
-      if (medicalInfo.id) {
-        const { error } = await supabase.from('medical_info').update(medicalData).eq('id', medicalInfo.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from('medical_info').insert(medicalData)
-        if (error) throw error
-      }
+      const response = await fetch('/api/notfall', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ medicalInfo: medicalData }),
+      })
+      if (!response.ok) throw new Error('Fehler beim Speichern')
+
       setIsMedicalDialogOpen(false)
       fetchData()
     } catch (err) {
@@ -476,34 +466,35 @@ export default function NotfallPage() {
     setIsSaving(true)
     setError(null)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Nicht angemeldet')
-
-      const data = {
-        user_id: user.id,
+      const directiveData = {
+        ...(advanceDirectives.id ? { id: advanceDirectives.id } : {}),
         has_patient_decree: directivesForm.has_patient_decree,
         patient_decree_location: directivesForm.patient_decree_location || null,
         patient_decree_date: directivesForm.patient_decree_date || null,
+        patient_decree_document_id: directivesForm.patient_decree_document_id || null,
         has_power_of_attorney: directivesForm.has_power_of_attorney,
         power_of_attorney_location: directivesForm.power_of_attorney_location || null,
         power_of_attorney_holder: directivesForm.power_of_attorney_holder || null,
         power_of_attorney_date: directivesForm.power_of_attorney_date || null,
+        power_of_attorney_document_id: directivesForm.power_of_attorney_document_id || null,
         has_care_directive: directivesForm.has_care_directive,
         care_directive_location: directivesForm.care_directive_location || null,
         care_directive_date: directivesForm.care_directive_date || null,
+        care_directive_document_id: directivesForm.care_directive_document_id || null,
         has_bank_power_of_attorney: directivesForm.has_bank_power_of_attorney,
         bank_power_of_attorney_holder: directivesForm.bank_power_of_attorney_holder || null,
         bank_power_of_attorney_banks: directivesForm.bank_power_of_attorney_banks || null,
+        bank_power_of_attorney_document_id: directivesForm.bank_power_of_attorney_document_id || null,
         notes: directivesForm.notes || null,
       }
 
-      if (advanceDirectives.id) {
-        const { error } = await supabase.from('advance_directives').update(data).eq('id', advanceDirectives.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from('advance_directives').insert(data)
-        if (error) throw error
-      }
+      const response = await fetch('/api/notfall', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directives: directiveData }),
+      })
+      if (!response.ok) throw new Error('Fehler beim Speichern')
+
       setIsDirectivesDialogOpen(false)
       fetchData()
     } catch (err) {
@@ -517,11 +508,8 @@ export default function NotfallPage() {
     setIsSaving(true)
     setError(null)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Nicht angemeldet')
-
-      const data = {
-        user_id: user.id,
+      const funeralData = {
+        ...(funeralWishes.id ? { id: funeralWishes.id } : {}),
         burial_type: funeralForm.burial_type || null,
         burial_location: funeralForm.burial_location || null,
         ceremony_type: funeralForm.ceremony_type || null,
@@ -534,13 +522,13 @@ export default function NotfallPage() {
         funeral_insurance_number: funeralForm.funeral_insurance_number || null,
       }
 
-      if (funeralWishes.id) {
-        const { error } = await supabase.from('funeral_wishes').update(data).eq('id', funeralWishes.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from('funeral_wishes').insert(data)
-        if (error) throw error
-      }
+      const response = await fetch('/api/notfall', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ funeralWishes: funeralData }),
+      })
+      if (!response.ok) throw new Error('Fehler beim Speichern')
+
       setIsFuneralDialogOpen(false)
       fetchData()
     } catch (err) {

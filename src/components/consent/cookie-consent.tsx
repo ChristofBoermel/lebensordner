@@ -2,13 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import Cookies from 'js-cookie'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Cookie, Settings, Check, X } from 'lucide-react'
 import { initPostHog, posthog } from '@/lib/posthog'
 
 const CONSENT_COOKIE = 'lebensordner_consent'
-const CONSENT_VERSION = '1.0'
+export const CONSENT_VERSION = '1.0'
+
+// Phase 1: marketing consent is disabled. Set to true in a future phase to enable.
+const MARKETING_ENABLED = false
 
 interface ConsentSettings {
   necessary: boolean
@@ -50,8 +54,52 @@ export function CookieConsent() {
     }
   }, [])
 
+  const syncConsentToServer = async (newSettings: ConsentSettings) => {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const requests = []
+      requests.push(
+        fetch('/api/consent/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            consentType: 'analytics',
+            granted: newSettings.analytics,
+            version: newSettings.version,
+          }),
+        })
+      )
+
+      // Phase 1: omit marketing consent record
+      if (MARKETING_ENABLED) {
+        requests.push(
+          fetch('/api/consent/record', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              consentType: 'marketing',
+              granted: newSettings.marketing,
+              version: newSettings.version,
+            }),
+          })
+        )
+      }
+
+      await Promise.allSettled(requests)
+    } catch {
+      // Silently handle errors to avoid blocking consent flow
+    }
+  }
+
   const saveConsent = (newSettings: ConsentSettings) => {
-    Cookies.set(CONSENT_COOKIE, JSON.stringify(newSettings), { 
+    // Phase 1: always force marketing to false
+    if (!MARKETING_ENABLED) {
+      newSettings = { ...newSettings, marketing: false }
+    }
+    Cookies.set(CONSENT_COOKIE, JSON.stringify(newSettings), {
       expires: 365,
       sameSite: 'strict'
     })
@@ -65,13 +113,16 @@ export function CookieConsent() {
     } else if (posthog.__loaded) {
       posthog.opt_out_capturing()
     }
+
+    // Sync to server for logged-in users
+    syncConsentToServer(newSettings)
   }
 
   const acceptAll = () => {
     saveConsent({
       necessary: true,
       analytics: true,
-      marketing: true,
+      marketing: false,
       version: CONSENT_VERSION,
     })
   }
@@ -133,6 +184,8 @@ export function CookieConsent() {
                 <a href="/datenschutz" className="underline hover:text-warmgray-700">Datenschutzerklärung</a>
                 {' · '}
                 <a href="/impressum" className="underline hover:text-warmgray-700">Impressum</a>
+                {' · '}
+                <a href="/einstellungen#privacy" className="underline hover:text-warmgray-700">Einstellungen verwalten</a>
               </p>
             </div>
           ) : (
@@ -177,21 +230,19 @@ export function CookieConsent() {
                   </button>
                 </label>
 
-                {/* Marketing */}
-                <label className="flex items-center justify-between p-3 rounded-lg bg-warmgray-50 cursor-pointer">
+                {/* Marketing - disabled in Phase 1 */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-warmgray-50">
                   <div>
                     <p className="font-medium text-warmgray-900">Marketing-Cookies</p>
-                    <p className="text-xs text-warmgray-500">Für personalisierte Inhalte</p>
+                    <p className="text-xs text-warmgray-500">Derzeit nicht verfügbar</p>
                   </div>
-                  <button
-                    onClick={() => setSettings({ ...settings, marketing: !settings.marketing })}
-                    className={`w-10 h-6 rounded-full flex items-center px-1 transition-colors ${
-                      settings.marketing ? 'bg-sage-600 justify-end' : 'bg-warmgray-300 justify-start'
-                    }`}
-                  >
-                    <div className="w-4 h-4 rounded-full bg-white" />
-                  </button>
-                </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-warmgray-400">Demnächst</span>
+                    <div className="w-10 h-6 rounded-full bg-warmgray-200 flex items-center px-1 justify-start opacity-50 cursor-not-allowed">
+                      <div className="w-4 h-4 rounded-full bg-white" />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-2">

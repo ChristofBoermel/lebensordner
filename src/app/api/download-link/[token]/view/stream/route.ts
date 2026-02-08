@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { logSecurityEvent, EVENT_DOWNLOAD_LINK_VIEWED } from '@/lib/security/audit-log'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,7 +48,7 @@ function verifyStreamToken(token: string): DownloadLinkStreamToken | null {
 }
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   context: { params: Promise<{ token: string }> }
 ) {
   try {
@@ -122,6 +123,21 @@ export async function GET(
       console.error('Error downloading file:', fileError)
       return NextResponse.json({ error: 'Fehler beim Laden der Datei' }, { status: 500 })
     }
+
+    // Log security event for download link stream access
+    logSecurityEvent({
+      user_id: downloadToken.user_id,
+      event_type: EVENT_DOWNLOAD_LINK_VIEWED,
+      event_data: {
+        owner_id: downloadToken.user_id,
+        document_id: docId,
+        recipient_email: downloadToken.recipient_email,
+        file_type: document.file_type,
+        action: 'stream',
+        download_link_token: downloadLinkToken,
+      },
+      request,
+    })
 
     // Get file as array buffer for streaming
     const arrayBuffer = await fileData.arrayBuffer()

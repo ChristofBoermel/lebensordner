@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createHmac } from 'crypto'
+import { logSecurityEvent, EVENT_DOWNLOAD_LINK_VIEWED } from '@/lib/security/audit-log'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -66,7 +67,7 @@ export function generateDownloadLinkStreamToken(docId: string, ownerId: string, 
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ token: string }> }
 ) {
   try {
@@ -110,6 +111,19 @@ export async function GET(
     }
 
     // Note: We don't check used_at for view links - they can be used multiple times
+
+    // Log security event for download link view access
+    logSecurityEvent({
+      user_id: downloadToken.user_id,
+      event_type: EVENT_DOWNLOAD_LINK_VIEWED,
+      event_data: {
+        owner_id: downloadToken.user_id,
+        recipient_email: downloadToken.recipient_email,
+        link_type: 'view',
+        download_link_token: token,
+      },
+      request: request as NextRequest,
+    })
 
     // Get owner profile
     const { data: profile } = await adminClient

@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import JSZip from 'jszip'
 import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscription-tiers'
+import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
 
 const getSupabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -144,6 +145,20 @@ export async function GET(request: Request) {
         continue
       }
     }
+
+    // Log security event for trusted person document download
+    logSecurityEvent({
+      user_id: ownerId,
+      event_type: EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED,
+      event_data: {
+        owner_id: ownerId,
+        trusted_person_id: trustedPerson.id,
+        trusted_person_user_id: user.id,
+        document_count: documents.length,
+        action: 'download',
+      },
+      request: request as NextRequest,
+    })
 
     // Generate ZIP
     const zipBlob = await zip.generateAsync({ type: 'arraybuffer' })
