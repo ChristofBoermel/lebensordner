@@ -21,7 +21,9 @@ import {
   QrCode,
   Info,
   Smartphone,
-  CreditCard
+  CreditCard,
+  AlertCircle,
+  X
 } from 'lucide-react'
 import { DOCUMENT_CATEGORIES, type DocumentCategory } from '@/types/database'
 import { formatDate } from '@/lib/utils'
@@ -35,6 +37,7 @@ interface DocumentRow {
   title: string
   notes: string | null
   file_name: string
+  file_path: string | null
   created_at: string
   expiry_date: string | null
 }
@@ -96,138 +99,171 @@ export default function ExportPage() {
   const [reminders, setReminders] = useState<any[]>([])
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null)
   const [isGeneratingQR, setIsGeneratingQR] = useState(false)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null)
 
   const supabase = createClient()
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) return
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
 
-    // Fetch profile
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('full_name, email, phone, address')
-      .eq('id', user.id)
-      .single() as { data: ProfileRow | null }
-    
-    if (profileData) setProfile(profileData)
+      if (!user) return
 
-    // Fetch documents
-    const { data: docsData } = await supabase
-      .from('documents')
-      .select('id, category, title, notes, file_name, created_at, expiry_date')
-      .eq('user_id', user.id)
-      .order('category') as { data: DocumentRow[] | null }
-    
-    if (docsData) setDocuments(docsData)
+      // Fetch decrypted emergency/medical data from API (handles server-side decryption)
+      const notfallResponse = await fetch('/api/notfall')
+      if (!notfallResponse.ok) {
+        if (notfallResponse.status === 401) {
+          setNotification({ type: 'error', message: 'Sitzung abgelaufen. Bitte melden Sie sich erneut an.' })
+          return
+        }
+        console.error('Notfall API error:', notfallResponse.status)
+      }
+      const notfallData = notfallResponse.ok ? await notfallResponse.json() : {}
 
-    // Fetch trusted persons
-    const { data: trustedData } = await supabase
-      .from('trusted_persons')
-      .select('id, name, email, phone, relationship, access_level')
-      .eq('user_id', user.id)
-      .eq('is_active', true) as { data: TrustedPersonRow[] | null }
-    
-    if (trustedData) setTrustedPersons(trustedData)
+      // Fetch decrypted profile fields from API (phone, address are encrypted in DB)
+      const profileResponse = await fetch('/api/profile')
+      const decryptedProfile = profileResponse.ok ? (await profileResponse.json()).profile : null
 
-    // Fetch emergency contacts from Supabase
-    const { data: contactsData } = await supabase
-      .from('emergency_contacts')
-      .select('id, name, phone, email, relationship, is_primary')
-      .eq('user_id', user.id)
-      .order('is_primary', { ascending: false })
+      // Fetch basic profile data (full_name, email are not encrypted)
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user.id)
+        .single()
 
-    if (contactsData) setEmergencyContacts(contactsData as EmergencyContactRow[])
+      if (profileData) {
+        setProfile({
+          full_name: profileData.full_name,
+          email: profileData.email,
+          phone: decryptedProfile?.phone || null,
+          address: decryptedProfile?.address || null,
+        })
+      }
 
-    // Fetch medical info from Supabase
-    const { data: medicalData } = await supabase
-      .from('medical_info')
-      .select('blood_type, allergies, medications, conditions, doctor_name, doctor_phone, insurance_number, organ_donor')
-      .eq('user_id', user.id)
-      .maybeSingle()
+      // Set decrypted emergency data from API
+      if (notfallData.emergencyContacts) {
+        setEmergencyContacts(notfallData.emergencyContacts)
+      }
+      if (notfallData.medicalInfo) {
+        setMedicalInfo(notfallData.medicalInfo)
+      }
+      if (notfallData.directives) {
+        setAdvanceDirectives(notfallData.directives)
+      }
 
-    if (medicalData) setMedicalInfo(medicalData as MedicalInfoRow)
+      // Fetch documents (not encrypted, direct Supabase query is fine)
+      const { data: docsData } = await supabase
+        .from('documents')
+        .select('id, category, title, notes, file_name, file_path, created_at, expiry_date')
+        .eq('user_id', user.id)
+        .order('category') as { data: DocumentRow[] | null }
 
-    // Fetch advance directives from Supabase
-    const { data: directivesData } = await supabase
-      .from('advance_directives')
-      .select('has_patient_decree, has_power_of_attorney, has_care_directive, has_bank_power_of_attorney')
-      .eq('user_id', user.id)
-      .maybeSingle()
+      if (docsData) setDocuments(docsData)
 
-    if (directivesData) setAdvanceDirectives(directivesData as AdvanceDirectivesRow)
+      // Fetch trusted persons (not encrypted)
+      const { data: trustedData } = await supabase
+        .from('trusted_persons')
+        .select('id, name, email, phone, relationship, access_level')
+        .eq('user_id', user.id)
+        .eq('is_active', true) as { data: TrustedPersonRow[] | null }
 
-    // Fetch reminders
-    const { data: remindersData } = await supabase
-      .from('reminders')
-      .select('*')
-      .eq('user_id', user.id)
-    
-    if (remindersData) setReminders(remindersData)
+      if (trustedData) setTrustedPersons(trustedData)
 
-    setIsLoading(false)
+      // Fetch reminders
+      const { data: remindersData } = await supabase
+        .from('reminders')
+        .select('*')
+        .eq('user_id', user.id)
+
+      if (remindersData) setReminders(remindersData)
+    } catch (error) {
+      console.error('Error fetching export data:', error)
+      setNotification({ type: 'error', message: 'Fehler beim Laden der Daten. Bitte versuchen Sie es erneut.' })
+    } finally {
+      setIsLoading(false)
+    }
   }, [supabase])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
-  // Generate emergency QR code with compact data
+  // Auto-dismiss notifications after 6 seconds
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 6000)
+      return () => clearTimeout(timer)
+    }
+  }, [notification])
+
+  // Generate emergency QR code with human-readable German text
   const generateEmergencyQR = useCallback(async () => {
     setIsGeneratingQR(true)
     try {
-      // Build compact emergency data structure
-      const emergencyData: Record<string, any> = {
-        // Header
-        t: 'NOTFALL', // type
-        v: 1, // version
-      }
+      // Build human-readable German text block
+      const lines: string[] = []
+      lines.push('NOTFALL-INFORMATIONEN')
+      lines.push('')
 
-      // Personal info (name only)
+      // Personal info
       if (profile?.full_name) {
-        emergencyData.n = profile.full_name
+        lines.push(`Name: ${profile.full_name}`)
       }
 
-      // Emergency contacts (max 2, most important)
+      // Emergency contacts
       if (emergencyContacts.length > 0) {
-        emergencyData.k = emergencyContacts.slice(0, 2).map(c => ({
-          n: c.name,
-          t: c.phone,
-          b: c.relationship,
-        }))
+        lines.push('')
+        lines.push('Notfall-Kontakte:')
+        emergencyContacts.slice(0, 2).forEach(c => {
+          lines.push(`- ${c.name} (${c.relationship}): ${c.phone}`)
+        })
       }
 
       // Medical info
       if (medicalInfo) {
-        const med: Record<string, any> = {}
-        if (medicalInfo.blood_type) med.bg = medicalInfo.blood_type
-        if (medicalInfo.allergies?.length > 0) med.al = medicalInfo.allergies
-        if (medicalInfo.medications?.length > 0) med.me = medicalInfo.medications
-        if (medicalInfo.conditions?.length > 0) med.ve = medicalInfo.conditions
-        if (medicalInfo.doctor_name) {
-          med.ha = medicalInfo.doctor_name
-          if (medicalInfo.doctor_phone) med.ht = medicalInfo.doctor_phone
+        if (medicalInfo.blood_type) {
+          lines.push('')
+          lines.push(`Blutgruppe: ${medicalInfo.blood_type}`)
         }
-        if (medicalInfo.insurance_number) med.vn = medicalInfo.insurance_number
-        if (medicalInfo.organ_donor !== null) med.os = medicalInfo.organ_donor ? 'J' : 'N'
-        if (Object.keys(med).length > 0) emergencyData.m = med
+        if (medicalInfo.allergies?.length > 0) {
+          lines.push(`Allergien: ${medicalInfo.allergies.join(', ')}`)
+        }
+        if (medicalInfo.medications?.length > 0) {
+          lines.push(`Medikamente: ${medicalInfo.medications.join(', ')}`)
+        }
+        if (medicalInfo.conditions?.length > 0) {
+          lines.push(`Vorerkrankungen: ${medicalInfo.conditions.join(', ')}`)
+        }
+        if (medicalInfo.doctor_name) {
+          let doctorLine = `Hausarzt: ${medicalInfo.doctor_name}`
+          if (medicalInfo.doctor_phone) doctorLine += ` (${medicalInfo.doctor_phone})`
+          lines.push(doctorLine)
+        }
+        if (medicalInfo.insurance_number) {
+          lines.push(`Versicherungsnummer: ${medicalInfo.insurance_number}`)
+        }
+        if (medicalInfo.organ_donor !== null) {
+          lines.push(`Organspender: ${medicalInfo.organ_donor ? 'Ja' : 'Nein'}`)
+        }
       }
 
-      // Advance directives (yes/no only)
+      // Advance directives
       if (advanceDirectives) {
-        const dir: string[] = []
-        if (advanceDirectives.has_patient_decree) dir.push('PV')
-        if (advanceDirectives.has_power_of_attorney) dir.push('VV')
-        if (advanceDirectives.has_care_directive) dir.push('BV')
-        if (advanceDirectives.has_bank_power_of_attorney) dir.push('BaV')
-        if (dir.length > 0) emergencyData.vo = dir
+        const directives: string[] = []
+        if (advanceDirectives.has_patient_decree) directives.push('Patientenverfügung')
+        if (advanceDirectives.has_power_of_attorney) directives.push('Vorsorgevollmacht')
+        if (advanceDirectives.has_care_directive) directives.push('Betreuungsverfügung')
+        if (advanceDirectives.has_bank_power_of_attorney) directives.push('Bankvollmacht')
+        if (directives.length > 0) {
+          lines.push('')
+          lines.push(`Verfügungen: ${directives.join(', ')}`)
+        }
       }
 
       // Generate QR code
-      const jsonData = JSON.stringify(emergencyData)
-      const dataUrl = await QRCode.toDataURL(jsonData, {
+      const textData = lines.join('\n')
+      const dataUrl = await QRCode.toDataURL(textData, {
         width: 300,
         margin: 2,
         color: {
@@ -240,7 +276,7 @@ export default function ExportPage() {
       setQrCodeDataUrl(dataUrl)
     } catch (error) {
       console.error('QR generation error:', error)
-      alert('Fehler beim Erstellen des QR-Codes.')
+      setNotification({ type: 'error', message: 'Fehler beim Erstellen des QR-Codes. Bitte versuchen Sie es erneut.' })
     } finally {
       setIsGeneratingQR(false)
     }
@@ -296,95 +332,119 @@ export default function ExportPage() {
       yPos += 15
 
       // Personal Info
-      addSection('Persönliche Daten')
-      if (profile) {
-        doc.text(`Name: ${profile.full_name || '-'}`, 14, yPos); yPos += 6
-        doc.text(`E-Mail: ${profile.email || '-'}`, 14, yPos); yPos += 6
-        doc.text(`Telefon: ${profile.phone || '-'}`, 14, yPos); yPos += 6
-        if (profile.address) {
-          doc.text(`Adresse: ${profile.address.replace(/\n/g, ', ')}`, 14, yPos); yPos += 6
+      try {
+        addSection('Persönliche Daten')
+        if (profile) {
+          doc.text(`Name: ${profile.full_name || '-'}`, 14, yPos); yPos += 6
+          doc.text(`E-Mail: ${profile.email || '-'}`, 14, yPos); yPos += 6
+          doc.text(`Telefon: ${profile.phone || '-'}`, 14, yPos); yPos += 6
+          if (profile.address) {
+            doc.text(`Adresse: ${profile.address.replace(/\n/g, ', ')}`, 14, yPos); yPos += 6
+          }
         }
+        yPos += 10
+      } catch (sectionError) {
+        console.error('PDF section error (Persönliche Daten):', sectionError)
+        yPos += 10
       }
-      yPos += 10
 
       // Emergency Contacts
-      if (emergencyContacts.length > 0) {
-        addSection('Notfall-Kontakte')
-        emergencyContacts.forEach((contact: any) => {
-          doc.text(`• ${contact.name} (${contact.relationship}): ${contact.phone}`, 14, yPos)
-          yPos += 6
-        })
+      try {
+        if (emergencyContacts.length > 0) {
+          addSection('Notfall-Kontakte')
+          emergencyContacts.forEach((contact: any) => {
+            doc.text(`• ${contact.name} (${contact.relationship}): ${contact.phone}`, 14, yPos)
+            yPos += 6
+          })
+          yPos += 10
+        }
+      } catch (sectionError) {
+        console.error('PDF section error (Notfall-Kontakte):', sectionError)
         yPos += 10
       }
 
       // Medical Info
-      if (medicalInfo && (medicalInfo.blood_type || medicalInfo.allergies?.length > 0 || medicalInfo.medications?.length > 0)) {
-        addSection('Medizinische Informationen')
-        if (medicalInfo.blood_type) {
-          doc.text(`Blutgruppe: ${medicalInfo.blood_type}`, 14, yPos); yPos += 6
+      try {
+        if (medicalInfo && (medicalInfo.blood_type || medicalInfo.allergies?.length > 0 || medicalInfo.medications?.length > 0)) {
+          addSection('Medizinische Informationen')
+          if (medicalInfo.blood_type) {
+            doc.text(`Blutgruppe: ${medicalInfo.blood_type}`, 14, yPos); yPos += 6
+          }
+          if (medicalInfo.allergies?.length > 0) {
+            doc.text(`Allergien: ${medicalInfo.allergies.join(', ')}`, 14, yPos); yPos += 6
+          }
+          if (medicalInfo.medications?.length > 0) {
+            doc.text(`Medikamente: ${medicalInfo.medications.join(', ')}`, 14, yPos); yPos += 6
+          }
+          if (medicalInfo.conditions?.length > 0) {
+            doc.text(`Vorerkrankungen: ${medicalInfo.conditions.join(', ')}`, 14, yPos); yPos += 6
+          }
+          if (medicalInfo.doctor_name) {
+            doc.text(`Hausarzt: ${medicalInfo.doctor_name} (${medicalInfo.doctor_phone || '-'})`, 14, yPos); yPos += 6
+          }
+          if (medicalInfo.insurance_number) {
+            doc.text(`Versicherungsnummer: ${medicalInfo.insurance_number}`, 14, yPos); yPos += 6
+          }
+          yPos += 10
         }
-        if (medicalInfo.allergies?.length > 0) {
-          doc.text(`Allergien: ${medicalInfo.allergies.join(', ')}`, 14, yPos); yPos += 6
-        }
-        if (medicalInfo.medications?.length > 0) {
-          doc.text(`Medikamente: ${medicalInfo.medications.join(', ')}`, 14, yPos); yPos += 6
-        }
-        if (medicalInfo.conditions?.length > 0) {
-          doc.text(`Vorerkrankungen: ${medicalInfo.conditions.join(', ')}`, 14, yPos); yPos += 6
-        }
-        if (medicalInfo.doctor_name) {
-          doc.text(`Hausarzt: ${medicalInfo.doctor_name} (${medicalInfo.doctor_phone || '-'})`, 14, yPos); yPos += 6
-        }
-        if (medicalInfo.insurance_number) {
-          doc.text(`Versicherungsnummer: ${medicalInfo.insurance_number}`, 14, yPos); yPos += 6
-        }
+      } catch (sectionError) {
+        console.error('PDF section error (Medizinische Informationen):', sectionError)
         yPos += 10
       }
 
       // Trusted Persons
-      if (trustedPersons.length > 0) {
-        addSection('Vertrauenspersonen')
-        trustedPersons.forEach((person) => {
-          const accessLabel = person.access_level === 'immediate' ? 'Sofort' : 
-                             person.access_level === 'emergency' ? 'Notfall' : 'Nach Bestätigung'
-          doc.text(`• ${person.name} (${person.relationship})`, 14, yPos); yPos += 5
-          doc.text(`  E-Mail: ${person.email}, Zugriff: ${accessLabel}`, 14, yPos); yPos += 7
-        })
+      try {
+        if (trustedPersons.length > 0) {
+          addSection('Vertrauenspersonen')
+          trustedPersons.forEach((person) => {
+            const accessLabel = person.access_level === 'immediate' ? 'Sofort' :
+                               person.access_level === 'emergency' ? 'Notfall' : 'Nach Bestätigung'
+            doc.text(`• ${person.name} (${person.relationship})`, 14, yPos); yPos += 5
+            doc.text(`  E-Mail: ${person.email}, Zugriff: ${accessLabel}`, 14, yPos); yPos += 7
+          })
+          yPos += 10
+        }
+      } catch (sectionError) {
+        console.error('PDF section error (Vertrauenspersonen):', sectionError)
         yPos += 10
       }
 
       // Documents by Category
-      addSection('Dokumente nach Kategorien')
-      yPos += 5
-      
-      Object.entries(DOCUMENT_CATEGORIES).forEach(([key, category]) => {
-        const categoryDocs = documents.filter(d => d.category === key)
-        if (categoryDocs.length > 0) {
-          if (yPos > 250) {
-            doc.addPage()
-            yPos = 20
-          }
-          
-          doc.setFont('helvetica', 'bold')
-          doc.text(`${category.name} (${categoryDocs.length})`, 14, yPos)
-          doc.setFont('helvetica', 'normal')
-          yPos += 6
-          
-          categoryDocs.forEach((docItem) => {
-            if (yPos > 270) {
+      try {
+        addSection('Dokumente nach Kategorien')
+        yPos += 5
+
+        Object.entries(DOCUMENT_CATEGORIES).forEach(([key, category]) => {
+          const categoryDocs = documents.filter(d => d.category === key)
+          if (categoryDocs.length > 0) {
+            if (yPos > 250) {
               doc.addPage()
               yPos = 20
             }
-            let docText = `• ${docItem.title}`
-            if (docItem.expiry_date) {
-              docText += ` (gültig bis: ${formatDate(docItem.expiry_date)})`
-            }
-            doc.text(docText, 18, yPos)
+
+            doc.setFont('helvetica', 'bold')
+            doc.text(`${category.name} (${categoryDocs.length})`, 14, yPos)
+            doc.setFont('helvetica', 'normal')
+            yPos += 6
+
+            categoryDocs.forEach((docItem) => {
+              if (yPos > 270) {
+                doc.addPage()
+                yPos = 20
+              }
+              let docText = `• ${docItem.title}`
+              if (docItem.expiry_date) {
+                docText += ` (gültig bis: ${formatDate(docItem.expiry_date)})`
+              }
+              doc.text(docText, 18, yPos)
+              yPos += 5
+            })
             yPos += 5
-          })
-          yPos += 5
-        }
-      })
+          }
+        })
+      } catch (sectionError) {
+        console.error('PDF section error (Dokumente):', sectionError)
+      }
 
       // Footer on last page
       const pageCount = doc.internal.pages.length - 1
@@ -403,7 +463,7 @@ export default function ExportPage() {
       doc.save(`lebensordner-uebersicht-${new Date().toISOString().split('T')[0]}.pdf`)
     } catch (error) {
       console.error('PDF generation error:', error)
-      alert('Fehler beim Erstellen der PDF. Bitte versuchen Sie es erneut.')
+      setNotification({ type: 'error', message: 'Fehler beim Erstellen der PDF. Bitte versuchen Sie es erneut.' })
     } finally {
       setIsGenerating(false)
     }
@@ -412,68 +472,80 @@ export default function ExportPage() {
   const generateFullBackup = async () => {
     setIsBackingUp(true)
     setBackupProgress(0)
+    const failedFiles: string[] = []
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Nicht angemeldet')
+      if (!user) {
+        setNotification({ type: 'error', message: 'Sitzung abgelaufen. Bitte melden Sie sich erneut an.' })
+        return
+      }
 
       const zip = new JSZip()
-      
+
       // Create data folder
       const dataFolder = zip.folder('daten')
-      
-      // Add profile data
+
+      // Add profile data (already decrypted via API)
       setBackupProgress(10)
       dataFolder?.file('profil.json', JSON.stringify(profile, null, 2))
-      
+
       // Add documents metadata
       setBackupProgress(20)
       dataFolder?.file('dokumente.json', JSON.stringify(documents, null, 2))
-      
+
       // Add trusted persons
       setBackupProgress(30)
       dataFolder?.file('vertrauenspersonen.json', JSON.stringify(trustedPersons, null, 2))
-      
-      // Add emergency contacts
+
+      // Add emergency contacts (already decrypted via API)
       setBackupProgress(40)
       dataFolder?.file('notfallkontakte.json', JSON.stringify(emergencyContacts, null, 2))
-      
-      // Add medical info
+
+      // Add medical info (already decrypted via API)
       setBackupProgress(50)
       dataFolder?.file('medizinische-infos.json', JSON.stringify(medicalInfo, null, 2))
-      
+
       // Add reminders
       setBackupProgress(55)
       dataFolder?.file('erinnerungen.json', JSON.stringify(reminders, null, 2))
-      
+
       // Download all document files
       const filesFolder = zip.folder('dateien')
       const totalDocs = documents.length
-      
+      let successCount = 0
+
       for (let i = 0; i < documents.length; i++) {
         const doc = documents[i]
         const progress = 60 + ((i / totalDocs) * 35)
         setBackupProgress(Math.round(progress))
-        
+
         try {
+          const filePath = doc.file_path || `${user.id}/${doc.id}/${doc.file_name}`
           const { data: fileData, error } = await supabase.storage
             .from('documents')
-            .download(`${user.id}/${doc.id}/${doc.file_name}`)
-          
+            .download(filePath)
+
           if (fileData && !error) {
             const categoryName = DOCUMENT_CATEGORIES[doc.category]?.name || doc.category
             const safeFileName = doc.file_name.replace(/[^a-zA-Z0-9.-]/g, '_')
             filesFolder?.file(`${categoryName}/${doc.title}_${safeFileName}`, fileData)
+            successCount++
+          } else {
+            const errorMsg = error?.message || 'Unbekannter Fehler'
+            console.warn(`Datei nicht herunterladbar: ${doc.file_name} (${errorMsg})`)
+            failedFiles.push(doc.file_name)
           }
         } catch (err) {
-          console.warn(`Could not download file: ${doc.file_name}`, err)
+          console.warn(`Fehler beim Download: ${doc.file_name}`, err)
+          failedFiles.push(doc.file_name)
         }
       }
-      
+
       // Add README
       setBackupProgress(98)
       const readmeContent = `# Lebensordner Backup
-      
+
 Erstellt am: ${new Date().toLocaleString('de-DE')}
 Benutzer: ${profile?.email}
 
@@ -489,28 +561,47 @@ Benutzer: ${profile?.email}
 
 ### /dateien
 Alle hochgeladenen Dokumente, sortiert nach Kategorie.
+${failedFiles.length > 0 ? `\n### Fehlende Dateien\nDie folgenden Dateien konnten nicht heruntergeladen werden:\n${failedFiles.map(f => `- ${f}`).join('\n')}` : ''}
 
 ## Hinweis
-Dieses Backup enthält vertrauliche Informationen. 
+Dieses Backup enthält vertrauliche Informationen.
 Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
 `
       zip.file('README.md', readmeContent)
-      
+
       // Generate zip
       setBackupProgress(100)
-      const content = await zip.generateAsync({ 
+      const content = await zip.generateAsync({
         type: 'blob',
         compression: 'DEFLATE',
         compressionOptions: { level: 6 }
       })
-      
+
       // Download
       const fileName = `lebensordner-backup-${new Date().toISOString().split('T')[0]}.zip`
       saveAs(content, fileName)
-      
+
+      // Show summary notification
+      if (failedFiles.length > 0) {
+        setNotification({
+          type: 'warning',
+          message: `Backup erstellt. ${successCount} von ${totalDocs} Dateien erfolgreich. ${failedFiles.length} Datei(en) konnten nicht heruntergeladen werden.`,
+        })
+      } else if (totalDocs > 0) {
+        setNotification({
+          type: 'success',
+          message: `Backup erfolgreich erstellt mit allen ${totalDocs} Dateien.`,
+        })
+      } else {
+        setNotification({
+          type: 'success',
+          message: 'Backup erfolgreich erstellt.',
+        })
+      }
+
     } catch (error) {
       console.error('Backup error:', error)
-      alert('Fehler beim Erstellen des Backups. Bitte versuchen Sie es erneut.')
+      setNotification({ type: 'error', message: 'Fehler beim Erstellen des Backups. Bitte versuchen Sie es erneut.' })
     } finally {
       setIsBackingUp(false)
       setBackupProgress(0)
@@ -531,6 +622,30 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
+      {/* Notification Toast */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 max-w-md p-4 rounded-lg shadow-lg border flex items-start gap-3 animate-in fade-in slide-in-from-top-2 ${
+          notification.type === 'error' ? 'bg-red-50 border-red-200 text-red-900' :
+          notification.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-900' :
+          'bg-green-50 border-green-200 text-green-900'
+        }`}>
+          {notification.type === 'error' ? (
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          ) : notification.type === 'warning' ? (
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+          )}
+          <p className="text-sm flex-1">{notification.message}</p>
+          <button
+            onClick={() => setNotification(null)}
+            className="flex-shrink-0 p-0.5 rounded hover:bg-black/5"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="page-header">
         <h1 className="text-3xl font-serif font-semibold text-warmgray-900">
@@ -554,7 +669,7 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={generatePDF} disabled={isGenerating} className="w-full">
+            <Button onClick={generatePDF} disabled={isGenerating} className="w-full print:hidden">
               {isGenerating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -581,7 +696,7 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={handlePrint} variant="outline" className="w-full">
+            <Button onClick={handlePrint} variant="outline" className="w-full print:hidden">
               <Printer className="mr-2 h-4 w-4" />
               Seite drucken
             </Button>
@@ -639,10 +754,10 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
             </div>
           )}
 
-          <Button 
-            onClick={generateFullBackup} 
+          <Button
+            onClick={generateFullBackup}
             disabled={isBackingUp}
-            className="w-full md:w-auto"
+            className="w-full md:w-auto print:hidden"
           >
             {isBackingUp ? (
               <>
@@ -688,11 +803,11 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
                   <Loader2 className="w-8 h-8 animate-spin text-warmgray-400" />
                 </div>
               ) : qrCodeDataUrl ? (
-                <div className="p-3 bg-white rounded-lg shadow-sm border border-warmgray-200">
+                <div className="p-3 bg-white rounded-lg shadow-sm border border-warmgray-200 print:shadow-none" data-qr-code>
                   <img
                     src={qrCodeDataUrl}
                     alt="Notfall QR-Code"
-                    className="w-[200px] h-[200px]"
+                    className="w-[200px] h-[200px] qr-code"
                     id="emergency-qr-code"
                   />
                 </div>
@@ -708,7 +823,7 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
                 onClick={generateEmergencyQR}
                 variant="outline"
                 size="sm"
-                className="mt-3"
+                className="mt-3 print:hidden"
                 disabled={isGeneratingQR}
               >
                 {isGeneratingQR ? (
@@ -954,6 +1069,17 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
           )}
         </CardContent>
       </Card>
+
+      {/* Print-only footer with date */}
+      <div className="hidden print:block mt-8 pt-4 border-t border-gray-300 text-center text-sm text-gray-600">
+        Gedruckt am: {new Date().toLocaleDateString('de-DE', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })}
+      </div>
 
       {/* Info Note */}
       <Card className="border-amber-200 bg-amber-50 print:hidden">

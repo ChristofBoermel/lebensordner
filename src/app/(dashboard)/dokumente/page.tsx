@@ -69,6 +69,7 @@ import {
 } from "lucide-react";
 import {
   DOCUMENT_CATEGORIES,
+  CATEGORY_METADATA_FIELDS,
   type DocumentCategory,
   type Document,
   type Subcategory,
@@ -212,6 +213,9 @@ export default function DocumentsPage() {
   const [uploadReminderWatcher, setUploadReminderWatcher] = useState<
     string | null
   >(null);
+  const [uploadMetadata, setUploadMetadata] = useState<Record<string, string>>(
+    {},
+  );
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -514,6 +518,20 @@ export default function DocumentsPage() {
       return;
     }
 
+    // Validate required metadata fields
+    if (uploadCategory && CATEGORY_METADATA_FIELDS[uploadCategory]) {
+      const fields = CATEGORY_METADATA_FIELDS[uploadCategory];
+      const missingFields = fields.filter(
+        (field) => field.required && !uploadMetadata[field.name]?.trim(),
+      );
+      if (missingFields.length > 0) {
+        setUploadError(
+          `Bitte füllen Sie alle Pflichtfelder aus: ${missingFields.map((f) => f.label).join(", ")}`,
+        );
+        return;
+      }
+    }
+
     setIsUploading(true);
     setUploadError(null);
 
@@ -553,6 +571,10 @@ export default function DocumentsPage() {
 
       if (uploadReminderWatcher) {
         formData.append("reminder_watcher_id", uploadReminderWatcher);
+      }
+
+      if (uploadMetadata && Object.keys(uploadMetadata).length > 0) {
+        formData.append("metadata", JSON.stringify(uploadMetadata));
       }
 
       const uploadRes = await fetch("/api/documents/upload", {
@@ -627,6 +649,7 @@ export default function DocumentsPage() {
       setUploadSubcategory(null);
       setUploadCustomCategory(null);
       setUploadReminderWatcher(null);
+      setUploadMetadata({});
       setIsUploadOpen(false);
 
       // Fetch in background to ensure consistency
@@ -1924,6 +1947,7 @@ export default function DocumentsPage() {
             setUploadCustomReminderDays={setUploadCustomReminderDays}
             setUploadExpiryDate={setUploadExpiryDate}
             setUploadFile={setUploadFile}
+            setUploadMetadata={setUploadMetadata}
             setUploadNotes={setUploadNotes}
             setUploadReminderWatcher={setUploadReminderWatcher}
             setUploadSubcategory={setUploadSubcategory}
@@ -1933,6 +1957,7 @@ export default function DocumentsPage() {
             uploadCustomReminderDays={uploadCustomReminderDays}
             uploadExpiryDate={uploadExpiryDate}
             uploadFile={uploadFile}
+            uploadMetadata={uploadMetadata}
             uploadNotes={uploadNotes}
             uploadReminderWatcher={uploadReminderWatcher}
             uploadSubcategory={uploadSubcategory}

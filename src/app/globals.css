@@ -538,21 +538,28 @@ html.onboarding-accessible {
    ================================================================= */
 
 @media print {
-  /* Hide navigation, buttons, and non-essential elements */
-  .dashboard-nav,
-  .floating-help-button,
-  .step-feedback-widget,
-  button:not(.print-include),
-  .no-print {
+  /* Hide all navigation and UI chrome */
+  nav, aside, header, footer,
+  .dashboard-nav, .theme-toggle,
+  .floating-help-button, .step-feedback-widget,
+  button:not(.print-include), .no-print,
+  [role="navigation"], [role="banner"],
+  .dropdown-menu, .tooltip, .popover {
     display: none !important;
   }
 
-  /* Optimize text for printing */
+  /* Optimize for print */
   body {
-    font-size: 14pt;
-    line-height: 1.6;
-    color: #000;
-    background: #fff;
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+
+  /* Remove decorative elements */
+  *, *::before, *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
 
   /* Ensure proper page breaks */
@@ -574,10 +581,21 @@ html.onboarding-accessible {
     content: "";
   }
 
-  /* Remove shadows and borders for cleaner print */
-  .card-elevated,
-  [class*="shadow"] {
-    box-shadow: none !important;
+  /* QR Code sizing for scannability */
+  .qr-code, [data-qr-code] {
+    width: 4cm !important;
+    height: 4cm !important;
+    page-break-inside: avoid;
+    margin: 1cm auto;
+  }
+
+  /* Page breaks */
+  .card-elevated, .category-card, section {
+    page-break-inside: avoid;
+  }
+
+  .page-break {
+    page-break-after: always;
   }
 
   /* Ensure images print correctly */
@@ -589,5 +607,13 @@ html.onboarding-accessible {
   [class*="fixed"],
   [class*="sticky"] {
     position: static !important;
+  }
+
+  /* Print metadata */
+  .print-date {
+    display: block !important;
+    font-size: 10pt;
+    color: #666;
+    margin-top: 1cm;
   }
 }

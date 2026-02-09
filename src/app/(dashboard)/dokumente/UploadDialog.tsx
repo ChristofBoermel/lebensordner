@@ -16,6 +16,7 @@ import { FileUpload } from "@/components/ui/file-upload";
 import { Loader2, Plus, Tag } from "lucide-react";
 import {
   DOCUMENT_CATEGORIES,
+  CATEGORY_METADATA_FIELDS,
   type DocumentCategory,
   type Subcategory,
   type CustomCategory,
@@ -45,6 +46,7 @@ interface UploadDialogProps {
   setUploadCustomReminderDays: (value: number | null) => void;
   setUploadExpiryDate: (value: string) => void;
   setUploadFile: (value: File | null) => void;
+  setUploadMetadata: (value: Record<string, string>) => void;
   setUploadNotes: (value: string) => void;
   setUploadReminderWatcher: (value: string | null) => void;
   setUploadSubcategory: (value: string | null) => void;
@@ -54,6 +56,7 @@ interface UploadDialogProps {
   uploadCustomReminderDays: number | null;
   uploadExpiryDate: string;
   uploadFile: File | null;
+  uploadMetadata: Record<string, string>;
   uploadNotes: string;
   uploadReminderWatcher: string | null;
   uploadSubcategory: string | null;
@@ -79,6 +82,7 @@ export default function UploadDialog({
   setUploadCustomReminderDays,
   setUploadExpiryDate,
   setUploadFile,
+  setUploadMetadata,
   setUploadNotes,
   setUploadReminderWatcher,
   setUploadSubcategory,
@@ -88,6 +92,7 @@ export default function UploadDialog({
   uploadCustomReminderDays,
   uploadExpiryDate,
   uploadFile,
+  uploadMetadata,
   uploadNotes,
   uploadReminderWatcher,
   uploadSubcategory,
@@ -120,6 +125,7 @@ export default function UploadDialog({
                 setUploadCustomCategory(null);
                 setUploadSubcategory(null);
                 setIsCreatingSubcategory(false);
+                setUploadMetadata({});
               }}
               className={`p-3 text-left rounded-lg border-2 transition-colors ${
                 uploadCategory === key && !uploadCustomCategory
@@ -140,6 +146,7 @@ export default function UploadDialog({
                 setUploadCustomCategory(cat.id);
                 setUploadSubcategory(null);
                 setIsCreatingSubcategory(false);
+                setUploadMetadata({});
               }}
               className={`p-3 text-left rounded-lg border-2 transition-colors flex items-center gap-2 ${
                 uploadCustomCategory === cat.id
@@ -253,6 +260,47 @@ export default function UploadDialog({
             onChange={(e) => setUploadNotes(e.target.value)}
           />
         </div>
+
+        {/* Category-specific Metadata Fields */}
+        {uploadCategory && !uploadCustomCategory && CATEGORY_METADATA_FIELDS[uploadCategory] && (
+          <div className="space-y-3">
+            <Label className="text-sm font-medium text-warmgray-700">
+              Zusätzliche Angaben
+            </Label>
+            {CATEGORY_METADATA_FIELDS[uploadCategory]!.map((field) => (
+              <div key={field.name} className="space-y-1">
+                <Label htmlFor={`meta-${field.name}`} className="text-sm">
+                  {field.label}{field.required && ' *'}
+                </Label>
+                {field.type === 'date' ? (
+                  <DatePicker
+                    value={uploadMetadata[field.name] || ''}
+                    onChange={(value) =>
+                      setUploadMetadata({
+                        ...uploadMetadata,
+                        [field.name]: value,
+                      })
+                    }
+                    placeholder={field.label}
+                  />
+                ) : (
+                  <Input
+                    id={`meta-${field.name}`}
+                    type="text"
+                    placeholder={field.label}
+                    value={uploadMetadata[field.name] || ''}
+                    onChange={(e) =>
+                      setUploadMetadata({
+                        ...uploadMetadata,
+                        [field.name]: e.target.value,
+                      })
+                    }
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Expiry Date */}
         <div className="space-y-2">

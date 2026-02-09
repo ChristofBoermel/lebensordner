@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { TagInput } from '@/components/ui/tag-input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -612,7 +613,7 @@ export default function NotfallPage() {
                   </CardTitle>
                   <CardDescription>Personen, die im Notfall kontaktiert werden sollen</CardDescription>
                 </div>
-                <Button onClick={() => handleOpenContactDialog()} className="w-full sm:w-auto flex-shrink-0">
+                <Button onClick={() => handleOpenContactDialog()} className="w-full sm:w-auto flex-shrink-0 print:hidden">
                   <Plus className="w-4 h-4 mr-2" />
                   Hinzufügen
                 </Button>
@@ -642,7 +643,7 @@ export default function NotfallPage() {
                           {contact.email && <p className="text-sm text-warmgray-500 truncate">{contact.email}</p>}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 justify-end">
+                      <div className="flex items-center gap-2 flex-shrink-0 justify-end print:hidden">
                         <Button variant="ghost" size="icon" onClick={() => handleOpenContactDialog(contact)} className="h-9 w-9">
                           <Edit2 className="w-4 h-4" />
                         </Button>
@@ -687,7 +688,7 @@ export default function NotfallPage() {
                 <Button
                   variant="outline"
                   onClick={() => { setMedicalForm(medicalInfo); setError(null); setIsMedicalDialogOpen(true) }}
-                  className="w-full sm:w-auto flex-shrink-0"
+                  className="w-full sm:w-auto flex-shrink-0 print:hidden"
                 >
                   <Edit2 className="w-4 h-4 mr-2" />
                   Bearbeiten
@@ -747,7 +748,7 @@ export default function NotfallPage() {
                 <Button
                   variant="outline"
                   onClick={() => { setDirectivesForm(advanceDirectives); setError(null); setIsDirectivesDialogOpen(true) }}
-                  className="w-full sm:w-auto flex-shrink-0"
+                  className="w-full sm:w-auto flex-shrink-0 print:hidden"
                 >
                   <Edit2 className="w-4 h-4 mr-2" />
                   Bearbeiten
@@ -874,7 +875,7 @@ export default function NotfallPage() {
                 <Button
                   variant="outline"
                   onClick={() => { setFuneralForm(funeralWishes); setError(null); setIsFuneralDialogOpen(true) }}
-                  className="w-full sm:w-auto flex-shrink-0"
+                  className="w-full sm:w-auto flex-shrink-0 print:hidden"
                 >
                   <Edit2 className="w-4 h-4 mr-2" />
                   Bearbeiten
@@ -900,7 +901,7 @@ export default function NotfallPage() {
 
       {/* Dialogs */}
       <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>
-        <DialogContent>
+        <DialogContent className="print:hidden">
           <DialogHeader>
             <DialogTitle>{editingContact ? 'Kontakt bearbeiten' : 'Neuen Kontakt hinzufügen'}</DialogTitle>
             <DialogDescription>Person für Notfallkontakt hinzufügen.</DialogDescription>
@@ -921,16 +922,16 @@ export default function NotfallPage() {
       </Dialog>
 
       <Dialog open={isMedicalDialogOpen} onOpenChange={setIsMedicalDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:hidden">
           <DialogHeader>
             <DialogTitle>Medizinische Informationen</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
             <div className="space-y-2"><Label>Blutgruppe</Label><Input value={medicalForm.blood_type} onChange={(e) => setMedicalForm({ ...medicalForm, blood_type: e.target.value })} placeholder="z.B. A+, 0-" /></div>
-            <div className="space-y-2"><Label>Allergien (kommagetrennt)</Label><Input value={medicalForm.allergies.join(', ')} onChange={(e) => setMedicalForm({ ...medicalForm, allergies: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
-            <div className="space-y-2"><Label>Medikamente (kommagetrennt)</Label><Input value={medicalForm.medications.join(', ')} onChange={(e) => setMedicalForm({ ...medicalForm, medications: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
-            <div className="space-y-2"><Label>Vorerkrankungen (kommagetrennt)</Label><Input value={medicalForm.conditions.join(', ')} onChange={(e) => setMedicalForm({ ...medicalForm, conditions: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
+            <div className="space-y-2"><Label>Allergien</Label><TagInput value={medicalForm.allergies} onChange={(allergies) => setMedicalForm({ ...medicalForm, allergies })} placeholder="Drücken Sie Enter nach jeder Allergie" /></div>
+            <div className="space-y-2"><Label>Medikamente</Label><TagInput value={medicalForm.medications} onChange={(medications) => setMedicalForm({ ...medicalForm, medications })} placeholder="Drücken Sie Enter nach jedem Medikament" /></div>
+            <div className="space-y-2"><Label>Vorerkrankungen</Label><TagInput value={medicalForm.conditions} onChange={(conditions) => setMedicalForm({ ...medicalForm, conditions })} placeholder="Drücken Sie Enter nach jeder Vorerkrankung" /></div>
             <Separator />
             <div className="space-y-2"><Label>Hausarzt Name</Label><Input value={medicalForm.doctor_name} onChange={(e) => setMedicalForm({ ...medicalForm, doctor_name: e.target.value })} /></div>
             <div className="space-y-2"><Label>Hausarzt Telefon</Label><Input value={medicalForm.doctor_phone} onChange={(e) => setMedicalForm({ ...medicalForm, doctor_phone: e.target.value })} /></div>
@@ -954,7 +955,7 @@ export default function NotfallPage() {
       </Dialog>
 
       <Dialog open={isDirectivesDialogOpen} onOpenChange={setIsDirectivesDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:hidden">
           <DialogHeader>
             <DialogTitle>Vorsorgedokumente</DialogTitle>
           </DialogHeader>
@@ -990,7 +991,7 @@ export default function NotfallPage() {
       </Dialog>
 
       <Dialog open={isFuneralDialogOpen} onOpenChange={setIsFuneralDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:hidden">
           <DialogHeader>
             <DialogTitle>Bestattungswünsche</DialogTitle>
           </DialogHeader>

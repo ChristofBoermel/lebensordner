@@ -6,6 +6,15 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+// Metadata field definition for category-specific document metadata
+export interface MetadataFieldDefinition {
+  name: string
+  label: string
+  required: boolean
+  type: 'text' | 'date' | 'select'
+  options?: string[] // for 'select' type
+}
+
 // Document categories as defined in the concept
 export type DocumentCategory =
   | 'identitaet'      // Identität
@@ -92,6 +101,41 @@ export const DOCUMENT_CATEGORIES: Record<DocumentCategory, {
     examples: ['Verschiedene Dokumente', 'Temporäre Ablage'],
     icon: 'folder',
   },
+}
+
+// Category-specific metadata fields required during document upload
+export const CATEGORY_METADATA_FIELDS: Partial<Record<DocumentCategory, MetadataFieldDefinition[]>> = {
+  identitaet: [
+    { name: 'ausstellungsdatum', label: 'Ausstellungsdatum', required: true, type: 'date' },
+    { name: 'ausweisnummer', label: 'Ausweisnummer', required: false, type: 'text' },
+    { name: 'ausstellende_behoerde', label: 'Ausstellende Behörde', required: false, type: 'text' },
+  ],
+  versicherungen: [
+    { name: 'versicherungsnummer', label: 'Versicherungsnummer', required: true, type: 'text' },
+    { name: 'versicherer', label: 'Versicherer', required: true, type: 'text' },
+    { name: 'vertragsbeginn', label: 'Vertragsbeginn', required: false, type: 'date' },
+  ],
+  finanzen: [
+    { name: 'kontonummer_iban', label: 'Kontonummer / IBAN', required: false, type: 'text' },
+    { name: 'institut', label: 'Institut / Bank', required: false, type: 'text' },
+  ],
+  vertraege: [
+    { name: 'vertragspartner', label: 'Vertragspartner', required: true, type: 'text' },
+    { name: 'vertragsbeginn', label: 'Vertragsbeginn', required: false, type: 'date' },
+    { name: 'kuendigungsfrist', label: 'Kündigungsfrist', required: false, type: 'text' },
+  ],
+  gesundheit: [
+    { name: 'arzt_praxis', label: 'Arzt / Praxis', required: false, type: 'text' },
+    { name: 'behandlungsdatum', label: 'Behandlungsdatum', required: false, type: 'date' },
+  ],
+  wohnen: [
+    { name: 'adresse', label: 'Adresse des Objekts', required: false, type: 'text' },
+    { name: 'vertragspartner', label: 'Vermieter / Vertragspartner', required: false, type: 'text' },
+  ],
+  arbeit: [
+    { name: 'arbeitgeber', label: 'Arbeitgeber', required: false, type: 'text' },
+    { name: 'zeitraum', label: 'Zeitraum / Datum', required: false, type: 'text' },
+  ],
 }
 
 // Custom category interface for user-created categories
@@ -228,6 +272,7 @@ export interface Database {
           custom_category_id: string | null
           reminder_watcher_id: string | null
           reminder_watcher_notified_at: string | null
+          metadata: Record<string, unknown> | null
         }
         Insert: {
           id?: string
@@ -248,6 +293,7 @@ export interface Database {
           custom_category_id?: string | null
           reminder_watcher_id?: string | null
           reminder_watcher_notified_at?: string | null
+          metadata?: Record<string, unknown> | null
         }
         Update: {
           id?: string
@@ -268,6 +314,7 @@ export interface Database {
           custom_category_id?: string | null
           reminder_watcher_id?: string | null
           reminder_watcher_notified_at?: string | null
+          metadata?: Record<string, unknown> | null
         }
       }
       subcategories: {
@@ -1018,6 +1065,7 @@ export type Document = Database['public']['Tables']['documents']['Row'] & {
   subcategory?: Subcategory | null
   custom_category_id?: string | null
   custom_category?: CustomCategory | null
+  metadata?: Record<string, unknown> | null
 }
 export type TrustedPerson = Database['public']['Tables']['trusted_persons']['Row']
 export type Reminder = Database['public']['Tables']['reminders']['Row']

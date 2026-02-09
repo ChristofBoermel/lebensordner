@@ -4,6 +4,7 @@ import { getUserTier } from '@/lib/auth/tier-guard'
 import { canUploadFile } from '@/lib/subscription-tiers'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_UPLOAD } from '@/lib/security/rate-limit'
+import { CATEGORY_METADATA_FIELDS, type DocumentCategory } from '@/types/database'
 
 // New endpoint for secure server-side uploads
 export async function POST(req: NextRequest) {
@@ -220,6 +221,43 @@ export async function POST(req: NextRequest) {
                 )
             }
 
+            // Parse and validate category-specific metadata
+            const metadataRaw = formData.get('metadata') as string | null
+            let parsedMetadata: Record<string, string> | null = null
+
+            const metadataFields = CATEGORY_METADATA_FIELDS[category as DocumentCategory]
+            if (metadataFields && metadataFields.length > 0) {
+                if (metadataRaw) {
+                    try {
+                        parsedMetadata = JSON.parse(metadataRaw)
+                    } catch {
+                        return NextResponse.json(
+                            { error: 'Ungültiges Metadaten-Format' },
+                            { status: 400 }
+                        )
+                    }
+                }
+
+                // Validate required fields
+                const requiredFields = metadataFields.filter(f => f.required)
+                const missingFields = requiredFields.filter(
+                    f => !parsedMetadata || !parsedMetadata[f.name] || parsedMetadata[f.name].trim() === ''
+                )
+                if (missingFields.length > 0) {
+                    return NextResponse.json(
+                        { error: `Pflichtfelder fehlen: ${missingFields.map(f => f.label).join(', ')}` },
+                        { status: 400 }
+                    )
+                }
+            } else if (metadataRaw) {
+                // Category has no defined fields but metadata was sent - parse it anyway
+                try {
+                    parsedMetadata = JSON.parse(metadataRaw)
+                } catch {
+                    // Ignore invalid metadata for categories without defined fields
+                }
+            }
+
             const { data: documentData, error: documentError } = await supabase
                 .from('documents')
                 .insert({
@@ -236,6 +274,7 @@ export async function POST(req: NextRequest) {
                     expiry_date: expiryDate || null,
                     custom_reminder_days: customReminderDays,
                     reminder_watcher_id: reminderWatcherId,
+                    metadata: parsedMetadata,
                 })
                 .select()
                 .single()

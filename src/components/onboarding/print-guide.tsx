@@ -327,7 +327,7 @@ export function PrintGuideButton({
       size={size}
       onClick={handlePrint}
       disabled={isGenerating}
-      className={className}
+      className={`print:hidden ${className}`}
     >
       {isGenerating ? (
         <Loader2 className="mr-2 w-5 h-5 animate-spin" />

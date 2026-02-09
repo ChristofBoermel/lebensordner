@@ -16,7 +16,11 @@
       "Bash(if not exist \"D:\\\\Projects\\\\Lebensordner\\\\src\\\\app\\\\api\\\\onboarding\\\\feedback\" mkdir \"D:\\\\Projects\\\\Lebensordner\\\\src\\\\app\\\\api\\\\onboarding\\\\feedback\")",
       "Bash(if not exist \"%USERPROFILE%\\\\.traycer\\\\yolo_artifacts\" mkdir \"%USERPROFILE%\\\\.traycer\\\\yolo_artifacts\")",
       "Bash(if not exist \"C:\\\\Users\\\\chris\\\\.traycer\\\\yolo_artifacts\" mkdir \"C:\\\\Users\\\\chris\\\\.traycer\\\\yolo_artifacts\")",
-      "Bash(git diff:*)"
+      "Bash(git diff:*)",
+      "Bash(ls \"D:\\\\Projects\\\\Lebensordner\\\\tests\\\\integration\"\" 2>nul || echo \"Directory does not exist \")",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(~/.traycer/yolo_artifacts/2a714060-eb76-4372-827b-8da8ec8523b4.json)"
     ]
   }
 }

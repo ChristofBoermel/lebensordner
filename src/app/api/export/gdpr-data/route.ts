@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
         .single(),
       supabase
         .from('documents')
-        .select('id, title, category, file_name, file_size, created_at, expiry_date')
+        .select('id, title, category, file_name, file_size, created_at, expiry_date, metadata')
         .eq('user_id', user.id),
       supabase
         .from('consent_ledger')

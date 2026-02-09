@@ -15,7 +15,7 @@ export function ThemeToggle() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+      <DropdownMenuTrigger asChild className="print:hidden">
         <Button variant="ghost" size="icon">
           {resolvedTheme === 'light' ? (
             <Sun className="h-5 w-5" />

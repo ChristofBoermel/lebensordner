@@ -109,7 +109,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
       <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
 
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+      <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col print:hidden">
         <div className="flex h-full flex-col border-r border-warmgray-200 dark:border-warmgray-800 bg-white dark:bg-warmgray-900 overflow-hidden">
           {/* Logo and Search Header */}
           <div className="flex-shrink-0">
@@ -310,7 +310,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
       </aside>
 
       {/* Mobile Header */}
-      <div className="sticky top-0 z-40 flex h-20 items-center gap-x-2 border-b border-warmgray-200 bg-white dark:bg-warmgray-900 dark:border-warmgray-800 px-4 lg:hidden">
+      <div className="sticky top-0 z-40 flex h-20 items-center gap-x-2 border-b border-warmgray-200 bg-white dark:bg-warmgray-900 dark:border-warmgray-800 px-4 lg:hidden print:hidden">
         <button
           type="button"
           className="-m-2.5 p-2.5 text-warmgray-700 dark:text-warmgray-300"
@@ -374,7 +374,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden print:hidden">
           <div className="fixed inset-0 bg-warmgray-900/50" onClick={() => setMobileMenuOpen(false)} />
           <div className="fixed inset-y-0 left-0 w-full max-w-xs bg-white">
             <div className="flex h-20 items-center justify-between px-6 border-b border-warmgray-200">
