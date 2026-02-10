@@ -53,8 +53,7 @@ import { SUBSCRIPTION_TIERS, getTierFromSubscription, type TierConfig } from '@/
 import type { Profile } from '@/types/database'
 import type { ConsentRecord } from '@/lib/consent/manager'
 import Cookies from 'js-cookie'
-import { CONSENT_VERSION } from '@/components/consent/cookie-consent'
-import { initPostHog, posthog } from '@/lib/posthog'
+import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
 import Link from 'next/link'
 import { SecurityActivityLog } from '@/components/settings/security-activity-log'
 import { GDPRExportDialog } from '@/components/settings/gdpr-export-dialog'
@@ -429,7 +428,7 @@ export default function EinstellungenPage() {
     const fetchConsent = async () => {
       try {
         // Read current state from cookie first
-        const consentCookie = Cookies.get('lebensordner_consent')
+        const consentCookie = Cookies.get(CONSENT_COOKIE_NAME)
         if (consentCookie) {
           const parsed = JSON.parse(consentCookie)
           setAnalyticsConsent(parsed.analytics === true)
@@ -460,17 +459,13 @@ export default function EinstellungenPage() {
     setIsLoadingConsent(true)
 
     // Update cookie
-    const consentCookie = Cookies.get('lebensordner_consent')
+    const consentCookie = Cookies.get(CONSENT_COOKIE_NAME)
     const current = consentCookie ? JSON.parse(consentCookie) : { necessary: true, analytics: false, marketing: false, version: CONSENT_VERSION }
     const updated = { ...current, analytics: enabled }
-    Cookies.set('lebensordner_consent', JSON.stringify(updated), { expires: 365, sameSite: 'strict' })
+    Cookies.set(CONSENT_COOKIE_NAME, JSON.stringify(updated), { expires: 365, sameSite: 'strict' })
 
-    // Update PostHog
-    if (enabled) {
-      initPostHog()
-    } else if (posthog.__loaded) {
-      posthog.opt_out_capturing()
-    }
+    // Note: PostHog initialization is handled by PostHogProvider
+    // which monitors cookie changes and initializes/opts-out accordingly
 
     // Record to server
     try {

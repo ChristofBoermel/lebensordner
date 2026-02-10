@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import { recordConsent } from '@/lib/consent/manager'
-
-const CONSENT_COOKIE = 'lebensordner_consent'
+import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
 
 export async function POST() {
   try {
@@ -18,7 +17,7 @@ export async function POST() {
     }
 
     const cookieStore = await cookies()
-    const consentCookie = cookieStore.get(CONSENT_COOKIE)
+    const consentCookie = cookieStore.get(CONSENT_COOKIE_NAME)
 
     if (!consentCookie?.value) {
       return NextResponse.json(
@@ -37,7 +36,7 @@ export async function POST() {
       )
     }
 
-    const version = consent.version || '1.0'
+    const version = consent.version || CONSENT_VERSION
 
     // Record analytics consent if present
     if (typeof consent.analytics === 'boolean') {

@@ -6,10 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Cookie, Settings, Check, X } from 'lucide-react'
-import { initPostHog, posthog } from '@/lib/posthog'
-
-const CONSENT_COOKIE = 'lebensordner_consent'
-export const CONSENT_VERSION = '1.0'
+import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
 
 // Phase 1: marketing consent is disabled. Set to true in a future phase to enable.
 const MARKETING_ENABLED = false
@@ -32,7 +29,7 @@ export function CookieConsent() {
   })
 
   useEffect(() => {
-    const consent = Cookies.get(CONSENT_COOKIE)
+    const consent = Cookies.get(CONSENT_COOKIE_NAME)
     if (!consent) {
       setShowBanner(true)
     } else {
@@ -43,10 +40,8 @@ export function CookieConsent() {
           setShowBanner(true)
         } else {
           setSettings(parsed)
-          // Initialize PostHog if analytics consent given
-          if (parsed.analytics) {
-            initPostHog()
-          }
+          // Note: PostHog initialization is handled by PostHogProvider
+          // which monitors cookie changes and initializes/opts-out accordingly
         }
       } catch {
         setShowBanner(true)
@@ -99,7 +94,7 @@ export function CookieConsent() {
     if (!MARKETING_ENABLED) {
       newSettings = { ...newSettings, marketing: false }
     }
-    Cookies.set(CONSENT_COOKIE, JSON.stringify(newSettings), {
+    Cookies.set(CONSENT_COOKIE_NAME, JSON.stringify(newSettings), {
       expires: 365,
       sameSite: 'strict'
     })
@@ -107,12 +102,8 @@ export function CookieConsent() {
     setShowBanner(false)
     setShowSettings(false)
 
-    // Initialize or opt-out of PostHog based on consent
-    if (newSettings.analytics) {
-      initPostHog()
-    } else if (posthog.__loaded) {
-      posthog.opt_out_capturing()
-    }
+    // Note: PostHog initialization is handled by PostHogProvider
+    // which monitors cookie changes and initializes/opts-out accordingly
 
     // Sync to server for logged-in users
     syncConsentToServer(newSettings)

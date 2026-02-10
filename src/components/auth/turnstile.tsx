@@ -1,6 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
+
+export interface TurnstileWidgetRef {
+  reset: () => void
+}
 
 interface TurnstileWidgetProps {
   onVerify: (token: string) => void
@@ -24,10 +28,18 @@ declare global {
   }
 }
 
-export default function TurnstileWidget({ onVerify }: TurnstileWidgetProps) {
+const TurnstileWidget = forwardRef<TurnstileWidgetRef, TurnstileWidgetProps>(function TurnstileWidget({ onVerify }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const widgetIdRef = useRef<string | null>(null)
   const scriptLoadedRef = useRef(false)
+
+  useImperativeHandle(ref, () => ({
+    reset() {
+      if (widgetIdRef.current && window.turnstile) {
+        window.turnstile.reset(widgetIdRef.current)
+      }
+    },
+  }), [])
 
   const renderWidget = useCallback(() => {
     if (!containerRef.current || !window.turnstile) return
@@ -88,4 +100,6 @@ export default function TurnstileWidget({ onVerify }: TurnstileWidgetProps) {
       <div ref={containerRef} />
     </div>
   )
-}
+})
+
+export default TurnstileWidget

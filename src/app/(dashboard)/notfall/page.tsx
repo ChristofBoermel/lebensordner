@@ -555,11 +555,11 @@ export default function NotfallPage() {
     <div className="max-w-4xl mx-auto space-y-8 px-4 sm:px-0">
       <div className="page-header">
         <h1 className="text-3xl font-serif font-semibold text-warmgray-900">Notfall & Vorsorge</h1>
-        <p className="text-lg text-warmgray-600 mt-2">Wichtige Informationen für den Notfall und Vorsorgedokumente</p>
+        <p className="text-lg text-warmgray-600 mt-2 print:hidden">Wichtige Informationen für den Notfall und Vorsorgedokumente</p>
       </div>
 
       {/* Beruhigende Erklärung */}
-      <Card className="border-sage-200 bg-white">
+      <Card className="border-sage-200 bg-white print:hidden">
         <CardContent className="pt-6">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
@@ -577,7 +577,7 @@ export default function NotfallPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-sage-200 bg-sage-50">
+      <Card className="border-sage-200 bg-sage-50 print:hidden">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -595,7 +595,7 @@ export default function NotfallPage() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto p-1 bg-warmgray-100/50">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto p-1 bg-warmgray-100/50 print:hidden">
           <TabsTrigger value="notfall" className="py-3 sm:py-2">Notfall</TabsTrigger>
           <TabsTrigger value="gesundheit" className="py-3 sm:py-2">Gesundheit</TabsTrigger>
           <TabsTrigger value="vorsorge" className="py-3 sm:py-2">Vollmachten</TabsTrigger>
@@ -776,7 +776,7 @@ export default function NotfallPage() {
                         </div>
 
                         {/* Document upload/view buttons */}
-                        <div className="flex items-center gap-2 flex-shrink-0 justify-end">
+                        <div className="flex items-center gap-2 flex-shrink-0 justify-end print:hidden">
                           {uploadedDoc ? (
                             <Button
                               variant="ghost"
@@ -842,7 +842,7 @@ export default function NotfallPage() {
 
               {/* Upgrade hint for free users */}
               {!canUploadVollmachten && (
-                <div className="mt-4 p-4 rounded-lg bg-sage-50 border border-sage-200">
+                <div className="mt-4 p-4 rounded-lg bg-sage-50 border border-sage-200 print:hidden">
                   <div className="flex items-start gap-3">
                     <Lock className="w-5 h-5 text-sage-600 mt-0.5" />
                     <div>
@@ -898,6 +898,17 @@ export default function NotfallPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Print-only footer with date */}
+      <div className="hidden print:block mt-8 pt-4 border-t border-gray-300 text-center text-sm text-gray-600">
+        Gedruckt am: {new Date().toLocaleDateString('de-DE', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })}
+      </div>
 
       {/* Dialogs */}
       <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>

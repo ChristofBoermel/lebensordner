@@ -70,24 +70,56 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      // Search documents
+      // Search documents (title, notes, and metadata)
       const { data: documents } = await supabase
         .from('documents')
-        .select('id, title, category, notes')
+        .select('id, title, category, notes, metadata')
         .eq('user_id', user.id)
         .or(`title.ilike.%${searchQuery}%,notes.ilike.%${searchQuery}%`)
         .limit(5)
 
       if (documents) {
-        documents.forEach(doc => {
+        documents.forEach((doc: Record<string, unknown>) => {
           searchResults.push({
-            id: doc.id,
+            id: doc.id as string,
             type: 'document',
-            title: doc.title,
-            subtitle: DOCUMENT_CATEGORIES[doc.category as DocumentCategory]?.name,
+            title: doc.title as string,
+            subtitle: DOCUMENT_CATEGORIES[(doc.category as DocumentCategory)]?.name,
             category: doc.category as DocumentCategory,
             url: `/dokumente?kategorie=${doc.category}&highlight=${doc.id}`,
           })
+        })
+      }
+
+      // Secondary search: check metadata values for matches
+      // This catches documents where the search term matches metadata but not title/notes
+      const { data: allUserDocs } = await supabase
+        .from('documents')
+        .select('id, title, category, metadata')
+        .eq('user_id', user.id)
+        .not('metadata', 'is', null)
+        .limit(50)
+
+      if (allUserDocs) {
+        allUserDocs.forEach((doc: Record<string, unknown>) => {
+          // Skip if already in results
+          if (searchResults.find(r => r.id === doc.id)) return
+          const metadata = doc.metadata as Record<string, string> | null
+          if (metadata) {
+            const matchesMetadata = Object.values(metadata).some(
+              (val) => typeof val === 'string' && val.toLowerCase().includes(searchQuery.toLowerCase())
+            )
+            if (matchesMetadata) {
+              searchResults.push({
+                id: doc.id as string,
+                type: 'document',
+                title: doc.title as string,
+                subtitle: DOCUMENT_CATEGORIES[(doc.category as DocumentCategory)]?.name,
+                category: doc.category as DocumentCategory,
+                url: `/dokumente?kategorie=${doc.category}&highlight=${doc.id}`,
+              })
+            }
+          }
         })
       }
 

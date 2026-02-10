@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/auth/guards'
 import { decrypt, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
 import { logSecurityEvent, EVENT_GDPR_EXPORT_REQUESTED } from '@/lib/security/audit-log'
+import { CATEGORY_METADATA_FIELDS } from '@/types/database'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
         .single(),
       supabase
         .from('documents')
-        .select('id, title, category, file_name, file_size, created_at, expiry_date, metadata')
+        .select('id, title, category, file_name, file_size, created_at, expiry_date, notes, metadata')
         .eq('user_id', user.id),
       supabase
         .from('consent_ledger')
@@ -92,11 +93,29 @@ export async function POST(request: NextRequest) {
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    // Format document metadata with human-readable labels
+    const documentsWithLabels = (documentsResult.data || []).map((doc: Record<string, unknown>) => {
+      if (doc.metadata && typeof doc.metadata === 'object') {
+        const categoryFields = CATEGORY_METADATA_FIELDS[doc.category as keyof typeof CATEGORY_METADATA_FIELDS]
+        if (categoryFields) {
+          const labeledMetadata: Record<string, unknown> = {}
+          for (const [key, value] of Object.entries(doc.metadata as Record<string, unknown>)) {
+            const fieldDef = categoryFields.find(f => f.key === key || f.name === key)
+            const label = fieldDef?.label || key
+            labeledMetadata[label] = value
+          }
+          return { ...doc, metadata_labeled: labeledMetadata }
+        }
+      }
+      return doc
+    })
+
     const exportData = {
       export_date: new Date().toISOString(),
       user_id: user.id,
       profile: profileData || null,
-      documents: documentsResult.data || [],
+      documents: documentsWithLabels,
+      metadata_field_definitions: CATEGORY_METADATA_FIELDS,
       consent_history: consentResult.data || [],
       security_audit_log: auditResult.data || [],
       trusted_persons: trustedPersonsResult.data || [],

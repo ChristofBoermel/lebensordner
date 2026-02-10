@@ -101,7 +101,7 @@ export function DeleteAccountModal({ open, onOpenChange, onDeleted }: DeleteAcco
               <li>Ihr Profil und pers&ouml;nliche Daten</li>
               <li>Vertrauenspersonen und Zugriffsrechte</li>
               <li>Erinnerungen und Benachrichtigungen</li>
-              <li>Einwilligungsprotokolle und Sicherheitslogs</li>
+              <li>Einwilligungsprotokolle</li>
             </ul>
           </div>
 
@@ -113,6 +113,17 @@ export function DeleteAccountModal({ open, onOpenChange, onDeleted }: DeleteAcco
             </div>
             <p className="text-sm text-amber-700 ml-6">
               Abrechnungsdaten werden gem&auml;&szlig; &sect;147 AO (Abgabenordnung) f&uuml;r 7 Jahre aufbewahrt. Stripe-Kundendaten werden mit einem L&ouml;schvermerk versehen.
+            </p>
+          </div>
+
+          {/* Anonymized audit log retention */}
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldAlert className="w-4 h-4 text-amber-600" />
+              <p className="font-medium text-amber-800 text-sm">Sicherheitsprotokolle:</p>
+            </div>
+            <p className="text-sm text-amber-700 ml-6">
+              Sicherheitsprotokolle werden anonymisiert aufbewahrt (ohne persönliche Zuordnung) für Compliance-Zwecke gemäß DSGVO Art. 6 Abs. 1 lit. c.
             </p>
           </div>
 

@@ -77,14 +77,30 @@ export default function DatenschutzPage() {
               <li>Widerruf erteilter Einwilligungen</li>
             </ul>
 
-            <h2 className="text-xl font-semibold text-warmgray-900 mt-8 mb-4">6. Cookies</h2>
+            <h2 className="text-xl font-semibold text-warmgray-900 mt-8 mb-4">6. Aufbewahrung von Sicherheitsprotokollen</h2>
+            <p className="text-warmgray-700 mb-4">
+              Zur Erfüllung gesetzlicher Aufbewahrungspflichten werden Sicherheitsprotokolle
+              (z.B. Anmeldeversuche, Datenzugriffe, sicherheitsrelevante Ereignisse) auch nach
+              Löschung Ihres Kontos aufbewahrt. Diese Protokolle werden bei der Kontolöschung
+              vollständig anonymisiert – Ihre Benutzer-ID wird entfernt, sodass keine persönliche
+              Zuordnung mehr möglich ist.
+            </p>
+            <p className="text-warmgray-700 mb-4">
+              Rechtsgrundlage hierfür ist Art. 6 Abs. 1 lit. c DSGVO (Erfüllung einer rechtlichen
+              Verpflichtung) in Verbindung mit den Anforderungen des BDSG an Prüfpfade.
+              Die anonymisierten Protokolle können nicht mehr auf einzelne Personen zurückgeführt
+              werden und unterliegen daher nicht dem Recht auf Löschung gemäß Art. 17 DSGVO.
+              Sie werden für den gesetzlich vorgeschriebenen Zeitraum aufbewahrt.
+            </p>
+
+            <h2 className="text-xl font-semibold text-warmgray-900 mt-8 mb-4">7. Cookies</h2>
             <p className="text-warmgray-700 mb-4">
               Wir verwenden nur technisch notwendige Cookies für die Funktionalität der Website 
               sowie optionale Analyse-Cookies (PostHog) zur Verbesserung unserer Dienste, 
               die Sie ablehnen können.
             </p>
 
-            <h2 className="text-xl font-semibold text-warmgray-900 mt-8 mb-4">7. Kontakt</h2>
+            <h2 className="text-xl font-semibold text-warmgray-900 mt-8 mb-4">8. Kontakt</h2>
             <p className="text-warmgray-700 mb-4">
               Bei Fragen zum Datenschutz wenden Sie sich bitte an:<br />
               datenschutz@lebensordner.org

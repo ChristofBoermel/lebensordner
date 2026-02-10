@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FileUpload } from "@/components/ui/file-upload";
-import { Loader2, Plus, Tag } from "lucide-react";
+import { Loader2, Plus, Tag, Info } from "lucide-react";
 import {
   DOCUMENT_CATEGORIES,
   CATEGORY_METADATA_FIELDS,
@@ -46,17 +46,17 @@ interface UploadDialogProps {
   setUploadCustomReminderDays: (value: number | null) => void;
   setUploadExpiryDate: (value: string) => void;
   setUploadFile: (value: File | null) => void;
-  setUploadMetadata: (value: Record<string, string>) => void;
   setUploadNotes: (value: string) => void;
   setUploadReminderWatcher: (value: string | null) => void;
   setUploadSubcategory: (value: string | null) => void;
   setUploadTitle: (value: string) => void;
+  uploadMetadata: Record<string, string>;
+  setUploadMetadata: (value: Record<string, string>) => void;
   uploadCategory: DocumentCategory | null;
   uploadCustomCategory: string | null;
   uploadCustomReminderDays: number | null;
   uploadExpiryDate: string;
   uploadFile: File | null;
-  uploadMetadata: Record<string, string>;
   uploadNotes: string;
   uploadReminderWatcher: string | null;
   uploadSubcategory: string | null;
@@ -82,17 +82,17 @@ export default function UploadDialog({
   setUploadCustomReminderDays,
   setUploadExpiryDate,
   setUploadFile,
-  setUploadMetadata,
   setUploadNotes,
   setUploadReminderWatcher,
   setUploadSubcategory,
   setUploadTitle,
+  uploadMetadata,
+  setUploadMetadata,
   uploadCategory,
   uploadCustomCategory,
   uploadCustomReminderDays,
   uploadExpiryDate,
   uploadFile,
-  uploadMetadata,
   uploadNotes,
   uploadReminderWatcher,
   uploadSubcategory,
@@ -261,44 +261,75 @@ export default function UploadDialog({
           />
         </div>
 
-        {/* Category-specific Metadata Fields */}
-        {uploadCategory && !uploadCustomCategory && CATEGORY_METADATA_FIELDS[uploadCategory] && (
+        {/* Category-specific metadata fields */}
+        {uploadCategory && CATEGORY_METADATA_FIELDS[uploadCategory] && CATEGORY_METADATA_FIELDS[uploadCategory]!.length > 0 && (
           <div className="space-y-3">
-            <Label className="text-sm font-medium text-warmgray-700">
+            <Label className="flex items-center gap-1.5">
+              <Info className="w-3.5 h-3.5 text-sage-600" />
               Zusätzliche Angaben
             </Label>
             {CATEGORY_METADATA_FIELDS[uploadCategory]!.map((field) => (
-              <div key={field.name} className="space-y-1">
-                <Label htmlFor={`meta-${field.name}`} className="text-sm">
-                  {field.label}{field.required && ' *'}
+              <div key={field.key} className="space-y-1">
+                <Label htmlFor={`meta-${field.key}`} className="text-sm">
+                  {field.label}{field.required ? ' *' : ' (optional)'}
                 </Label>
-                {field.type === 'date' ? (
-                  <DatePicker
-                    value={uploadMetadata[field.name] || ''}
-                    onChange={(value) =>
-                      setUploadMetadata({
-                        ...uploadMetadata,
-                        [field.name]: value,
-                      })
-                    }
-                    placeholder={field.label}
-                  />
-                ) : (
-                  <Input
-                    id={`meta-${field.name}`}
-                    type="text"
-                    placeholder={field.label}
-                    value={uploadMetadata[field.name] || ''}
+                {field.type === 'select' && field.options ? (
+                  <select
+                    id={`meta-${field.key}`}
+                    value={uploadMetadata[field.key] || ''}
                     onChange={(e) =>
                       setUploadMetadata({
                         ...uploadMetadata,
-                        [field.name]: e.target.value,
+                        [field.key]: e.target.value,
+                      })
+                    }
+                    className="w-full h-10 px-3 rounded-md border border-warmgray-200 bg-white text-warmgray-900 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
+                  >
+                    <option value="">{field.label} wählen...</option>
+                    {field.options.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    id={`meta-${field.key}`}
+                    type={field.type === 'date' ? 'date' : 'text'}
+                    placeholder={field.label}
+                    value={uploadMetadata[field.key] || ''}
+                    onChange={(e) =>
+                      setUploadMetadata({
+                        ...uploadMetadata,
+                        [field.key]: e.target.value,
                       })
                     }
                   />
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Help Text for metadata and power of attorney */}
+        {uploadCategory && ['gesundheit', 'bevollmaechtigungen', 'rente', 'familie', 'religion'].includes(uploadCategory) && (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-sage-50 border border-sage-200">
+            <Info className="w-4 h-4 text-sage-600 mt-0.5 flex-shrink-0" />
+            <div className="text-sm text-sage-800">
+              <p>
+                Nutzen Sie das Notizfeld, um zusätzliche Angaben zu erfassen (z.B. Versicherungsnummern, beteiligte Personen oder Gültigkeitsdaten).
+              </p>
+              {uploadCategory === 'gesundheit' && (
+                <p className="mt-1 text-sage-700">
+                  Medizinische Vollmachten (z.B. Patientenverfügung) können hier oder in der Kategorie &quot;Bevollmächtigungen&quot; hochgeladen werden.
+                </p>
+              )}
+              {uploadCategory === 'bevollmaechtigungen' && (
+                <p className="mt-1 text-sage-700">
+                  Vollmachten und Verfügungen können auch im Bereich &quot;Notfall&quot; verwaltet werden.
+                </p>
+              )}
+            </div>
           </div>
         )}
 

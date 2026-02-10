@@ -120,16 +120,25 @@ export async function incrementRateLimit(config: RateLimitConfig): Promise<void>
   }
 }
 
-export async function cleanupExpiredLimits(): Promise<void> {
+export async function cleanupExpiredLimits(): Promise<number> {
   try {
     const supabase = createServiceClient()
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+    // Count entries that will be deleted
+    const { count } = await supabase
+      .from('rate_limits')
+      .select('*', { count: 'exact', head: true })
+      .lt('window_start', cutoff.toISOString())
 
     await supabase
       .from('rate_limits')
       .delete()
       .lt('window_start', cutoff.toISOString())
+
+    return count ?? 0
   } catch (error) {
     console.error('Rate limit cleanup failed:', error)
+    return 0
   }
 }

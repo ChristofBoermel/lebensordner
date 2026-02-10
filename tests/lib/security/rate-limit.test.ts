@@ -17,7 +17,8 @@ const mockOrder = vi.fn(() => ({ limit: mockLimit }))
 const mockGte = vi.fn(() => ({ order: mockOrder }))
 const mockEqChain = vi.fn(() => ({ gte: mockGte }))
 const mockEq = vi.fn(() => ({ eq: mockEqChain }))
-const mockSelect = vi.fn(() => ({ eq: mockEq }))
+const mockSelectLt = vi.fn(() => ({ count: 0 }))
+const mockSelect = vi.fn(() => ({ eq: mockEq, lt: mockSelectLt }))
 const mockInsert = vi.fn(() => ({ error: null }))
 const mockUpdate = vi.fn(() => ({ eq: vi.fn(() => ({ error: null })) }))
 const mockLt = vi.fn(() => ({ error: null }))
@@ -128,17 +129,21 @@ describe('rate-limit', () => {
   })
 
   describe('cleanupExpiredLimits', () => {
-    it('should delete old records', async () => {
-      await cleanupExpiredLimits()
+    it('should delete old records and return count', async () => {
+      mockSelectLt.mockReturnValueOnce({ count: 5 })
+
+      const result = await cleanupExpiredLimits()
       expect(mockFrom).toHaveBeenCalledWith('rate_limits')
+      expect(mockSelectLt).toHaveBeenCalled()
       expect(mockDelete).toHaveBeenCalled()
       expect(mockLt).toHaveBeenCalled()
+      expect(result).toBe(5)
     })
 
     it('should handle database errors gracefully', async () => {
-      mockLt.mockRejectedValueOnce(new Error('DB error'))
+      mockSelectLt.mockRejectedValueOnce(new Error('DB error'))
 
-      await expect(cleanupExpiredLimits()).resolves.toBeUndefined()
+      await expect(cleanupExpiredLimits()).resolves.toBe(0)
     })
   })
 

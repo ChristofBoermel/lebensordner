@@ -622,9 +622,14 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
+      {/* Print-only header */}
+      <div className="hidden print:block text-center mb-8">
+        <h1 className="text-2xl font-bold">Lebensordner - Notfall-Informationen</h1>
+      </div>
+
       {/* Notification Toast */}
       {notification && (
-        <div className={`fixed top-4 right-4 z-50 max-w-md p-4 rounded-lg shadow-lg border flex items-start gap-3 animate-in fade-in slide-in-from-top-2 ${
+        <div className={`fixed top-4 right-4 z-50 max-w-md p-4 rounded-lg shadow-lg border flex items-start gap-3 animate-in fade-in slide-in-from-top-2 print:hidden ${
           notification.type === 'error' ? 'bg-red-50 border-red-200 text-red-900' :
           notification.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-900' :
           'bg-green-50 border-green-200 text-green-900'
@@ -657,7 +662,7 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
       </div>
 
       {/* Export Options */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:hidden">
         <Card>
           <CardHeader>
             <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center mb-4">
@@ -705,7 +710,7 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
       </div>
 
       {/* Full Backup Section */}
-      <Card className="border-sage-200 bg-sage-50/50">
+      <Card className="border-sage-200 bg-sage-50/50 print:hidden">
         <CardHeader>
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 rounded-lg bg-sage-600 flex items-center justify-center">
@@ -891,10 +896,10 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
             </div>
           </div>
 
-          <Separator />
+          <Separator className="print:hidden" />
 
           {/* Instructions */}
-          <div className="bg-white rounded-lg p-4 border border-warmgray-200">
+          <div className="bg-white rounded-lg p-4 border border-warmgray-200 print:hidden">
             <div className="flex items-start gap-3 mb-4">
               <Info className="w-5 h-5 text-sage-600 mt-0.5 flex-shrink-0" />
               <div>
@@ -945,7 +950,7 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
           </div>
 
           {/* Print Tips */}
-          <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200">
+          <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200 print:hidden">
             <CreditCard className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
             <div>
               <h4 className="font-medium text-amber-900 text-sm">Tipp: Ideale Stellen für den QR-Code</h4>
@@ -959,7 +964,7 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
           </div>
 
           {/* Scan Demo */}
-          <div className="flex items-center gap-4 p-4 rounded-lg bg-sage-50 border border-sage-200">
+          <div className="flex items-center gap-4 p-4 rounded-lg bg-sage-50 border border-sage-200 print:hidden">
             <Smartphone className="w-8 h-8 text-sage-600 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm text-warmgray-700">
@@ -1071,7 +1076,7 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
       </Card>
 
       {/* Print-only footer with date */}
-      <div className="hidden print:block mt-8 pt-4 border-t border-gray-300 text-center text-sm text-gray-600">
+      <div className="hidden print:block print-date mt-8 pt-4 border-t border-gray-300 text-center text-sm text-gray-600">
         Gedruckt am: {new Date().toLocaleDateString('de-DE', {
           year: 'numeric',
           month: 'long',

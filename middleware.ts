@@ -1,7 +1,15 @@
+import { validateRequiredEnvVars } from '@/lib/config/validate-env'
 import { updateSession } from '@/lib/supabase/middleware'
 import { NextRequest } from 'next/server'
 
+let envValidated = false
+
 export async function middleware(request: NextRequest) {
+  if (!envValidated) {
+    validateRequiredEnvVars()
+    envValidated = true
+  }
+
   return await updateSession(request)
 }
 

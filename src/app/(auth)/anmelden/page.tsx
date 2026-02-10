@@ -1,16 +1,17 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, setSessionPersistence, clearSupabaseLocalStorage } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Loader2, Shield, ArrowLeft, Mail, CheckCircle2, ShieldAlert, Clock } from 'lucide-react'
 import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
-import TurnstileWidget from '@/components/auth/turnstile'
+import TurnstileWidget, { TurnstileWidgetRef } from '@/components/auth/turnstile'
 
 type LoginStep = 'credentials' | '2fa' | 'email_not_confirmed'
 
@@ -29,12 +30,15 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [failureCount, setFailureCount] = useState(0)
   const [isLocked, setIsLocked] = useState(false)
+  const [showLockoutModal, setShowLockoutModal] = useState(false)
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null)
   const [countdown, setCountdown] = useState<number>(0)
+  const [rememberMe, setRememberMe] = useState(false)
 
   const router = useRouter()
   const supabase = createClient()
   const { capture, identify } = usePostHog()
+  const turnstileRef = useRef<TurnstileWidgetRef>(null)
 
   // Countdown timer for rate limiting
   useEffect(() => {
@@ -67,6 +71,7 @@ export default function LoginPage() {
         body: JSON.stringify({
           email,
           password,
+          rememberMe,
           ...(turnstileToken ? { turnstileToken } : {}),
         }),
       })
@@ -74,34 +79,41 @@ export default function LoginPage() {
       const data = await response.json()
 
       if (response.status === 200 && data.success) {
+        // Configure persistence based on rememberMe choice
+        setSessionPersistence(rememberMe)
+        if (!rememberMe) {
+          clearSupabaseLocalStorage()
+        }
+        const loginClient = createClient({ persist: rememberMe })
+
         // Hydrate the browser Supabase client with session tokens
         if (data.access_token && data.refresh_token) {
-          await supabase.auth.setSession({
+          await loginClient.auth.setSession({
             access_token: data.access_token,
             refresh_token: data.refresh_token,
           })
         }
 
         // Successful login - now check for 2FA
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await loginClient.auth.getUser()
 
         if (user) {
           // Check if email is confirmed
           if (!user.email_confirmed_at) {
-            await supabase.auth.signOut()
+            await loginClient.auth.signOut()
             setStep('email_not_confirmed')
             return
           }
 
           // Check if user has 2FA enabled
-          const { data: profile } = await supabase
+          const { data: profile } = await loginClient
             .from('profiles')
             .select('two_factor_enabled')
             .eq('id', user.id)
             .single()
 
           if (profile?.two_factor_enabled) {
-            await supabase.auth.signOut()
+            await loginClient.auth.signOut()
             setPendingUserId(user.id)
             setStep('2fa')
             setIsLoading(false)
@@ -141,6 +153,7 @@ export default function LoginPage() {
       if (response.status === 403) {
         // Account locked
         setIsLocked(true)
+        setShowLockoutModal(true)
         setError(null)
         capture(ANALYTICS_EVENTS.ERROR_OCCURRED, {
           error_type: 'account_locked',
@@ -158,6 +171,7 @@ export default function LoginPage() {
 
       if (response.status === 400 && data.error === 'Invalid CAPTCHA. Please try again.') {
         setError('CAPTCHA-Verifizierung fehlgeschlagen. Bitte versuchen Sie es erneut.')
+        turnstileRef.current?.reset()
         setTurnstileToken(null)
         return
       }
@@ -252,7 +266,7 @@ export default function LoginPage() {
       const loginResponse = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, rememberMe }),
       })
 
       const loginData = await loginResponse.json()
@@ -263,15 +277,22 @@ export default function LoginPage() {
         return
       }
 
+      // Configure persistence based on rememberMe choice
+      setSessionPersistence(rememberMe)
+      if (!rememberMe) {
+        clearSupabaseLocalStorage()
+      }
+      const loginClient = createClient({ persist: rememberMe })
+
       // Hydrate the browser Supabase client with session tokens
       if (loginData.access_token && loginData.refresh_token) {
-        await supabase.auth.setSession({
+        await loginClient.auth.setSession({
           access_token: loginData.access_token,
           refresh_token: loginData.refresh_token,
         })
       }
 
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await loginClient.auth.getUser()
 
       if (user) {
         identify(user.id, { email: user.email })
@@ -528,13 +549,33 @@ export default function LoginPage() {
             />
           </div>
 
+          {/* Remember Me Checkbox */}
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="remember-me"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              disabled={isLoading || isLocked}
+              className="w-5 h-5 rounded mt-0.5 accent-sage-600"
+            />
+            <div>
+              <label htmlFor="remember-me" className="text-sm font-medium text-warmgray-700 cursor-pointer">
+                Angemeldet bleiben
+              </label>
+              <p className="text-xs text-warmgray-500 mt-0.5">
+                🔒 Nicht auf gemeinsam genutzten Geräten verwenden
+              </p>
+            </div>
+          </div>
+
           {/* CAPTCHA Widget */}
           {showCaptcha && (
             <div className="space-y-2">
               <p className="text-sm text-warmgray-600 text-center">
                 Aus Sicherheitsgründen ist eine CAPTCHA-Verifizierung erforderlich.
               </p>
-              <TurnstileWidget onVerify={handleTurnstileVerify} />
+              <TurnstileWidget ref={turnstileRef} onVerify={handleTurnstileVerify} />
               {turnstileToken && (
                 <p className="text-xs text-green-600 text-center flex items-center justify-center gap-1">
                   <CheckCircle2 className="w-3 h-3" />
@@ -546,20 +587,31 @@ export default function LoginPage() {
         </CardContent>
 
         <CardFooter className="flex flex-col gap-4">
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={isLoading || isLocked || (countdown > 0) || (showCaptcha && !turnstileToken)}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Anmelden...
-              </>
-            ) : (
-              'Anmelden'
-            )}
-          </Button>
+          {isLocked ? (
+            <Button
+              type="button"
+              variant="destructive"
+              className="w-full"
+              onClick={() => router.push('/passwort-vergessen')}
+            >
+              Passwort zurücksetzen
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isLoading || (countdown > 0) || (showCaptcha && !turnstileToken)}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Anmelden...
+                </>
+              ) : (
+                'Anmelden'
+              )}
+            </Button>
+          )}
 
           <p className="text-sm text-warmgray-600 text-center">
             Noch kein Konto?{' '}
@@ -569,6 +621,41 @@ export default function LoginPage() {
           </p>
         </CardFooter>
       </form>
+
+      {/* Lockout Modal */}
+      <Dialog open={showLockoutModal} onOpenChange={setShowLockoutModal}>
+        <DialogContent>
+          <DialogHeader>
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <ShieldAlert className="w-8 h-8 text-red-600" />
+            </div>
+            <DialogTitle className="text-center text-2xl">
+              Konto gesperrt
+            </DialogTitle>
+            <DialogDescription className="text-center text-base mt-2">
+              Ihr Konto wurde aus Sicherheitsgründen nach mehreren fehlgeschlagenen
+              Anmeldeversuchen vorübergehend gesperrt. Bitte setzen Sie Ihr Passwort
+              zurück, um Ihr Konto wieder zu entsperren.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-col">
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={() => router.push('/passwort-vergessen')}
+            >
+              Passwort zurücksetzen
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setShowLockoutModal(false)}
+            >
+              Schließen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

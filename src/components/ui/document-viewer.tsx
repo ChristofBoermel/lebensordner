@@ -16,6 +16,7 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCw,
+  Info,
 } from 'lucide-react'
 import {
   Dialog,
@@ -24,7 +25,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { DocumentMetadata } from '@/types/database'
+import type { DocumentMetadata, DocumentCategory } from '@/types/database'
+import { CATEGORY_METADATA_FIELDS } from '@/types/database'
 
 export interface DocumentViewerProps {
   documents: DocumentMetadata[]
@@ -410,6 +412,33 @@ export function DocumentViewer({
                 <div>
                   <p className="text-sm font-medium text-warmgray-700">Notizen</p>
                   <p className="text-sm text-warmgray-600 whitespace-pre-wrap">{selectedDoc.notes}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Metadata / Dokumentdetails */}
+            {selectedDoc?.metadata && Object.keys(selectedDoc.metadata).length > 0 && (
+              <div className="flex items-start gap-2">
+                <Info className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                <div>
+                  <p className="text-sm font-medium text-warmgray-700">Dokumentdetails</p>
+                  <div className="space-y-1 mt-1">
+                    {(() => {
+                      const fields = CATEGORY_METADATA_FIELDS[selectedDoc.category as DocumentCategory]
+                      return Object.entries(selectedDoc.metadata!).map(([key, value]) => {
+                        const fieldDef = fields?.find(f => f.key === key || f.name === key)
+                        const label = fieldDef?.label || key
+                        const displayValue = fieldDef?.type === 'date' && value
+                          ? new Date(value).toLocaleDateString('de-DE')
+                          : value
+                        return (
+                          <p key={key} className="text-sm text-warmgray-600">
+                            <span className="font-medium">{label}:</span> {displayValue}
+                          </p>
+                        )
+                      })
+                    })()}
+                  </div>
                 </div>
               </div>
             )}

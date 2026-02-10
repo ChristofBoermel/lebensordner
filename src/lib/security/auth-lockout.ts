@@ -88,6 +88,12 @@ export async function getFailureCount(email: string): Promise<number> {
 
 export async function resetFailureCount(email: string): Promise<void> {
   try {
+    const locked = await isAccountLocked(email)
+    if (locked) {
+      console.log(`Skipping failure count reset for locked account: ${email}`)
+      return
+    }
+
     const supabase = createServiceClient()
     await supabase
       .from('rate_limits')

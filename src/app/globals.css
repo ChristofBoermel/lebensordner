@@ -534,63 +534,105 @@ html.onboarding-accessible {
 
 /* =================================================================
    PRINT STYLESHEET
-   Clean printing for onboarding and general pages
+   Comprehensive print optimization for A4 output.
+   Hides all interactive/decorative UI, optimizes typography,
+   and ensures clean, professional printed pages.
    ================================================================= */
 
+@page {
+  size: A4;
+  margin: 2cm;
+}
+
 @media print {
-  /* Hide all navigation and UI chrome */
+  /* --- Hide all non-essential UI elements --- */
   nav, aside, header, footer,
   .dashboard-nav, .theme-toggle,
   .floating-help-button, .step-feedback-widget,
   button:not(.print-include), .no-print,
   [role="navigation"], [role="banner"],
-  .dropdown-menu, .tooltip, .popover {
+  .dropdown-menu, .tooltip, .popover,
+  [role="dialog"], [role="alertdialog"],
+  [data-radix-popper-content-wrapper],
+  [data-sonner-toaster],
+  [class*="toast"], [class*="notification"],
+  [class*="alert-"]:not(.print-include),
+  [role="tablist"],
+  [class*="progress"], [class*="Progress"],
+  [class*="dropdown"], [class*="Dropdown"],
+  [class*="search"], [class*="Search"],
+  .global-search {
     display: none !important;
   }
 
-  /* Optimize for print */
+  /* --- Page layout and body --- */
+  html {
+    font-size: 11pt !important;
+  }
+
   body {
     background: white !important;
     color: black !important;
-    font-size: 12pt;
-    line-height: 1.5;
+    font-size: 11pt;
+    line-height: 1.4;
+    font-family: Georgia, "Times New Roman", serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
-  /* Remove decorative elements */
+  /* --- Typography optimization --- */
+  h1 {
+    font-size: 18pt !important;
+    color: black !important;
+    margin-bottom: 0.5cm;
+  }
+
+  h2 {
+    font-size: 14pt !important;
+    color: black !important;
+    margin-bottom: 0.3cm;
+  }
+
+  h3 {
+    font-size: 12pt !important;
+    color: black !important;
+    margin-bottom: 0.2cm;
+  }
+
+  p, span, li, td, th, label, div {
+    color: black !important;
+  }
+
+  /* Ensure muted text is still readable in print */
+  [class*="text-warmgray-"], [class*="text-muted"] {
+    color: #333 !important;
+  }
+
+  /* --- Remove all decorative elements --- */
   *, *::before, *::after {
     box-shadow: none !important;
     text-shadow: none !important;
   }
 
-  /* Ensure proper page breaks */
-  .onboarding-step {
+  /* Remove background colors and gradients */
+  [class*="bg-sage-"], [class*="bg-cream-"],
+  [class*="bg-warmgray-"], [class*="bg-amber-"],
+  [class*="bg-red-"], [class*="bg-green-"],
+  [class*="bg-blue-"], [class*="bg-gradient"] {
+    background: white !important;
+  }
+
+  /* --- Card and container optimization --- */
+  .card-elevated, .category-card,
+  [class*="Card"], [class*="card"] {
+    border: 1px solid #ccc !important;
+    background: white !important;
+    padding: 0.5cm !important;
     page-break-inside: avoid;
+    margin-bottom: 0.5cm;
   }
 
-  /* Show URLs for links */
-  a[href]:after {
-    content: " (" attr(href) ")";
-    font-size: 10pt;
-    color: #666;
-  }
-
-  /* Don't show URL for internal links or buttons */
-  a[href^="/"]:after,
-  a[href^="#"]:after,
-  button a[href]:after {
-    content: "";
-  }
-
-  /* QR Code sizing for scannability */
-  .qr-code, [data-qr-code] {
-    width: 4cm !important;
-    height: 4cm !important;
-    page-break-inside: avoid;
-    margin: 1cm auto;
-  }
-
-  /* Page breaks */
-  .card-elevated, .category-card, section {
+  section {
     page-break-inside: avoid;
   }
 
@@ -598,22 +640,93 @@ html.onboarding-accessible {
     page-break-after: always;
   }
 
-  /* Ensure images print correctly */
+  /* --- Link handling --- */
+  a[href]:after {
+    content: " (" attr(href) ")";
+    font-size: 9pt;
+    color: #666;
+  }
+
+  a[href^="/"]:after,
+  a[href^="#"]:after,
+  a[href^="javascript"]:after,
+  button a[href]:after {
+    content: "";
+  }
+
+  /* --- QR Code: ensure scannable print size (4cm x 4cm) --- */
+  .qr-code, [data-qr-code] {
+    width: 4cm !important;
+    height: 4cm !important;
+    page-break-inside: avoid;
+    margin: 0.5cm auto;
+  }
+
+  [data-qr-code] {
+    border: 2px solid black !important;
+    padding: 0.3cm !important;
+    background: white !important;
+  }
+
+  .qr-code, [data-qr-code] img {
+    filter: contrast(1.2) !important;
+    image-rendering: pixelated;
+  }
+
+  /* --- Image handling --- */
   img {
     max-width: 100% !important;
   }
 
-  /* Hide fixed/floating elements */
+  /* --- Fixed/floating elements --- */
   [class*="fixed"],
   [class*="sticky"] {
     position: static !important;
   }
 
-  /* Print metadata */
+  /* --- Page break helpers --- */
+  .onboarding-step {
+    page-break-inside: avoid;
+  }
+
+  /* --- Tab content: show all tab panels in print --- */
+  [role="tabpanel"] {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    position: static !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  [role="tabpanel"][hidden] {
+    display: block !important;
+  }
+
+  /* Add visual section separators between tab panels */
+  [role="tabpanel"] + [role="tabpanel"] {
+    border-top: 2px solid #999;
+    padding-top: 0.5cm;
+    margin-top: 0.5cm;
+  }
+
+  /* --- Print date/time footer --- */
   .print-date {
     display: block !important;
     font-size: 10pt;
-    color: #666;
+    color: #666 !important;
     margin-top: 1cm;
+    padding-top: 0.3cm;
+    border-top: 1px solid #ccc;
+    text-align: center;
+  }
+
+  /* --- Ensure print:hidden utility works --- */
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:block {
+    display: block !important;
   }
 }

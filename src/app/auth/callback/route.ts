@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { recordConsent } from '@/lib/consent/manager'
+import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
+import { isAccountLocked } from '@/lib/security/auth-lockout'
 
 // Admin client for profile creation
 const getSupabaseAdmin = () => {
@@ -15,11 +17,11 @@ const getSupabaseAdmin = () => {
 async function syncConsentFromCookie(userId: string) {
   try {
     const cookieStore = await cookies()
-    const consentCookie = cookieStore.get('lebensordner_consent')
+    const consentCookie = cookieStore.get(CONSENT_COOKIE_NAME)
     if (!consentCookie?.value) return
 
     const consent = JSON.parse(consentCookie.value)
-    const version = consent.version || '1.0'
+    const version = consent.version || CONSENT_VERSION
 
     const promises = []
     if (typeof consent.analytics === 'boolean') {
@@ -45,6 +47,16 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error && data.user) {
+      // Check if the account is locked before allowing session creation
+      if (data.user.email) {
+        const locked = await isAccountLocked(data.user.email)
+        if (locked) {
+          console.log(`Blocked session creation for locked account during callback: ${data.user.email}`)
+          await supabase.auth.signOut()
+          return NextResponse.redirect(`${origin}/anmelden?error=account_locked`)
+        }
+      }
+
       // Ensure profile exists after email confirmation
       const supabaseAdmin = getSupabaseAdmin()
       

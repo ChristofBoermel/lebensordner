@@ -54,7 +54,7 @@ export function FloatingHelpButton({ currentStep }: FloatingHelpButtonProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full bg-sage-600 hover:bg-sage-700 text-white shadow-lg transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-4"
+        className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full bg-sage-600 hover:bg-sage-700 text-white shadow-lg transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-4 print:hidden"
         aria-label="Hilfe anzeigen"
       >
         <HelpCircle className="w-8 h-8" />

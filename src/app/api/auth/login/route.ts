@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { checkRateLimit, incrementRateLimit } from '@/lib/security/rate-limit'
 import { logSecurityEvent } from '@/lib/security/audit-log'
 import {
@@ -13,7 +14,7 @@ import { sendSecurityNotification } from '@/lib/email/security-notifications'
 
 // --- Constants ---
 
-const IP_RATE_LIMIT = { maxRequests: 10, windowMs: 15 * 60 * 1000 }
+const IP_RATE_LIMIT = { maxRequests: 5, windowMs: 15 * 60 * 1000 }
 const EMAIL_RATE_LIMIT = { maxRequests: 5, windowMs: 15 * 60 * 1000 }
 const CAPTCHA_THRESHOLD = 3
 const LOCKOUT_THRESHOLD = 5
@@ -54,7 +55,8 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, password, turnstileToken } = body
+    const { email, password, turnstileToken, rememberMe } = body
+    const persistSession = rememberMe ?? false
 
     if (!email || !password) {
       return NextResponse.json(
@@ -153,7 +155,36 @@ export async function POST(request: NextRequest) {
 
     // --- Authentication Attempt ---
 
-    const supabase = await createServerSupabaseClient()
+    const cookieStore = await cookies()
+    const extraCookieOptions = persistSession
+      ? { maxAge: 30 * 24 * 60 * 60 } // 30 days in seconds
+      : {} // Session cookie (no maxAge — expires when browser closes)
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value
+          },
+          set(name: string, value: string, options: CookieOptions) {
+            try {
+              cookieStore.set({ name, value, ...options, ...extraCookieOptions })
+            } catch {
+              // Handle cookie setting in server components
+            }
+          },
+          remove(name: string, options: CookieOptions) {
+            try {
+              cookieStore.set({ name, value: '', ...options })
+            } catch {
+              // Handle cookie removal in server components
+            }
+          },
+        },
+      }
+    )
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -210,13 +241,28 @@ export async function POST(request: NextRequest) {
 
     // --- Success ---
 
+    // Post-authentication lockout check (TOCTOU race condition defense)
+    const lockedAfterAuth = await isAccountLocked(email)
+    if (lockedAfterAuth) {
+      await supabase.auth.signOut()
+      await logSecurityEvent({
+        event_type: 'login_blocked_locked_account',
+        event_data: { email, reason: 'account_locked_after_authentication' },
+        request,
+      })
+      return NextResponse.json(
+        { error: 'Account locked during login. Reset password to unlock.' },
+        { status: 403 }
+      )
+    }
+
     // Reset failure count on successful login
     await resetFailureCount(email)
 
     await logSecurityEvent({
       event_type: 'login_success',
       user_id: data.user?.id,
-      event_data: { email },
+      event_data: { email, rememberMe: persistSession },
       request,
     })
 

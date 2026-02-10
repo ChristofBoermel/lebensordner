@@ -66,6 +66,7 @@ import {
   Pencil,
   PlusCircle,
   Tag,
+  Info,
 } from "lucide-react";
 import {
   DOCUMENT_CATEGORIES,
@@ -213,9 +214,7 @@ export default function DocumentsPage() {
   const [uploadReminderWatcher, setUploadReminderWatcher] = useState<
     string | null
   >(null);
-  const [uploadMetadata, setUploadMetadata] = useState<Record<string, string>>(
-    {},
-  );
+  const [uploadMetadata, setUploadMetadata] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -519,16 +518,18 @@ export default function DocumentsPage() {
     }
 
     // Validate required metadata fields
-    if (uploadCategory && CATEGORY_METADATA_FIELDS[uploadCategory]) {
-      const fields = CATEGORY_METADATA_FIELDS[uploadCategory];
-      const missingFields = fields.filter(
-        (field) => field.required && !uploadMetadata[field.name]?.trim(),
-      );
-      if (missingFields.length > 0) {
-        setUploadError(
-          `Bitte füllen Sie alle Pflichtfelder aus: ${missingFields.map((f) => f.label).join(", ")}`,
-        );
-        return;
+    if (uploadCategory) {
+      const metadataFields = CATEGORY_METADATA_FIELDS[uploadCategory];
+      if (metadataFields) {
+        const missingRequired = metadataFields
+          .filter((f) => f.required && !uploadMetadata[f.key]?.trim())
+          .map((f) => f.label);
+        if (missingRequired.length > 0) {
+          setUploadError(
+            `Bitte füllen Sie folgende Pflichtfelder aus: ${missingRequired.join(", ")}`,
+          );
+          return;
+        }
       }
     }
 
@@ -573,8 +574,12 @@ export default function DocumentsPage() {
         formData.append("reminder_watcher_id", uploadReminderWatcher);
       }
 
-      if (uploadMetadata && Object.keys(uploadMetadata).length > 0) {
-        formData.append("metadata", JSON.stringify(uploadMetadata));
+      // Send metadata as JSON if any non-empty values exist
+      const filteredMetadata = Object.fromEntries(
+        Object.entries(uploadMetadata).filter(([, v]) => v && v.trim()),
+      );
+      if (Object.keys(filteredMetadata).length > 0) {
+        formData.append("metadata", JSON.stringify(filteredMetadata));
       }
 
       const uploadRes = await fetch("/api/documents/upload", {
@@ -930,6 +935,7 @@ export default function DocumentsPage() {
     setUploadCategory(category);
     setUploadCustomCategory(customCategoryId || null);
     setUploadSubcategory(null);
+    setUploadMetadata({});
     setIsCreatingSubcategory(false);
     setNewSubcategoryName("");
     setIsUploadOpen(true);
@@ -1094,15 +1100,24 @@ export default function DocumentsPage() {
   })();
 
   const filteredDocuments = validatedDocuments.filter((doc) => {
+    const matchesSearchQuery = (d: Document) => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      if (d.title.toLowerCase().includes(q)) return true;
+      if (d.notes?.toLowerCase().includes(q)) return true;
+      if (d.metadata) {
+        return Object.values(d.metadata).some(
+          (val) => typeof val === 'string' && val.toLowerCase().includes(q)
+        );
+      }
+      return false;
+    };
+
     // Check if viewing a custom category
     if (selectedCustomCategory) {
       const matchesCustomCategory =
         doc.custom_category_id === selectedCustomCategory;
-      const matchesSearch =
-        !searchQuery ||
-        doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doc.notes?.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCustomCategory && matchesSearch;
+      return matchesCustomCategory && matchesSearchQuery(doc);
     }
 
     // Check standard category
@@ -1110,14 +1125,10 @@ export default function DocumentsPage() {
       !selectedCategory || doc.category === selectedCategory;
     // Also filter out documents that have a custom category when viewing standard categories
     const notInCustomCategory = !doc.custom_category_id;
-    const matchesSearch =
-      !searchQuery ||
-      doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.notes?.toLowerCase().includes(searchQuery.toLowerCase());
     return (
       matchesCategory &&
       (selectedCategory ? notInCustomCategory : true) &&
-      matchesSearch
+      matchesSearchQuery(doc)
     );
   });
 
@@ -1204,6 +1215,14 @@ export default function DocumentsPage() {
                   <ChevronRight className="w-3 h-3 flex-shrink-0" />
                   <span className="truncate">{subcategory.name}</span>
                 </>
+              )}
+              {doc.metadata && Object.keys(doc.metadata).length > 0 && (
+                <span
+                  className="inline-flex items-center gap-0.5 text-xs text-sage-600 bg-sage-50 px-1.5 py-0.5 rounded-full flex-shrink-0"
+                  title={`Zusätzliche Angaben: ${Object.keys(doc.metadata).length}`}
+                >
+                  <Info className="w-3 h-3" />
+                </span>
               )}
               <span className="flex-shrink-0">•</span>
               <span className="flex-shrink-0">
@@ -1947,17 +1966,17 @@ export default function DocumentsPage() {
             setUploadCustomReminderDays={setUploadCustomReminderDays}
             setUploadExpiryDate={setUploadExpiryDate}
             setUploadFile={setUploadFile}
-            setUploadMetadata={setUploadMetadata}
             setUploadNotes={setUploadNotes}
             setUploadReminderWatcher={setUploadReminderWatcher}
             setUploadSubcategory={setUploadSubcategory}
             setUploadTitle={setUploadTitle}
+            uploadMetadata={uploadMetadata}
+            setUploadMetadata={setUploadMetadata}
             uploadCategory={uploadCategory}
             uploadCustomCategory={uploadCustomCategory}
             uploadCustomReminderDays={uploadCustomReminderDays}
             uploadExpiryDate={uploadExpiryDate}
             uploadFile={uploadFile}
-            uploadMetadata={uploadMetadata}
             uploadNotes={uploadNotes}
             uploadReminderWatcher={uploadReminderWatcher}
             uploadSubcategory={uploadSubcategory}

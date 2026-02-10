@@ -23,8 +23,11 @@ import {
   Maximize2,
   Calendar,
   StickyNote,
-  AlertTriangle
+  AlertTriangle,
+  Info,
 } from 'lucide-react'
+import type { DocumentCategory } from '@/types/database'
+import { CATEGORY_METADATA_FIELDS } from '@/types/database'
 
 interface DocumentPreviewProps {
   isOpen: boolean
@@ -39,6 +42,7 @@ interface DocumentPreviewProps {
     expiry_date?: string | null
     notes?: string | null
     category?: string
+    metadata?: Record<string, string> | null
   } | null
 }
 
@@ -313,6 +317,35 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
               <div>
                 <p className="text-sm font-medium text-warmgray-700">Notizen</p>
                 <p className="text-sm text-warmgray-600 whitespace-pre-wrap">{document.notes}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Metadata / Dokumentdetails */}
+          {document?.metadata && Object.keys(document.metadata).length > 0 && (
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-warmgray-700">Dokumentdetails</p>
+                <div className="space-y-1 mt-1">
+                  {(() => {
+                    const fields = document.category
+                      ? CATEGORY_METADATA_FIELDS[document.category as DocumentCategory]
+                      : undefined
+                    return Object.entries(document.metadata!).map(([key, value]) => {
+                      const fieldDef = fields?.find(f => f.key === key || f.name === key)
+                      const label = fieldDef?.label || key
+                      const displayValue = fieldDef?.type === 'date' && value
+                        ? new Date(value).toLocaleDateString('de-DE')
+                        : value
+                      return (
+                        <p key={key} className="text-sm text-warmgray-600">
+                          <span className="font-medium">{label}:</span> {displayValue}
+                        </p>
+                      )
+                    })
+                  })()}
+                </div>
               </div>
             </div>
           )}
