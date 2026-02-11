@@ -43,7 +43,7 @@ import {
   FileText
 } from 'lucide-react'
 import type { TrustedPerson, DocumentMetadata } from '@/types/database'
-import { SUBSCRIPTION_TIERS, getTierFromSubscription, canPerformAction, allowsFamilyDownloads, type TierConfig } from '@/lib/subscription-tiers'
+import { SUBSCRIPTION_TIERS, canPerformAction, allowsFamilyDownloads, type TierConfig } from '@/lib/subscription-tiers'
 import Link from 'next/link'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { TierStatusCard, InfoBadge } from '@/components/ui/info-badge'
@@ -73,6 +73,12 @@ interface FamilyMember {
   }
 }
 
+interface StripePriceIds {
+  basic: { monthly: string; yearly: string }
+  premium: { monthly: string; yearly: string }
+  family: { monthly: string; yearly: string }
+}
+
 export default function ZugriffPage() {
   const [trustedPersons, setTrustedPersons] = useState<TrustedPerson[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -82,6 +88,7 @@ export default function ZugriffPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [userTier, setUserTier] = useState<TierConfig>(SUBSCRIPTION_TIERS.free)
+  const [priceIds, setPriceIds] = useState<StripePriceIds | null>(null)
 
   const [downloadLinkForm, setDownloadLinkForm] = useState({
     name: '',
@@ -112,6 +119,20 @@ export default function ZugriffPage() {
 
   const supabase = createClient()
 
+  // Fetch Stripe price IDs from API
+  useEffect(() => {
+    async function fetchPriceIds() {
+      try {
+        const response = await fetch('/api/stripe/prices')
+        const data = await response.json()
+        setPriceIds(data)
+      } catch (err) {
+        console.error('Failed to fetch price IDs:', err)
+      }
+    }
+    fetchPriceIds()
+  }, [])
+
   // Family members filtering - memoized for performance
   const accessibleMembers = useMemo(
     () => familyMembers.filter(m => m.direction === 'incoming'),
@@ -129,6 +150,71 @@ export default function ZugriffPage() {
       setActiveMainTab('familie')
     }
   }, [])
+
+  // Determine current tier based on price ID
+  // This mirrors the server-side getTierFromSubscription logic exactly
+  const getCurrentTier = useCallback((
+    status: string | null,
+    priceId: string | null
+  ): TierConfig => {
+    const normalizedPriceId = priceId?.toLowerCase() ?? null
+    const normalizedPriceIds = {
+      basic: {
+        monthly: priceIds?.basic.monthly.toLowerCase() ?? '',
+        yearly: priceIds?.basic.yearly.toLowerCase() ?? '',
+      },
+      premium: {
+        monthly: priceIds?.premium.monthly.toLowerCase() ?? '',
+        yearly: priceIds?.premium.yearly.toLowerCase() ?? '',
+      },
+      family: {
+        monthly: priceIds?.family.monthly.toLowerCase() ?? '',
+        yearly: priceIds?.family.yearly.toLowerCase() ?? '',
+      },
+    }
+
+    // No status or canceled → free (matches server logic)
+    if (!status || status === 'canceled') return SUBSCRIPTION_TIERS.free
+
+    // Only active/trialing subscriptions continue
+    const isActiveOrTrialing = status === 'active' || status === 'trialing'
+    if (!isActiveOrTrialing) return SUBSCRIPTION_TIERS.free
+
+    // If priceIds not loaded yet, return 'free' as safe temporary fallback
+    if (!priceIds) return SUBSCRIPTION_TIERS.free
+
+    // Check basic tier price IDs
+    if (
+      normalizedPriceId === normalizedPriceIds.basic.monthly
+      || normalizedPriceId === normalizedPriceIds.basic.yearly
+    ) {
+      return SUBSCRIPTION_TIERS.basic
+    }
+
+    // Check premium tier price IDs
+    if (
+      normalizedPriceId === normalizedPriceIds.premium.monthly
+      || normalizedPriceId === normalizedPriceIds.premium.yearly
+    ) {
+      return SUBSCRIPTION_TIERS.premium
+    }
+
+    // Family tier price IDs are treated as premium tier for feature access
+    if (
+      normalizedPriceId === normalizedPriceIds.family.monthly
+      || normalizedPriceId === normalizedPriceIds.family.yearly
+    ) {
+      return SUBSCRIPTION_TIERS.premium
+    }
+
+    // Null or unknown price_id with active subscription → basic (matches server logic)
+    if (!normalizedPriceId) {
+      return SUBSCRIPTION_TIERS.basic
+    }
+
+    // Unrecognized price_id → basic (matches server logic)
+    return SUBSCRIPTION_TIERS.basic
+  }, [priceIds])
 
   // Fetch user tier
   useEffect(() => {
@@ -151,7 +237,7 @@ export default function ZugriffPage() {
           })
         }
 
-        const tier = getTierFromSubscription(profile.subscription_status, profile.stripe_price_id)
+        const tier = getCurrentTier(profile.subscription_status, profile.stripe_price_id)
 
         if (process.env.NODE_ENV === 'development') {
           console.log('[Zugriff Page] Detected tier:', tier.id, tier.name)
@@ -161,7 +247,7 @@ export default function ZugriffPage() {
       }
     }
     fetchTier()
-  }, [supabase])
+  }, [supabase, getCurrentTier, priceIds])
 
   const fetchTrustedPersons = useCallback(async () => {
     setIsLoading(true)
