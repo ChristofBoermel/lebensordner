@@ -209,12 +209,12 @@ export default function AboPage() {
 
     // Null or unknown price_id with active subscription → basic (matches server logic)
     if (!priceId) {
-      console.warn(`[Abo Page] Missing price_id for ${status} subscription. Defaulting to basic tier.`)
+
       return 'basic'
     }
 
     // Unrecognized price_id → basic (matches server logic)
-    console.warn(`[Abo Page] Unrecognized price ID: ${priceId}. Defaulting to basic tier.`)
+
     return 'basic'
   }
 

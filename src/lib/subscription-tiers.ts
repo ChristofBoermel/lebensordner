@@ -165,20 +165,17 @@ export function getTierFromSubscription(
 
   // Check basic tier price IDs
   if (priceId === priceIds.basic.monthly || priceId === priceIds.basic.yearly) {
-    console.log(`[Tier Detection] Tier detected: basic (price ID: ${priceId})`)
     return SUBSCRIPTION_TIERS.basic
   }
 
   // Check premium tier price IDs
   if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) {
-    console.log(`[Tier Detection] Tier detected: premium (price ID: ${priceId})`)
     return SUBSCRIPTION_TIERS.premium
   }
 
   // Family tier price IDs are treated as premium tier for feature access
   // This allows family plan subscribers to have full premium features
   if (priceId === priceIds.family.monthly || priceId === priceIds.family.yearly) {
-    console.log(`[Tier Detection] Tier detected: premium via family plan (price ID: ${priceId})`)
     return SUBSCRIPTION_TIERS.premium
   }
 
@@ -186,11 +183,11 @@ export function getTierFromSubscription(
   // default to basic tier (safe default to prevent over-granting permissions)
   if (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') {
     if (!priceId) {
-      console.warn(`[Tier Detection] Missing price ID for ${subscriptionStatus} subscription. Defaulting to basic tier.`)
+      // Silent fallback to basic tier
       return SUBSCRIPTION_TIERS.basic
     }
     // Unrecognized priceId with active subscription - default to basic
-    console.warn(`[Tier Detection] Unrecognized price ID: ${priceId}. Defaulting to basic tier. Known price IDs: basic=[${priceIds.basic.monthly}, ${priceIds.basic.yearly}], premium=[${priceIds.premium.monthly}, ${priceIds.premium.yearly}], family=[${priceIds.family.monthly}, ${priceIds.family.yearly}]`)
+    // Silent fallback to basic tier
     return SUBSCRIPTION_TIERS.basic
   }
 
@@ -294,4 +291,3 @@ export function getDownloadLinkType(tier: TierConfig): 'view' | 'download' | nul
 export function canCreateDownloadLinks(tier: TierConfig): boolean {
   return tier.id === 'basic' || tier.id === 'premium'
 }
-

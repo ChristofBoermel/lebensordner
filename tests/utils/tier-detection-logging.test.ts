@@ -2,11 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { getTierFromSubscription } from '@/lib/subscription-tiers'
 import {
   STRIPE_PRICE_BASIC_MONTHLY,
-  STRIPE_PRICE_BASIC_YEARLY,
   STRIPE_PRICE_PREMIUM_MONTHLY,
-  STRIPE_PRICE_PREMIUM_YEARLY,
+  STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION,
   STRIPE_PRICE_FAMILY_MONTHLY,
-  STRIPE_PRICE_FAMILY_YEARLY,
   STRIPE_PRICE_UNKNOWN,
 } from '../fixtures/stripe'
 
@@ -20,64 +18,74 @@ describe('Tier Detection Console Logging', () => {
     vi.restoreAllMocks()
   })
 
-  it('logs info for basic tier detection', () => {
+  it('does not log info for basic tier detection', () => {
     getTierFromSubscription('active', STRIPE_PRICE_BASIC_MONTHLY)
 
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining(`basic (price ID: ${STRIPE_PRICE_BASIC_MONTHLY})`)
-    )
+    expect(console.log).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
-  it('logs info for premium tier detection', () => {
+  it('does not log info for premium tier detection', () => {
     getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY)
 
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining(`premium (price ID: ${STRIPE_PRICE_PREMIUM_MONTHLY})`)
-    )
+    expect(console.log).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
-  it('logs info for family tier detection', () => {
+  it('does not log info for family tier detection', () => {
     getTierFromSubscription('active', STRIPE_PRICE_FAMILY_MONTHLY)
 
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining(`premium via family plan (price ID: ${STRIPE_PRICE_FAMILY_MONTHLY})`)
-    )
+    expect(console.log).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
-  it('logs warning when price_id is missing for active subscription', () => {
+  it('does not log warning when price_id is missing for active subscription', () => {
     getTierFromSubscription('active', null)
 
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Missing price ID for active subscription')
-    )
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
-  it('logs warning when price_id is unrecognized', () => {
+  it('does not log warning when price_id is unrecognized', () => {
     getTierFromSubscription('active', STRIPE_PRICE_UNKNOWN)
 
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Unrecognized price ID')
-    )
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
-  it('logs warning details with known price IDs for unrecognized price_id', () => {
+  it('does not log warning details with known price IDs for unrecognized price_id', () => {
     getTierFromSubscription('active', STRIPE_PRICE_UNKNOWN)
 
-    const [[message]] = (console.warn as unknown as { mock: { calls: string[][] } }).mock.calls
-    expect(message).toContain('Known price IDs: basic=[')
-    expect(message).toContain(STRIPE_PRICE_BASIC_MONTHLY)
-    expect(message).toContain(STRIPE_PRICE_BASIC_YEARLY)
-    expect(message).toContain(STRIPE_PRICE_PREMIUM_MONTHLY)
-    expect(message).toContain(STRIPE_PRICE_PREMIUM_YEARLY)
-    expect(message).toContain(STRIPE_PRICE_FAMILY_MONTHLY)
-    expect(message).toContain(STRIPE_PRICE_FAMILY_YEARLY)
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
-  it('logs warning when price_id is missing for trialing subscription', () => {
+  it('does not log warning when price_id is missing for trialing subscription', () => {
     getTierFromSubscription('trialing', null)
 
-    expect(console.warn).toHaveBeenCalledWith(
-      '[Tier Detection] Missing price ID for trialing subscription. Defaulting to basic tier.'
-    )
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('does not log output for production premium price ID', () => {
+    const originalPremiumMonthly = process.env.STRIPE_PRICE_PREMIUM_MONTHLY
+    process.env.STRIPE_PRICE_PREMIUM_MONTHLY = STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION
+
+    getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION)
+
+    expect(console.log).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
+
+    process.env.STRIPE_PRICE_PREMIUM_MONTHLY = originalPremiumMonthly
+  })
+
+  it('does not log output during silent fallback to basic tier', () => {
+    getTierFromSubscription('active', null)
+
+    expect(console.log).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('does not log output during silent fallback to free tier', () => {
+    getTierFromSubscription(null, null)
+
+    expect(console.log).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
   })
 })

@@ -131,10 +131,7 @@ describe('Tier Detection Integration Flow', () => {
       expect(result.extractedPriceId).toBe(STRIPE_PRICE_UNKNOWN)
       expect(result.tierId).toBe('basic')
       expect(result.tierName).toBe('Basis')
-      // Verify warning was logged
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Unrecognized price ID')
-      )
+      expect(console.warn).not.toHaveBeenCalled()
     })
 
     it('should handle missing price ID with safe fallback to Basic', () => {
@@ -143,10 +140,7 @@ describe('Tier Detection Integration Flow', () => {
       expect(result.extractedPriceId).toBeNull()
       expect(result.tierId).toBe('basic')
       expect(result.tierName).toBe('Basis')
-      // Verify warning was logged
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Missing price ID')
-      )
+      expect(console.warn).not.toHaveBeenCalled()
     })
 
     it('should return Free tier for canceled subscription', () => {
@@ -266,7 +260,7 @@ describe('Tier Detection Integration Flow', () => {
       const tier = getTierFromSubscription('active', '   ')
 
       expect(tier.id).toBe('basic') // Safe default
-      expect(console.warn).toHaveBeenCalled()
+      expect(console.warn).not.toHaveBeenCalled()
     })
 
     it('should handle price ID with extra characters', () => {

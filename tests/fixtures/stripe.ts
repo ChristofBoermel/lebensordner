@@ -5,6 +5,7 @@ export const STRIPE_PRICE_BASIC_MONTHLY = 'price_basic_monthly_test'
 export const STRIPE_PRICE_BASIC_YEARLY = 'price_basic_yearly_test'
 export const STRIPE_PRICE_PREMIUM_MONTHLY = 'price_premium_monthly_test'
 export const STRIPE_PRICE_PREMIUM_YEARLY = 'price_premium_yearly_test'
+export const STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION = 'price_1Sr6SkCaeXnImHccDBmDf7e6'
 
 // Family tier price IDs (treated as premium tier for feature access)
 export const STRIPE_PRICE_FAMILY_MONTHLY = 'price_family_monthly_test'
@@ -109,6 +110,15 @@ export function createMockWebhookEvent(
       object: data,
     },
   }
+}
+
+export function createSubscriptionDeletedWebhook(customerId: string, subscriptionId: string) {
+  return createMockWebhookEvent('customer.subscription.deleted', {
+    id: subscriptionId,
+    customer: customerId,
+    status: 'canceled',
+    metadata: { supabase_user_id: 'test-user-id' },
+  })
 }
 
 // Helper to create mock checkout session

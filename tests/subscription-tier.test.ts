@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   getTierFromSubscription,
   SUBSCRIPTION_TIERS,
@@ -12,6 +12,7 @@ import {
   STRIPE_PRICE_BASIC_YEARLY,
   STRIPE_PRICE_PREMIUM_MONTHLY,
   STRIPE_PRICE_PREMIUM_YEARLY,
+  STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION,
   STRIPE_PRICE_FAMILY_MONTHLY,
   STRIPE_PRICE_FAMILY_YEARLY,
   STRIPE_PRICE_UNKNOWN,
@@ -39,6 +40,18 @@ describe('getTierFromSubscription', () => {
       const tier = getTierFromSubscription('trialing', STRIPE_PRICE_PREMIUM_MONTHLY)
 
       expect(tier.id).toBe('premium')
+    })
+
+    it('should return premium tier for active subscription with production premium monthly price', () => {
+      const originalPremiumMonthly = process.env.STRIPE_PRICE_PREMIUM_MONTHLY
+      process.env.STRIPE_PRICE_PREMIUM_MONTHLY = STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION
+
+      const tier = getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION)
+
+      expect(tier.id).toBe('premium')
+      expect(tier.name).toBe('Premium')
+
+      process.env.STRIPE_PRICE_PREMIUM_MONTHLY = originalPremiumMonthly
     })
   })
 
@@ -137,6 +150,55 @@ describe('getTierFromSubscription', () => {
 
       expect(tier.id).toBe('basic')
     })
+
+    it('should return free tier when subscription status is null', () => {
+      const tier = getTierFromSubscription(null, STRIPE_PRICE_PREMIUM_MONTHLY)
+
+      expect(tier.id).toBe('free')
+    })
+
+    it('should return free tier when subscription status is canceled', () => {
+      const tier = getTierFromSubscription('canceled', STRIPE_PRICE_BASIC_MONTHLY)
+
+      expect(tier.id).toBe('free')
+    })
+
+    it('should default to basic tier when price ID is empty string but subscription is active', () => {
+      const tier = getTierFromSubscription('active', '')
+
+      expect(tier.id).toBe('basic')
+    })
+  })
+})
+
+describe('Silent Operation', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('does not write console.log during successful tier detection', () => {
+    getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY)
+
+    expect(console.log).not.toHaveBeenCalled()
+  })
+
+  it('does not write console.warn during fallback to basic tier', () => {
+    getTierFromSubscription('active', null)
+
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('does not log price IDs to console', () => {
+    getTierFromSubscription('active', STRIPE_PRICE_BASIC_MONTHLY)
+    getTierFromSubscription('active', STRIPE_PRICE_UNKNOWN)
+
+    expect(console.log).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
   })
 })
 
@@ -231,30 +293,28 @@ describe('Tier Detection Logging', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
-  it('should log warning when price ID is null with active subscription', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('should not log warning when price ID is null with active subscription', () => {
     const tier = getTierFromSubscription('active', null)
 
     expect(tier.id).toBe('basic')
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Missing price ID')
-    )
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
-  it('should log warning when price ID is unrecognized', () => {
+  it('should not log warning when price ID is unrecognized', () => {
     const tier = getTierFromSubscription('active', 'price_unknown_xyz')
 
     expect(tier.id).toBe('basic')
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Unrecognized price ID')
-    )
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
-  it('should log debug info when tier is successfully detected', () => {
+  it('should not log debug info when tier is successfully detected', () => {
     const tier = getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY)
 
     expect(tier.id).toBe('premium')
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining('Tier detected')
-    )
+    expect(console.log).not.toHaveBeenCalled()
   })
 })
