@@ -162,20 +162,44 @@ export function getTierFromSubscription(
 
   // Check price ID against known price IDs
   const priceIds = getStripePriceIds()
+  const normalizedPriceId = priceId?.toLowerCase()
+  const normalizedPriceIds = {
+    basic: {
+      monthly: priceIds.basic.monthly?.toLowerCase(),
+      yearly: priceIds.basic.yearly?.toLowerCase(),
+    },
+    premium: {
+      monthly: priceIds.premium.monthly?.toLowerCase(),
+      yearly: priceIds.premium.yearly?.toLowerCase(),
+    },
+    family: {
+      monthly: priceIds.family.monthly?.toLowerCase(),
+      yearly: priceIds.family.yearly?.toLowerCase(),
+    },
+  }
 
   // Check basic tier price IDs
-  if (priceId === priceIds.basic.monthly || priceId === priceIds.basic.yearly) {
+  if (
+    normalizedPriceId === normalizedPriceIds.basic.monthly ||
+    normalizedPriceId === normalizedPriceIds.basic.yearly
+  ) {
     return SUBSCRIPTION_TIERS.basic
   }
 
   // Check premium tier price IDs
-  if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) {
+  if (
+    normalizedPriceId === normalizedPriceIds.premium.monthly ||
+    normalizedPriceId === normalizedPriceIds.premium.yearly
+  ) {
     return SUBSCRIPTION_TIERS.premium
   }
 
   // Family tier price IDs are treated as premium tier for feature access
   // This allows family plan subscribers to have full premium features
-  if (priceId === priceIds.family.monthly || priceId === priceIds.family.yearly) {
+  if (
+    normalizedPriceId === normalizedPriceIds.family.monthly ||
+    normalizedPriceId === normalizedPriceIds.family.yearly
+  ) {
     return SUBSCRIPTION_TIERS.premium
   }
 

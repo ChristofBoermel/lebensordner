@@ -1197,8 +1197,6 @@ export default function OnboardingPage() {
 
         return (
           <div className="space-y-6">
-            {renderStepPrintButton('emergency')}
-            {renderStepPrintButton('documents')}
             {renderStepPrintButton('profile')}
             <div className="text-center">
               <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-4">

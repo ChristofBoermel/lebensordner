@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   STRIPE_PRICE_INVALID,
+  STRIPE_PRICE_PREMIUM_MONTHLY,
+  STRIPE_PRICE_PREMIUM_MONTHLY_UPPERCASE,
+  STRIPE_PRICE_PREMIUM_MONTHLY_MIXEDCASE,
   STRIPE_PRICE_UNKNOWN,
   createMockSubscription,
   createMockWebhookEvent,
@@ -161,9 +164,90 @@ describe('Stripe Webhook Edge Cases', () => {
         expect.objectContaining({ stripe_price_id: null })
       )
     })
+
+    it('handles webhook with uppercase price ID when env var is lowercase', async () => {
+      const { stripe } = await import('@/lib/stripe')
+      const subscription = createMockSubscription(STRIPE_PRICE_PREMIUM_MONTHLY_UPPERCASE, 'active')
+      ;(subscription as any).customer = 'cus_test'
+      ;(subscription as any).metadata = { supabase_user_id: 'test-user-id' }
+
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValue(
+        createMockWebhookEvent('customer.subscription.updated', subscription) as any
+      )
+
+      const { POST } = await import('@/app/api/stripe/webhook/route')
+      const request = new Request('http://localhost/api/stripe/webhook', {
+        method: 'POST',
+        body: JSON.stringify(subscription),
+      })
+
+      const response = await POST(request)
+
+      expect(response.status).toBe(200)
+      expect(mockSupabaseUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ stripe_price_id: STRIPE_PRICE_PREMIUM_MONTHLY_UPPERCASE })
+      )
+    })
+
+    it('handles webhook with lowercase price ID when env var is uppercase', async () => {
+      const originalPremiumMonthly = process.env.STRIPE_PRICE_PREMIUM_MONTHLY
+      process.env.STRIPE_PRICE_PREMIUM_MONTHLY = STRIPE_PRICE_PREMIUM_MONTHLY_UPPERCASE
+
+      const { stripe } = await import('@/lib/stripe')
+      const subscription = createMockSubscription(STRIPE_PRICE_PREMIUM_MONTHLY, 'active')
+      ;(subscription as any).customer = 'cus_test'
+      ;(subscription as any).metadata = { supabase_user_id: 'test-user-id' }
+
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValue(
+        createMockWebhookEvent('customer.subscription.updated', subscription) as any
+      )
+
+      const { POST } = await import('@/app/api/stripe/webhook/route')
+      const request = new Request('http://localhost/api/stripe/webhook', {
+        method: 'POST',
+        body: JSON.stringify(subscription),
+      })
+
+      const response = await POST(request)
+
+      expect(response.status).toBe(200)
+      expect(mockSupabaseUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ stripe_price_id: STRIPE_PRICE_PREMIUM_MONTHLY })
+      )
+
+      process.env.STRIPE_PRICE_PREMIUM_MONTHLY = originalPremiumMonthly
+    })
   })
 
   describe('Concurrent Operations', () => {
+    it('handles duplicate webhook delivery idempotently', async () => {
+      const { stripe } = await import('@/lib/stripe')
+      const subscription = createMockSubscription(STRIPE_PRICE_UNKNOWN, 'active')
+      ;(subscription as any).customer = 'cus_test'
+      ;(subscription as any).metadata = { supabase_user_id: 'test-user-id' }
+
+      const { POST } = await import('@/app/api/stripe/webhook/route')
+      const mockedEvent = createMockWebhookEvent('customer.subscription.updated', subscription)
+
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValue(mockedEvent as any)
+      const firstResponse = await POST(new Request('http://localhost/api/stripe/webhook', {
+        method: 'POST',
+        body: JSON.stringify(subscription),
+      }))
+
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValue(mockedEvent as any)
+      const secondResponse = await POST(new Request('http://localhost/api/stripe/webhook', {
+        method: 'POST',
+        body: JSON.stringify(subscription),
+      }))
+
+      expect(firstResponse.status).toBe(200)
+      expect(secondResponse.status).toBe(200)
+      expect(mockSupabaseUpdate).toHaveBeenCalledTimes(2)
+      const lastCall = mockSupabaseUpdate.mock.calls[mockSupabaseUpdate.mock.calls.length - 1][0]
+      expect(lastCall).toEqual(expect.objectContaining({ stripe_price_id: STRIPE_PRICE_UNKNOWN }))
+    })
+
     it('handles concurrent subscription updates', async () => {
       const { stripe } = await import('@/lib/stripe')
       const firstSubscription = createMockSubscription(STRIPE_PRICE_UNKNOWN, 'active')
@@ -235,6 +319,38 @@ describe('Stripe Webhook Edge Cases', () => {
       const lastCall = mockSupabaseUpdate.mock.calls[mockSupabaseUpdate.mock.calls.length - 1][0]
       expect(lastCall).toEqual(expect.objectContaining({ subscription_status: 'active' }))
       expect(mockSupabaseUpdate).toHaveBeenCalledTimes(3)
+    })
+
+    it('handles concurrent webhooks with different case variations of the same price ID', async () => {
+      const { stripe } = await import('@/lib/stripe')
+      const firstSubscription = createMockSubscription(STRIPE_PRICE_PREMIUM_MONTHLY_UPPERCASE, 'active')
+      ;(firstSubscription as any).customer = 'cus_test'
+      ;(firstSubscription as any).metadata = { supabase_user_id: 'test-user-id' }
+
+      const secondSubscription = createMockSubscription(STRIPE_PRICE_PREMIUM_MONTHLY_MIXEDCASE, 'active')
+      ;(secondSubscription as any).customer = 'cus_test'
+      ;(secondSubscription as any).metadata = { supabase_user_id: 'test-user-id' }
+
+      const { POST } = await import('@/app/api/stripe/webhook/route')
+
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValue(
+        createMockWebhookEvent('customer.subscription.updated', firstSubscription) as any
+      )
+      await POST(new Request('http://localhost/api/stripe/webhook', {
+        method: 'POST',
+        body: JSON.stringify(firstSubscription),
+      }))
+
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValue(
+        createMockWebhookEvent('customer.subscription.updated', secondSubscription) as any
+      )
+      await POST(new Request('http://localhost/api/stripe/webhook', {
+        method: 'POST',
+        body: JSON.stringify(secondSubscription),
+      }))
+
+      const lastCall = mockSupabaseUpdate.mock.calls[mockSupabaseUpdate.mock.calls.length - 1][0]
+      expect(lastCall).toEqual(expect.objectContaining({ stripe_price_id: STRIPE_PRICE_PREMIUM_MONTHLY_MIXEDCASE }))
     })
   })
 

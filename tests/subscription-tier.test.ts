@@ -13,6 +13,9 @@ import {
   STRIPE_PRICE_PREMIUM_MONTHLY,
   STRIPE_PRICE_PREMIUM_YEARLY,
   STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION,
+  STRIPE_PRICE_PREMIUM_MONTHLY_UPPERCASE,
+  STRIPE_PRICE_PREMIUM_MONTHLY_MIXEDCASE,
+  STRIPE_PRICE_BASIC_MONTHLY_LOWERCASE,
   STRIPE_PRICE_FAMILY_MONTHLY,
   STRIPE_PRICE_FAMILY_YEARLY,
   STRIPE_PRICE_UNKNOWN,
@@ -167,6 +170,62 @@ describe('getTierFromSubscription', () => {
       const tier = getTierFromSubscription('active', '')
 
       expect(tier.id).toBe('basic')
+    })
+  })
+
+  describe('Case-Insensitive Price ID Matching', () => {
+    it('matches uppercase price ID against lowercase environment variable', () => {
+      const tier = getTierFromSubscription('active', STRIPE_PRICE_BASIC_MONTHLY.toUpperCase())
+
+      expect(tier.id).toBe('basic')
+    })
+
+    it('matches lowercase price ID against uppercase environment variable', () => {
+      const originalPremiumMonthly = process.env.STRIPE_PRICE_PREMIUM_MONTHLY
+      process.env.STRIPE_PRICE_PREMIUM_MONTHLY = STRIPE_PRICE_PREMIUM_MONTHLY_UPPERCASE
+
+      const tier = getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY)
+
+      expect(tier.id).toBe('premium')
+
+      process.env.STRIPE_PRICE_PREMIUM_MONTHLY = originalPremiumMonthly
+    })
+
+    it('matches mixed-case price ID against lowercase environment variable', () => {
+      const tier = getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY_MIXEDCASE)
+
+      expect(tier.id).toBe('premium')
+    })
+
+    it('handles null price ID without throwing', () => {
+      expect(() => getTierFromSubscription('active', null)).not.toThrow()
+      expect(getTierFromSubscription('active', null).id).toBe('basic')
+    })
+
+    it('handles empty string price ID without throwing', () => {
+      expect(() => getTierFromSubscription('active', '')).not.toThrow()
+      expect(getTierFromSubscription('active', '').id).toBe('basic')
+    })
+
+    it('matches case-insensitively across basic, premium, and family tiers', () => {
+      const basicTier = getTierFromSubscription('active', STRIPE_PRICE_BASIC_MONTHLY_LOWERCASE.toUpperCase())
+      const premiumTier = getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY.toUpperCase())
+      const familyTier = getTierFromSubscription('active', STRIPE_PRICE_FAMILY_MONTHLY.toUpperCase())
+
+      expect(basicTier.id).toBe('basic')
+      expect(premiumTier.id).toBe('premium')
+      expect(familyTier.id).toBe('premium')
+    })
+
+    it('matches production premium monthly price ID with case variations', () => {
+      const originalPremiumMonthly = process.env.STRIPE_PRICE_PREMIUM_MONTHLY
+      process.env.STRIPE_PRICE_PREMIUM_MONTHLY = STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION
+
+      const tier = getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION.toUpperCase())
+
+      expect(tier.id).toBe('premium')
+
+      process.env.STRIPE_PRICE_PREMIUM_MONTHLY = originalPremiumMonthly
     })
   })
 })

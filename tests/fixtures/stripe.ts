@@ -6,6 +6,9 @@ export const STRIPE_PRICE_BASIC_YEARLY = 'price_basic_yearly_test'
 export const STRIPE_PRICE_PREMIUM_MONTHLY = 'price_premium_monthly_test'
 export const STRIPE_PRICE_PREMIUM_YEARLY = 'price_premium_yearly_test'
 export const STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION = 'price_1Sr6SkCaeXnImHccDBmDf7e6'
+export const STRIPE_PRICE_PREMIUM_MONTHLY_UPPERCASE = 'PRICE_PREMIUM_MONTHLY_TEST'
+export const STRIPE_PRICE_PREMIUM_MONTHLY_MIXEDCASE = 'Price_Premium_Monthly_Test'
+export const STRIPE_PRICE_BASIC_MONTHLY_LOWERCASE = 'price_basic_monthly_test'
 
 // Family tier price IDs (treated as premium tier for feature access)
 export const STRIPE_PRICE_FAMILY_MONTHLY = 'price_family_monthly_test'
@@ -55,6 +58,27 @@ export function createMockSubscription(
       ],
     },
   }
+}
+
+export function createMockSubscriptionWithCaseVariation(
+  priceId: string,
+  caseVariation: 'upper' | 'lower' | 'mixed',
+  status: MockStripeSubscription['status'] = 'active'
+): MockStripeSubscription {
+  const normalizedPriceId = (() => {
+    if (caseVariation === 'upper') {
+      return priceId.toUpperCase()
+    }
+    if (caseVariation === 'lower') {
+      return priceId.toLowerCase()
+    }
+    return priceId
+      .split('')
+      .map((char, index) => (index % 2 === 0 ? char.toLowerCase() : char.toUpperCase()))
+      .join('')
+  })()
+
+  return createMockSubscription(normalizedPriceId, status)
 }
 
 // Helper to create profile data for testing

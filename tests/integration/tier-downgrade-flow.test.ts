@@ -10,7 +10,9 @@ import {
   STRIPE_PRICE_BASIC_MONTHLY,
   STRIPE_PRICE_PREMIUM_MONTHLY,
   STRIPE_PRICE_PREMIUM_YEARLY,
+  STRIPE_PRICE_PREMIUM_MONTHLY_MIXEDCASE,
   createMockSubscription,
+  createMockSubscriptionWithCaseVariation,
   createMockWebhookEvent,
   createProfileWithSubscription,
   createSubscriptionDeletedWebhook,
@@ -59,6 +61,59 @@ describe('Tier Downgrade Flow Integration', () => {
 
       expect(freeTier.id).toBe('free')
       expect(premiumTier.id).toBe('premium')
+    })
+
+    it('case-insensitive price ID in webhook -> database -> tier detection flow', () => {
+      const subscription = createMockSubscriptionWithCaseVariation(STRIPE_PRICE_PREMIUM_MONTHLY, 'mixed', 'active')
+      const webhookEvent = createMockWebhookEvent('customer.subscription.updated', {
+        ...subscription,
+        customer: 'cus_test',
+        metadata: { supabase_user_id: 'test-user-id' },
+      })
+
+      const extractedPriceId = webhookEvent.data.object.items.data[0].price.id
+      const profileData = createProfileWithSubscription(extractedPriceId, 'active')
+
+      const tier = getTierFromSubscription(profileData.subscription_status, profileData.stripe_price_id)
+
+      expect(tier.id).toBe('premium')
+    })
+
+    it('tier detection with mixed-case price ID from Stripe webhook', () => {
+      const subscription = createMockSubscription(STRIPE_PRICE_PREMIUM_MONTHLY_MIXEDCASE, 'active')
+      const webhookEvent = createMockWebhookEvent('customer.subscription.updated', {
+        ...subscription,
+        customer: 'cus_test',
+        metadata: { supabase_user_id: 'test-user-id' },
+      })
+
+      const extractedPriceId = webhookEvent.data.object.items.data[0].price.id
+      const profileData = createProfileWithSubscription(extractedPriceId, 'active')
+
+      const tier = getTierFromSubscription(profileData.subscription_status, profileData.stripe_price_id)
+
+      expect(tier.id).toBe('premium')
+    })
+
+    it('subscription update with case mismatch between webhook and environment', () => {
+      const originalPremiumYearly = process.env.STRIPE_PRICE_PREMIUM_YEARLY
+      process.env.STRIPE_PRICE_PREMIUM_YEARLY = STRIPE_PRICE_PREMIUM_YEARLY.toUpperCase()
+
+      const subscription = createMockSubscription(STRIPE_PRICE_PREMIUM_YEARLY.toLowerCase(), 'active')
+      const webhookEvent = createMockWebhookEvent('customer.subscription.updated', {
+        ...subscription,
+        customer: 'cus_test',
+        metadata: { supabase_user_id: 'test-user-id' },
+      })
+
+      const extractedPriceId = webhookEvent.data.object.items.data[0].price.id
+      const profileData = createProfileWithSubscription(extractedPriceId, 'active')
+
+      const tier = getTierFromSubscription(profileData.subscription_status, profileData.stripe_price_id)
+
+      expect(tier.id).toBe('premium')
+
+      process.env.STRIPE_PRICE_PREMIUM_YEARLY = originalPremiumYearly
     })
   })
 

@@ -4,6 +4,7 @@ import {
   STRIPE_PRICE_BASIC_MONTHLY,
   STRIPE_PRICE_PREMIUM_MONTHLY,
   STRIPE_PRICE_PREMIUM_MONTHLY_PRODUCTION,
+  STRIPE_PRICE_PREMIUM_MONTHLY_MIXEDCASE,
   STRIPE_PRICE_FAMILY_MONTHLY,
   STRIPE_PRICE_UNKNOWN,
 } from '../fixtures/stripe'
@@ -84,6 +85,27 @@ describe('Tier Detection Console Logging', () => {
 
   it('does not log output during silent fallback to free tier', () => {
     getTierFromSubscription(null, null)
+
+    expect(console.log).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('does not log output with case-insensitive matching', () => {
+    getTierFromSubscription('active', STRIPE_PRICE_BASIC_MONTHLY.toUpperCase())
+
+    expect(console.log).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('does not log output with mixed-case price IDs', () => {
+    getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY_MIXEDCASE)
+
+    expect(console.log).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('does not log output during silent fallback with case-mismatched unknown price ID', () => {
+    getTierFromSubscription('active', STRIPE_PRICE_UNKNOWN.toUpperCase())
 
     expect(console.log).not.toHaveBeenCalled()
     expect(console.warn).not.toHaveBeenCalled()
