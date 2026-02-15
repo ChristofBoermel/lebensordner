@@ -31,7 +31,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await recordConsent(user.id, consentType, granted, version)
+    const result = await recordConsent(user.id, consentType, granted, version)
+
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

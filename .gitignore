@@ -82,3 +82,14 @@ Thumbs.db
 *.log
 .env.local
 .env.*.local
+
+# Playwright test artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+.auth/
+
+# E2E test storage states (contain real auth tokens)
+**/auth/*.json
+
+*pdf

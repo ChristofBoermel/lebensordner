@@ -346,16 +346,20 @@ export default function DocumentsPage() {
     fetchFamilyMembers,
   ]);
 
+  useEffect(() => {
+    setHighlightedDoc(searchParams.get("highlight"));
+  }, [searchParams]);
+
   // Handle document highlighting from search
   useEffect(() => {
     if (highlightedDoc && documents.length > 0) {
       // Scroll to the highlighted document after a short delay
       const timer = setTimeout(() => {
-        const element = document.getElementById(`doc-${highlightedDoc}`);
+        const element = document.getElementById(`document-${highlightedDoc}`);
         if (element) {
           element.scrollIntoView({ behavior: "smooth", block: "center" });
         }
-      }, 300);
+      }, 500);
 
       // Clear highlight after 3 seconds
       const clearTimer = setTimeout(() => {
@@ -1175,11 +1179,11 @@ export default function DocumentsPage() {
     return (
       <div
         key={doc.id}
-        id={`doc-${doc.id}`}
+        id={`document-${doc.id}`}
         onClick={() => navigateToDocument(doc)}
         className={`document-item flex items-center gap-3 p-3 rounded-xl border border-warmgray-200 dark:border-warmgray-800 group transition-all duration-300 cursor-pointer ${
           isHighlighted
-            ? "bg-amber-50 border-amber-400 ring-2 ring-amber-300 ring-offset-2"
+            ? "bg-sage-50 border-sage-600 ring-2 ring-sage-400 ring-offset-2 highlight-pulse"
             : isSelected
               ? "bg-sage-50 border-sage-300"
               : "bg-white dark:bg-warmgray-900 hover:border-sage-200 hover:bg-sage-50/30"

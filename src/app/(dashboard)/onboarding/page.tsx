@@ -1035,7 +1035,7 @@ export default function OnboardingPage() {
         ) : (
           <Printer className="mr-2 w-4 h-4" />
         )}
-        {isPrintingStep ? 'Wird erstellt...' : 'Print This Step'}
+                    {isPrintingStep ? 'Wird erstellt...' : 'Seite Drucken'}
       </Button>
     </div>
   )

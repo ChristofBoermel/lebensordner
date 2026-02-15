@@ -57,6 +57,7 @@ import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
 import Link from 'next/link'
 import { SecurityActivityLog } from '@/components/settings/security-activity-log'
 import { GDPRExportDialog } from '@/components/settings/gdpr-export-dialog'
+import { HealthConsentWithdrawalDialog } from '@/components/settings/health-consent-withdrawal-dialog'
 
 type SeniorSection = 'profil' | 'sicherheit' | 'zahlung' | 'weitere' | null
 
@@ -92,6 +93,8 @@ export default function EinstellungenPage() {
 
   // Privacy & consent state
   const [analyticsConsent, setAnalyticsConsent] = useState(false)
+  const [healthDataConsent, setHealthDataConsent] = useState(false)
+  const [showHealthWithdrawalDialog, setShowHealthWithdrawalDialog] = useState(false)
   const [consentHistory, setConsentHistory] = useState<ConsentRecord[]>([])
   const [showConsentHistory, setShowConsentHistory] = useState(false)
   const [isLoadingConsent, setIsLoadingConsent] = useState(false)
@@ -179,6 +182,16 @@ export default function EinstellungenPage() {
     }
   }
 
+  const loadHealthConsent = useCallback(async (userId: string) => {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('health_data_consent_granted')
+      .eq('id', userId)
+      .single()
+
+    setHealthDataConsent(profileData?.health_data_consent_granted || false)
+  }, [supabase])
+
   const fetchProfile = useCallback(async () => {
     setIsLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
@@ -194,6 +207,8 @@ export default function EinstellungenPage() {
       .select('*')
       .eq('id', user.id)
       .single()
+
+    await loadHealthConsent(user.id)
 
     if (!error && data) {
       // Fetch decrypted PII from server API
@@ -231,7 +246,7 @@ export default function EinstellungenPage() {
       setUserTier((prev) => (prev.id === tier.id ? prev : tier))
     }
     setIsLoading(false)
-  }, [supabase])
+  }, [supabase, loadHealthConsent])
 
   useEffect(() => {
     fetchProfile()
@@ -502,6 +517,20 @@ export default function EinstellungenPage() {
     } catch {
       // Silently handle
     }
+  }
+
+  const handleHealthConsentToggle = (checked: boolean) => {
+    if (!checked) {
+      setShowHealthWithdrawalDialog(true)
+    } else {
+      setHealthDataConsent(true)
+      router.push('/notfall')
+    }
+  }
+
+  const handleHealthConsentWithdrawn = () => {
+    setHealthDataConsent(false)
+    setShowHealthWithdrawalDialog(false)
   }
 
   if (isLoading) {
@@ -1189,10 +1218,14 @@ export default function EinstellungenPage() {
             Datenschutz & Privatsphäre
           </CardTitle>
           <CardDescription>
-            Verwalten Sie Ihre Einwilligungen für Datenverarbeitung
+            Verwalten Sie Ihre Einwilligungen und Rechte
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-warmgray-500">
+            Einwilligungen
+          </p>
+
           <div className="flex items-center justify-between py-3">
             <div>
               <p className="font-medium text-warmgray-900">Analyse-Cookies</p>
@@ -1221,23 +1254,32 @@ export default function EinstellungenPage() {
 
           <div className="flex items-center justify-between py-3">
             <div>
-              <p className="font-medium text-warmgray-900">Marketing-Cookies</p>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-warmgray-900">Gesundheitsdaten-Einwilligung</p>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200 ml-2">
+                  Art. 9 DSGVO
+                </span>
+              </div>
               <p className="text-sm text-warmgray-500">
-                Für personalisierte Inhalte
+                Verarbeitung von medizinischen Daten für Notfallzugriff
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-warmgray-400">Demnächst</span>
-              <label className="relative inline-flex items-center cursor-not-allowed">
-                <input
-                  type="checkbox"
-                  checked={false}
-                  disabled
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-warmgray-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
-              </label>
-            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={healthDataConsent}
+                onChange={(e) => handleHealthConsentToggle(e.target.checked)}
+                disabled={isLoadingConsent}
+                data-testid="health-consent-toggle"
+                className="sr-only peer"
+              />
+              <div className={cn(
+                "w-11 h-6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all",
+                isLoadingConsent
+                  ? "bg-warmgray-100 cursor-not-allowed"
+                  : "bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 peer-checked:bg-sage-600"
+              )}></div>
+            </label>
           </div>
 
           <Separator />
@@ -1258,11 +1300,69 @@ export default function EinstellungenPage() {
           <Separator />
 
           <div className="py-3">
-            <p className="font-medium text-warmgray-900">Datenportabilität</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-warmgray-500">
+              Ihre Daten
+            </p>
+            <div className="flex items-center gap-2 mt-3">
+              <p className="font-medium text-warmgray-900">GDPR-Datenexport</p>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200 ml-2">
+                Art. 20 DSGVO
+              </span>
+            </div>
             <p className="text-sm text-warmgray-500 mb-3">
-              Laden Sie eine Kopie Ihrer Daten im maschinenlesbaren Format herunter (GDPR Artikel 20)
+              Laden Sie alle Ihre Daten als JSON-Datei herunter
             </p>
             <GDPRExportDialog />
+          </div>
+
+          <Separator />
+
+          <p className="text-xs font-semibold uppercase tracking-wide text-warmgray-500">
+            Ihre Rechte
+          </p>
+
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-warmgray-900">Datenverarbeitung einschränken</p>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200 ml-2">
+                  Art. 18 DSGVO
+                </span>
+              </div>
+              <p className="text-sm text-warmgray-500">
+                Antrag auf Einschränkung der Verarbeitung stellen
+              </p>
+            </div>
+            <a
+              href="mailto:datenschutz@lebensordner.org?subject=Antrag%20auf%20Einschränkung%20der%20Datenverarbeitung&body=Sehr%20geehrtes%20Lebensordner-Team%2C%0A%0Ahiermit%20beantrage%20ich%20die%20Einschränkung%20der%20Verarbeitung%20meiner%20personenbezogenen%20Daten%20gemäß%20Art.%2018%20DSGVO.%0A%0AGrund%20für%20den%20Antrag%3A%0A%5B%20%5D%20Ich%20bestreite%20die%20Richtigkeit%20meiner%20Daten%0A%5B%20%5D%20Die%20Verarbeitung%20ist%20unrechtmäßig%0A%5B%20%5D%20Ich%20benötige%20die%20Daten%20für%20Rechtsansprüche%0A%5B%20%5D%20Ich%20habe%20Widerspruch%20eingelegt%20(Art.%2021)%0A%0AWeitere%20Informationen%3A%0A%5BBitte%20hier%20Details%20angeben%5D%0A%0AMit%20freundlichen%20Grüßen"
+              className="text-sm text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+            >
+              Antrag stellen →
+            </a>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-warmgray-900">Konto löschen</p>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200 ml-2">
+                  Art. 17 DSGVO
+                </span>
+              </div>
+              <p className="text-sm text-warmgray-500">
+                Ihr Konto und alle Daten unwiderruflich löschen
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Konto löschen
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -1385,25 +1485,6 @@ export default function EinstellungenPage() {
             <Button variant="outline" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               Abmelden
-            </Button>
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between py-3">
-            <div>
-              <p className="font-medium text-red-600">Konto löschen</p>
-              <p className="text-sm text-warmgray-500">
-                Ihr Konto und alle Daten unwiderruflich löschen
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(true)}
-              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Konto löschen
             </Button>
           </div>
         </CardContent>
@@ -1555,6 +1636,13 @@ export default function EinstellungenPage() {
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         onDeleted={handleAccountDeleted}
+      />
+
+      {/* Health Consent Withdrawal Dialog */}
+      <HealthConsentWithdrawalDialog
+        open={showHealthWithdrawalDialog}
+        onOpenChange={setShowHealthWithdrawalDialog}
+        onWithdrawn={handleHealthConsentWithdrawn}
       />
 
       {/* Consent History Dialog */}

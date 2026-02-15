@@ -34,7 +34,8 @@ import {
   Sun,
   Moon,
   Type,
-  Eye
+  Eye,
+  Lock
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { GlobalSearch } from '@/components/search/global-search'
@@ -80,6 +81,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
   const supabase = createClient()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [healthConsentGranted, setHealthConsentGranted] = useState<boolean | null>(null)
   const { theme, setTheme, resolvedTheme, fontSize, setFontSize, seniorMode, setSeniorMode } = useTheme()
 
   useEffect(() => {
@@ -92,6 +94,26 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkHealthConsent = async () => {
+      try {
+        const response = await fetch('/api/consent/check-health-consent')
+        if (!response.ok) throw new Error('Consent check failed')
+        const data = await response.json()
+        if (!isMounted) return
+        setHealthConsentGranted(Boolean(data?.granted))
+      } catch (error) {
+        if (!isMounted) return
+        setHealthConsentGranted(null)
+      }
+    }
+
+    checkHealthConsent()
+    return () => { isMounted = false }
   }, [])
 
   const handleLogout = async () => {
@@ -107,7 +129,6 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
   return (
     <>
       <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
-
       {/* Desktop Sidebar */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col print:hidden">
         <div className="flex h-full flex-col border-r border-warmgray-200 dark:border-warmgray-800 bg-white dark:bg-warmgray-900 overflow-hidden">
@@ -144,6 +165,23 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
                 }
 
                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                const isConsentLocked = item.href === '/notfall' && healthConsentGranted === false
+
+                if (isConsentLocked) {
+                  return (
+                    <div
+                      key={item.name}
+                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium opacity-50 cursor-not-allowed text-warmgray-500"
+                      title="Einwilligung zur Gesundheitsdatenverarbeitung erforderlich"
+                      aria-disabled="true"
+                    >
+                      <item.icon className="w-5 h-5 text-warmgray-400" />
+                      <Lock className="w-4 h-4 text-warmgray-400" />
+                      {item.name}
+                    </div>
+                  )
+                }
+
                 return (
                   <Link
                     key={item.name}
@@ -395,6 +433,23 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
                 }
 
                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                const isConsentLocked = item.href === '/notfall' && healthConsentGranted === false
+
+                if (isConsentLocked) {
+                  return (
+                    <div
+                      key={item.name}
+                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium opacity-50 cursor-not-allowed text-warmgray-500"
+                      title="Einwilligung zur Gesundheitsdatenverarbeitung erforderlich"
+                      aria-disabled="true"
+                    >
+                      <item.icon className="w-5 h-5 text-warmgray-400" />
+                      <Lock className="w-4 h-4 text-warmgray-400" />
+                      {item.name}
+                    </div>
+                  )
+                }
+
                 return (
                   <Link
                     key={item.name}

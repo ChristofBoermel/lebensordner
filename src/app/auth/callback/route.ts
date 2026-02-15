@@ -2,8 +2,8 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { recordConsent } from '@/lib/consent/manager'
-import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
+import { getCurrentConsent, recordConsent } from '@/lib/consent/manager'
+import { CONSENT_VERSION, CONSENT_COOKIE_NAME, PRIVACY_POLICY_VERSION } from '@/lib/consent/constants'
 import { isAccountLocked } from '@/lib/security/auth-lockout'
 
 // Admin client for profile creation
@@ -12,6 +12,12 @@ const getSupabaseAdmin = () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+}
+
+const normalizeReturnTo = (value: string | null) => {
+  if (!value) return null
+  if (value.startsWith('/')) return value
+  return null
 }
 
 async function syncConsentFromCookie(userId: string) {
@@ -41,6 +47,7 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/onboarding'
+  const returnTo = normalizeReturnTo(next)
 
   if (code) {
     const supabase = await createServerSupabaseClient()
@@ -130,6 +137,14 @@ export async function GET(request: Request) {
 
       // If onboarding completed, go to dashboard, otherwise onboarding
       if (existingProfile.onboarding_completed) {
+        const latestPolicyConsent = await getCurrentConsent(data.user.id, 'privacy_policy')
+        if (!latestPolicyConsent || latestPolicyConsent.version !== PRIVACY_POLICY_VERSION) {
+          const policyUpdateUrl = new URL(`${origin}/policy-update`)
+          if (returnTo) {
+            policyUpdateUrl.searchParams.set('returnTo', returnTo)
+          }
+          return NextResponse.redirect(policyUpdateUrl)
+        }
         return NextResponse.redirect(`${origin}/dashboard`)
       }
       

@@ -9,6 +9,8 @@ import { TagInput } from '@/components/ui/tag-input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ConsentModal } from '@/components/consent/consent-modal'
+import { HealthDataConsentContent } from '@/components/consent/health-data-consent-content'
 import {
   Dialog,
   DialogContent,
@@ -24,6 +26,7 @@ import {
 } from 'lucide-react'
 import { SUBSCRIPTION_TIERS, getTierFromSubscription, type TierConfig } from '@/lib/subscription-tiers'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 interface EmergencyContact {
   id: string
@@ -172,6 +175,9 @@ export default function NotfallPage() {
   const [isFuneralDialogOpen, setIsFuneralDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasHealthConsent, setHasHealthConsent] = useState<boolean | null>(null)
+  const [showConsentModal, setShowConsentModal] = useState(false)
+  const [consentToast, setConsentToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null)
 
   const [contactForm, setContactForm] = useState({
     name: '', phone: '', email: '', relationship: '', is_primary: false, notes: '',
@@ -191,70 +197,119 @@ export default function NotfallPage() {
   const [isUploadingDoc, setIsUploadingDoc] = useState<string | null>(null)
 
   const supabase = createClient()
+  const router = useRouter()
 
   // Check if user can upload Vollmachten (Basic tier or higher)
   const canUploadVollmachten = userTier.id !== 'free'
 
-  const fetchData = useCallback(async () => {
+  const clearHealthDataState = useCallback(() => {
+    setEmergencyContacts([])
+    setMedicalInfo(defaultMedicalInfo)
+    setMedicalForm(defaultMedicalInfo)
+    setAdvanceDirectives(defaultAdvanceDirectives)
+    setDirectivesForm(defaultAdvanceDirectives)
+    setFuneralWishes(defaultFuneralWishes)
+    setFuneralForm(defaultFuneralWishes)
+    setUploadedDocuments({
+      patient_decree: null,
+      power_of_attorney: null,
+      care_directive: null,
+      bank_power_of_attorney: null,
+    })
+  }, [])
+
+  const pushConsentToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
+    setConsentToast({ type, message })
+  }, [])
+
+  const handleConsentRequired = useCallback(async (response: Response) => {
+    if (response.status !== 403) return false
+    let data: any = null
+    try {
+      data = await response.json()
+    } catch {
+      return false
+    }
+    if (!data?.requiresConsent) return false
+    setHasHealthConsent(false)
+    setShowConsentModal(true)
+    clearHealthDataState()
+    pushConsentToast('info', 'Einwilligung erforderlich')
+    return true
+  }, [clearHealthDataState, pushConsentToast])
+
+  const fetchData = useCallback(async (consentOverride?: boolean) => {
     setIsLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) {
+      setIsLoading(false)
+      return
+    }
 
     // Fetch decrypted Notfall data from server API
     try {
-      const response = await fetch('/api/notfall')
-      if (response.ok) {
-        const data = await response.json()
-
-        if (data.emergencyContacts) {
-          setEmergencyContacts(data.emergencyContacts)
+      const canFetchHealthData = consentOverride ?? hasHealthConsent === true
+      if (canFetchHealthData) {
+        const response = await fetch('/api/notfall')
+        if (await handleConsentRequired(response)) {
+          setIsLoading(false)
+          return
         }
-        if (data.medicalInfo) {
-          setMedicalInfo({ ...defaultMedicalInfo, ...data.medicalInfo })
-          setMedicalForm({ ...defaultMedicalInfo, ...data.medicalInfo })
-        }
-        if (data.directives) {
-          setAdvanceDirectives({ ...defaultAdvanceDirectives, ...data.directives })
-          setDirectivesForm({ ...defaultAdvanceDirectives, ...data.directives })
-        }
-        if (data.funeralWishes) {
-          setFuneralWishes({ ...defaultFuneralWishes, ...data.funeralWishes })
-          setFuneralForm({ ...defaultFuneralWishes, ...data.funeralWishes })
-        }
+        if (response.ok) {
+          const data = await response.json()
 
-        // Fetch uploaded documents for Vollmachten
-        if (data.directives) {
-          const directives = data.directives
-          const docIds = [
-            directives.patient_decree_document_id,
-            directives.power_of_attorney_document_id,
-            directives.care_directive_document_id,
-            directives.bank_power_of_attorney_document_id,
-          ].filter(Boolean)
+          if (data.emergencyContacts) {
+            setEmergencyContacts(data.emergencyContacts)
+          }
+          if (data.medicalInfo) {
+            setMedicalInfo({ ...defaultMedicalInfo, ...data.medicalInfo })
+            setMedicalForm({ ...defaultMedicalInfo, ...data.medicalInfo })
+          }
+          if (data.directives) {
+            setAdvanceDirectives({ ...defaultAdvanceDirectives, ...data.directives })
+            setDirectivesForm({ ...defaultAdvanceDirectives, ...data.directives })
+          }
+          if (data.funeralWishes) {
+            setFuneralWishes({ ...defaultFuneralWishes, ...data.funeralWishes })
+            setFuneralForm({ ...defaultFuneralWishes, ...data.funeralWishes })
+          }
 
-          if (docIds.length > 0) {
-            const { data: docs } = await supabase
-              .from('documents')
-              .select('id, title, file_path')
-              .in('id', docIds)
+          // Fetch uploaded documents for Vollmachten
+          if (data.directives) {
+            const directives = data.directives
+            const docIds = [
+              directives.patient_decree_document_id,
+              directives.power_of_attorney_document_id,
+              directives.care_directive_document_id,
+              directives.bank_power_of_attorney_document_id,
+            ].filter(Boolean)
 
-            if (docs) {
-              const docMap: Record<string, UploadedDocument | null> = {
-                patient_decree: null,
-                power_of_attorney: null,
-                care_directive: null,
-                bank_power_of_attorney: null,
+            if (docIds.length > 0) {
+              const { data: docs } = await supabase
+                .from('documents')
+                .select('id, title, file_path')
+                .in('id', docIds)
+
+              if (docs) {
+                const docMap: Record<string, UploadedDocument | null> = {
+                  patient_decree: null,
+                  power_of_attorney: null,
+                  care_directive: null,
+                  bank_power_of_attorney: null,
+                }
+                docs.forEach(doc => {
+                  if (doc.id === directives.patient_decree_document_id) docMap.patient_decree = doc
+                  if (doc.id === directives.power_of_attorney_document_id) docMap.power_of_attorney = doc
+                  if (doc.id === directives.care_directive_document_id) docMap.care_directive = doc
+                  if (doc.id === directives.bank_power_of_attorney_document_id) docMap.bank_power_of_attorney = doc
+                })
+                setUploadedDocuments(docMap)
               }
-              docs.forEach(doc => {
-                if (doc.id === directives.patient_decree_document_id) docMap.patient_decree = doc
-                if (doc.id === directives.power_of_attorney_document_id) docMap.power_of_attorney = doc
-                if (doc.id === directives.care_directive_document_id) docMap.care_directive = doc
-                if (doc.id === directives.bank_power_of_attorney_document_id) docMap.bank_power_of_attorney = doc
-              })
-              setUploadedDocuments(docMap)
             }
           }
         }
+      } else {
+        clearHealthDataState()
       }
     } catch (err) {
       console.error('Failed to fetch Notfall data:', err)
@@ -272,9 +327,88 @@ export default function NotfallPage() {
     }
 
     setIsLoading(false)
-  }, [supabase])
+  }, [clearHealthDataState, handleConsentRequired, hasHealthConsent, supabase])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => {
+    if (!consentToast) return
+    const timer = setTimeout(() => setConsentToast(null), 5000)
+    return () => clearTimeout(timer)
+  }, [consentToast])
+
+  const checkHealthConsent = useCallback(async () => {
+    try {
+      const response = await fetch('/api/consent/check-health-consent')
+      if (!response.ok) throw new Error('Consent check failed')
+      const data = await response.json()
+      return Boolean(data?.granted)
+    } catch (err) {
+      return false
+    }
+  }, [])
+
+  const fetchDataAfterConsent = useCallback(async (granted: boolean) => {
+    if (!granted) {
+      setIsLoading(false)
+      return
+    }
+    await fetchData(granted)
+  }, [fetchData])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkAndFetch = async () => {
+      const granted = await checkHealthConsent()
+      if (!isMounted) return
+      setHasHealthConsent(granted)
+      if (!granted) {
+        setShowConsentModal(true)
+        clearHealthDataState()
+      }
+      await fetchDataAfterConsent(granted)
+    }
+
+    checkAndFetch()
+    return () => { isMounted = false }
+  }, [checkHealthConsent, clearHealthDataState, fetchDataAfterConsent])
+
+  useEffect(() => {
+    const handleFocus = async () => {
+      const granted = await checkHealthConsent()
+      setHasHealthConsent(granted)
+      if (!granted) {
+        setShowConsentModal(true)
+        clearHealthDataState()
+      }
+      await fetchDataAfterConsent(granted)
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [checkHealthConsent, clearHealthDataState, fetchDataAfterConsent])
+
+  const handleHealthConsentAccept = async () => {
+    try {
+      const response = await fetch('/api/consent/grant-health-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (!response.ok) throw new Error('Failed to grant consent')
+
+      setHasHealthConsent(true)
+      setShowConsentModal(false)
+      pushConsentToast('success', 'Einwilligung gespeichert. Sie können jetzt Gesundheitsdaten hinterlegen.')
+      await fetchData(true)
+    } catch (err) {
+      pushConsentToast('error', 'Einwilligung konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.')
+    }
+  }
+
+  const handleHealthConsentDecline = () => {
+    setShowConsentModal(false)
+    pushConsentToast('info', 'Ohne Einwilligung können keine Gesundheitsdaten gespeichert werden.')
+    router.push('/dashboard')
+  }
 
   const handleOpenContactDialog = (contact?: EmergencyContact) => {
     if (contact) {
@@ -322,6 +456,7 @@ export default function NotfallPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emergencyContacts: [contactToSave] }),
       })
+      if (await handleConsentRequired(response)) return
       if (!response.ok) throw new Error('Fehler beim Speichern')
 
       setIsContactDialogOpen(false)
@@ -452,6 +587,7 @@ export default function NotfallPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ medicalInfo: medicalData }),
       })
+      if (await handleConsentRequired(response)) return
       if (!response.ok) throw new Error('Fehler beim Speichern')
 
       setIsMedicalDialogOpen(false)
@@ -494,6 +630,7 @@ export default function NotfallPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ directives: directiveData }),
       })
+      if (await handleConsentRequired(response)) return
       if (!response.ok) throw new Error('Fehler beim Speichern')
 
       setIsDirectivesDialogOpen(false)
@@ -528,6 +665,7 @@ export default function NotfallPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ funeralWishes: funeralData }),
       })
+      if (await handleConsentRequired(response)) return
       if (!response.ok) throw new Error('Fehler beim Speichern')
 
       setIsFuneralDialogOpen(false)
@@ -549,10 +687,70 @@ export default function NotfallPage() {
     return { complete, total: 5, percentage: Math.round((complete / 5) * 100) }
   })()
 
-  if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-sage-600" /></div>
+  if (isLoading || hasHealthConsent === null) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-sage-600" />
+      </div>
+    )
+  }
+
+  if (hasHealthConsent === false && !showConsentModal) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6 px-4 sm:px-0">
+        {consentToast ? (
+          <div className="fixed top-6 right-6 z-50 w-[320px] rounded-lg border border-warmgray-200 bg-white p-4 shadow-lg">
+            <p className="text-sm text-warmgray-700">{consentToast.message}</p>
+          </div>
+        ) : null}
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-900">
+                  Einwilligung zur Gesundheitsdatenverarbeitung erforderlich
+                </p>
+                <p className="text-sm text-amber-700 mt-1">
+                  Ohne Einwilligung können keine Notfall- und Gesundheitsdaten gespeichert werden.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button onClick={() => setShowConsentModal(true)} variant="outline">
+                    Einwilligung anzeigen
+                  </Button>
+                  <Button onClick={() => router.push('/dashboard')}>
+                    Zurück zur Übersicht
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 px-4 sm:px-0">
+      <ConsentModal
+        type="health_data"
+        isOpen={showConsentModal}
+        onAccept={handleHealthConsentAccept}
+        onDecline={handleHealthConsentDecline}
+        title="Einwilligung zur Verarbeitung von Gesundheitsdaten"
+        description="Bitte prüfen Sie die Einwilligung zur Verarbeitung Ihrer Gesundheitsdaten."
+        content={<HealthDataConsentContent />}
+        requireCheckbox
+        checkboxLabel="Ich stimme ausdrücklich der Verarbeitung meiner Gesundheitsdaten gemäß Art. 9 DSGVO zu"
+        canDismiss={false}
+      />
+      {consentToast ? (
+        <div className="fixed top-6 right-6 z-50 w-[320px] rounded-lg border border-warmgray-200 bg-white p-4 shadow-lg">
+          <p className="text-sm text-warmgray-700">{consentToast.message}</p>
+        </div>
+      ) : null}
+      {hasHealthConsent === true ? (
+        <>
       <div className="page-header">
         <h1 className="text-3xl font-serif font-semibold text-warmgray-900">Notfall & Vorsorge</h1>
         <p className="text-lg text-warmgray-600 mt-2 print:hidden">Wichtige Informationen für den Notfall und Vorsorgedokumente</p>
@@ -1042,6 +1240,8 @@ export default function NotfallPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </>
+      ) : null}
     </div>
   )
 }

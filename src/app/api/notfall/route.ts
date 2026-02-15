@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/auth/guards'
 import { encrypt, decrypt, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
+import { hasHealthDataConsent } from '@/lib/consent/manager'
 
 // --- Encryption helpers ---
 
@@ -138,9 +139,22 @@ function decryptFuneralWishes(wishes: any, key: string) {
 
 // --- Route handlers ---
 
+async function requireHealthDataConsent(userId: string) {
+  const hasConsent = await hasHealthDataConsent(userId)
+  if (!hasConsent) {
+    return NextResponse.json(
+      { error: 'Gesundheitsdaten-Einwilligung erforderlich', requiresConsent: true },
+      { status: 403 }
+    )
+  }
+  return null
+}
+
 export async function GET() {
   try {
     const { user } = await requireAuth()
+    const consentResponse = await requireHealthDataConsent(user.id)
+    if (consentResponse) return consentResponse
     const supabase = await createServerSupabaseClient()
     const key = getEncryptionKey()
 
@@ -201,6 +215,8 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const { user } = await requireAuth()
+    const consentResponse = await requireHealthDataConsent(user.id)
+    if (consentResponse) return consentResponse
     const supabase = await createServerSupabaseClient()
     const key = getEncryptionKey()
 

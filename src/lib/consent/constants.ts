@@ -1,3 +1,4 @@
 export const CONSENT_VERSION = '1.0'
+export const PRIVACY_POLICY_VERSION = process.env.NEXT_PUBLIC_PRIVACY_POLICY_VERSION || 'v1.0.0'
 export const CONSENT_COOKIE_NAME = 'lebensordner_consent'
 export const CONSENT_TYPES = ['analytics', 'marketing'] as const

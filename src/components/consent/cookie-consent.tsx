@@ -5,8 +5,9 @@ import Cookies from 'js-cookie'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Cookie, Settings, Check, X } from 'lucide-react'
+import { Cookie, Settings, Check, X, Info } from 'lucide-react'
 import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
+import { LayeredPrivacyNotice } from '@/components/consent/layered-privacy-notice'
 
 // Phase 1: marketing consent is disabled. Set to true in a future phase to enable.
 const MARKETING_ENABLED = false
@@ -21,6 +22,7 @@ interface ConsentSettings {
 export function CookieConsent() {
   const [showBanner, setShowBanner] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showPrivacySummary, setShowPrivacySummary] = useState(false)
   const [settings, setSettings] = useState<ConsentSettings>({
     necessary: true, // Always required
     analytics: false,
@@ -150,7 +152,30 @@ export function CookieConsent() {
                     Wir verwenden Cookies, um Ihre Erfahrung zu verbessern und unsere Website zu analysieren. 
                     Sie können selbst entscheiden, welche Cookies Sie zulassen möchten.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowPrivacySummary(!showPrivacySummary)}
+                    aria-expanded={showPrivacySummary}
+                    className="inline-flex items-center gap-2 mt-2 text-sm text-sage-600 hover:text-sage-700 hover:underline"
+                  >
+                    <Info className="w-4 h-4" aria-hidden="true" />
+                    <span>Mehr erfahren</span>
+                  </button>
                 </div>
+              </div>
+
+              <div
+                className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                  showPrivacySummary ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+                }`}
+                aria-label="Datenschutz-Zusammenfassung"
+                aria-hidden={!showPrivacySummary}
+              >
+                {showPrivacySummary && (
+                  <div className="pt-4">
+                    <LayeredPrivacyNotice onClose={() => setShowPrivacySummary(false)} />
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2">

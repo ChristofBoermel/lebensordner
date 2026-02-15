@@ -176,6 +176,8 @@ export interface Database {
           address_encrypted: boolean
           date_of_birth_encrypted: boolean
           two_factor_secret_encrypted: boolean
+          health_data_consent_granted: boolean
+          health_data_consent_timestamp: string | null
         }
         Insert: {
           id: string
@@ -209,6 +211,8 @@ export interface Database {
           address_encrypted?: boolean
           date_of_birth_encrypted?: boolean
           two_factor_secret_encrypted?: boolean
+          health_data_consent_granted?: boolean
+          health_data_consent_timestamp?: string | null
         }
         Update: {
           id?: string
@@ -242,6 +246,8 @@ export interface Database {
           address_encrypted?: boolean
           date_of_birth_encrypted?: boolean
           two_factor_secret_encrypted?: boolean
+          health_data_consent_granted?: boolean
+          health_data_consent_timestamp?: string | null
         }
       }
       documents: {

@@ -88,6 +88,12 @@ npx playwright test --project="Mobile Chrome"
 npx playwright test family-dashboard.spec.ts
 ```
 
+## E2E Manual Checklist (GDPR Consent)
+
+**Ort**: `tests/e2e/gdpr-consent-flows.manual.md`
+
+Diese Flows sind aktuell manuell dokumentiert und werden nicht automatisch in Vitest ausgeführt.
+
 ## Viewports
 
 - **Desktop**: 1280x720

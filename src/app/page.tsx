@@ -395,7 +395,7 @@ export default function HomePage() {
               </p>
 
               <div className="mb-2">
-                <span className="text-4xl font-bold text-warmgray-900">4,99 €</span>
+                <span className="text-4xl font-bold text-warmgray-900">4,90 €</span>
                 <span className="text-warmgray-600 text-lg"> / Monat</span>
               </div>
               <p className="text-sage-600 font-medium mb-6">
@@ -438,11 +438,11 @@ export default function HomePage() {
               </p>
 
               <div className="mb-2">
-                <span className="text-4xl font-bold text-warmgray-900">9,99 €</span>
+                <span className="text-4xl font-bold text-warmgray-900">11,90 €</span>
                 <span className="text-warmgray-600 text-lg"> / Monat</span>
               </div>
               <p className="text-sage-600 font-medium mb-6">
-                oder 99 € / Jahr
+                oder 119 € / Jahr
               </p>
 
               <ul className="text-left space-y-3 mb-8 flex-1">
