@@ -3,6 +3,8 @@ import { PRIVACY_POLICY_VERSION } from '@/lib/consent/constants'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 
+export const revalidate = 3600 // Cache for 1 hour (rarely changes)
+
 export const metadata = {
   title: 'Datenschutzerklärung - Lebensordner Digital',
   description:

@@ -19,6 +19,8 @@ import {
   Quote
 } from 'lucide-react'
 
+export const revalidate = 60 // Cache for 60 seconds
+
 const faqItems = [
   {
     question: 'Brauche ich besondere Computer-Kenntnisse?',

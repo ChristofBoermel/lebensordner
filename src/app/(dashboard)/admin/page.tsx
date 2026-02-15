@@ -1,8 +1,20 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { requireAdmin, ForbiddenError, UnauthorizedError } from '@/lib/auth/guards'
 import { ForbiddenPage } from '@/components/error/forbidden-page'
-import { AdminDashboard } from './admin-dashboard'
+
+const AdminDashboard = dynamic(
+  () => import('./admin-dashboard').then((mod) => ({ default: mod.AdminDashboard })),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-warmgray-600">Laden...</div>
+      </div>
+    ),
+    ssr: false,
+  }
+)
 
 export default async function AdminPage() {
   try {

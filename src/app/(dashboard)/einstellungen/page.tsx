@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -48,7 +49,6 @@ import {
 import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { useTheme } from '@/components/theme/theme-provider'
 import { TwoFactorSetup } from '@/components/auth/two-factor-setup'
-import { DeleteAccountModal } from '@/components/settings/delete-account-modal'
 import { SUBSCRIPTION_TIERS, getTierFromSubscription, type TierConfig } from '@/lib/subscription-tiers'
 import type { Profile } from '@/types/database'
 import type { ConsentRecord } from '@/lib/consent/manager'
@@ -56,8 +56,32 @@ import Cookies from 'js-cookie'
 import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
 import Link from 'next/link'
 import { SecurityActivityLog } from '@/components/settings/security-activity-log'
-import { GDPRExportDialog } from '@/components/settings/gdpr-export-dialog'
-import { HealthConsentWithdrawalDialog } from '@/components/settings/health-consent-withdrawal-dialog'
+
+const GDPRExportDialog = dynamic(
+  () => import('@/components/settings/gdpr-export-dialog').then((mod) => ({ default: mod.GDPRExportDialog })),
+  {
+    loading: () => <div className="text-warmgray-600">Laden...</div>,
+    ssr: false,
+  }
+)
+
+const DeleteAccountModal = dynamic(
+  () => import('@/components/settings/delete-account-modal').then((mod) => ({ default: mod.DeleteAccountModal })),
+  {
+    loading: () => <div className="text-warmgray-600">Laden...</div>,
+    ssr: false,
+  }
+)
+
+const HealthConsentWithdrawalDialog = dynamic(
+  () => import('@/components/settings/health-consent-withdrawal-dialog').then((mod) => ({
+    default: mod.HealthConsentWithdrawalDialog,
+  })),
+  {
+    loading: () => <div className="text-warmgray-600">Laden...</div>,
+    ssr: false,
+  }
+)
 
 type SeniorSection = 'profil' | 'sicherheit' | 'zahlung' | 'weitere' | null
 

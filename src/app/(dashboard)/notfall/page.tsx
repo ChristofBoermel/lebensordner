@@ -195,6 +195,13 @@ export default function NotfallPage() {
     bank_power_of_attorney: null,
   })
   const [isUploadingDoc, setIsUploadingDoc] = useState<string | null>(null)
+  const [uploadMetadata, setUploadMetadata] = useState<Record<string, {
+    file: File | null
+    bevollmaechtigter: string
+    ausstellungsdatum: string
+    gueltig_bis: string
+  }>>({})
+  const [showMetadataForm, setShowMetadataForm] = useState<string | null>(null)
 
   const supabase = createClient()
   const router = useRouter()
@@ -477,16 +484,36 @@ export default function NotfallPage() {
   }
 
   // Document upload for Vollmachten
-  const handleVollmachtUpload = async (docType: string, file: File) => {
+  const handleVollmachtUpload = async (
+    docType: string,
+    file: File,
+    metadata: { bevollmaechtigter: string; ausstellungsdatum: string; gueltig_bis?: string }
+  ) => {
     if (!canUploadVollmachten) return
 
     setIsUploadingDoc(docType)
     try {
+      const docTitles: Record<string, string> = {
+        patient_decree: 'Patientenverfügung',
+        power_of_attorney: 'Vorsorgevollmacht',
+        care_directive: 'Betreuungsverfügung',
+        bank_power_of_attorney: 'Bankvollmacht',
+      }
+      const artDerVollmacht = docTitles[docType] || file.name
+
       // 1. Upload via Server-Side API
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('path', 'vertraege/notfall') // Use 'vertraege' or 'notfall' path
+      formData.append('path', 'bevollmaechtigungen/notfall')
+      formData.append('category', 'bevollmaechtigungen')
       formData.append('bucket', 'documents')
+      formData.append('title', artDerVollmacht)
+      formData.append('metadata', JSON.stringify({
+        bevollmaechtigter: metadata.bevollmaechtigter,
+        ausstellungsdatum: metadata.ausstellungsdatum,
+        ...(metadata.gueltig_bis ? { gueltig_bis: metadata.gueltig_bis } : {}),
+        art_der_vollmacht: artDerVollmacht,
+      }))
 
       const uploadRes = await fetch('/api/documents/upload', {
         method: 'POST',
@@ -499,49 +526,45 @@ export default function NotfallPage() {
       }
 
       const uploadData = await uploadRes.json()
-      const { path: filePath, size: fileSize } = uploadData
+      const { document } = uploadData
 
+      if (!document) throw new Error('Dokument wurde nicht erstellt')
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
 
-      // Create document record
-      const docTitles: Record<string, string> = {
-        patient_decree: 'Patientenverfügung',
-        power_of_attorney: 'Vorsorgevollmacht',
-        care_directive: 'Betreuungsverfügung',
-        bank_power_of_attorney: 'Bankvollmacht',
+      // Link the uploaded document to advance_directives
+      const docFieldMap: Record<string, string> = {
+        patient_decree: 'patient_decree_document_id',
+        power_of_attorney: 'power_of_attorney_document_id',
+        care_directive: 'care_directive_document_id',
+        bank_power_of_attorney: 'bank_power_of_attorney_document_id',
       }
+      const fieldName = docFieldMap[docType]
+      if (fieldName && document) {
+        const { data: existing } = await supabase
+          .from('advance_directives')
+          .select('id')
+          .eq('user_id', user.id)
+          .single()
 
-      const { data: doc, error: docError } = await supabase
-        .from('documents')
-        .insert({
-          user_id: user.id,
-          category: 'vertraege', // Map to Verträge category
-          title: docTitles[docType] || file.name,
-          file_name: file.name,
-          file_path: filePath,
-          file_size: fileSize,
-          file_type: file.type || 'application/octet-stream',
-        })
-        .select()
-        .single()
-
-      if (docError) throw docError
-
-      // Update advance_directives with document reference
-      const updateData: Record<string, string> = {}
-      updateData[`${docType}_document_id`] = doc.id
-
-      if (advanceDirectives.id) {
-        await supabase.from('advance_directives').update(updateData).eq('id', advanceDirectives.id)
-      } else {
-        await supabase.from('advance_directives').insert({
-          user_id: user.id,
-          ...updateData,
-        })
+        if (existing) {
+          await supabase
+            .from('advance_directives')
+            .update({ [fieldName]: document.id })
+            .eq('id', existing.id)
+        } else {
+          await supabase
+            .from('advance_directives')
+            .insert({ user_id: user.id, [fieldName]: document.id })
+        }
       }
 
       fetchData()
+      setShowMetadataForm(null)
+      setUploadMetadata(prev => ({
+        ...prev,
+        [docType]: { file: null, bevollmaechtigter: '', ausstellungsdatum: '', gueltig_bis: '' }
+      }))
     } catch (err: any) {
       console.error('Upload error:', err)
       alert(err.message || 'Fehler beim Hochladen. Bitte versuchen Sie es erneut.')
@@ -974,56 +997,157 @@ export default function NotfallPage() {
                         </div>
 
                         {/* Document upload/view buttons */}
-                        <div className="flex items-center gap-2 flex-shrink-0 justify-end print:hidden">
+                        <div className="flex-shrink-0 print:hidden">
                           {uploadedDoc ? (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleViewDocument(uploadedDoc.id)}
                               title="Dokument ansehen"
-                              className="h-9"
                             >
                               <Eye className="w-4 h-4 mr-1" />
                               Ansehen
                             </Button>
                           ) : canUploadVollmachten ? (
-                            <label className="cursor-pointer">
-                              <input
-                                type="file"
-                                className="hidden"
-                                accept=".pdf,.jpg,.jpeg,.png"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0]
-                                  if (file) handleVollmachtUpload(item.key, file)
-                                  e.target.value = ''
-                                }}
-                                disabled={isUploadingDoc === item.key}
-                              />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                                disabled={isUploadingDoc === item.key}
-                                className="h-9"
-                              >
-                                <span>
-                                  {isUploadingDoc === item.key ? (
-                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                  ) : (
-                                    <Upload className="w-4 h-4 mr-1" />
-                                  )}
-                                  Hinzufügen
-                                </span>
-                              </Button>
-                            </label>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setShowMetadataForm(item.key)
+                                setUploadMetadata(prev => ({
+                                  ...prev,
+                                  [item.key]: { file: null, bevollmaechtigter: '', ausstellungsdatum: '', gueltig_bis: '' }
+                                }))
+                              }}
+                              disabled={isUploadingDoc === item.key}
+                            >
+                              {isUploadingDoc === item.key ? (
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              ) : (
+                                <Upload className="w-4 h-4 mr-1" />
+                              )}
+                              Hinzufügen
+                            </Button>
                           ) : (
-                            <div className="flex items-center gap-1 text-xs text-warmgray-500 bg-white/50 px-2 py-1 rounded-md border border-warmgray-100">
+                            <div className="flex items-center gap-1 text-xs text-warmgray-500">
                               <Lock className="w-3 h-3" />
                               <Link href="/abo" className="hover:underline font-medium">Basis+</Link>
                             </div>
                           )}
                         </div>
                       </div>
+                      {showMetadataForm === item.key && (
+                        <div className="mt-4 p-4 rounded-lg bg-warmgray-50 border-2 border-dashed border-warmgray-300">
+                          <p className="text-sm font-medium text-warmgray-900 mb-3">Dokument hochladen</p>
+
+                          <div className="space-y-3">
+                            <div>
+                              <Label htmlFor={`file-${item.key}`} className="text-sm">
+                                Datei auswählen <span className="text-red-600">*</span>
+                              </Label>
+                              <Input
+                                id={`file-${item.key}`}
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null
+                                  setUploadMetadata(prev => ({
+                                    ...prev,
+                                    [item.key]: { ...prev[item.key], file }
+                                  }))
+                                }}
+                                className="mt-1"
+                              />
+                              <p className="text-xs text-warmgray-500 mt-1">PDF, JPG oder PNG (max. 25 MB)</p>
+                            </div>
+
+                            <div>
+                              <Label htmlFor={`bevollmaechtigter-${item.key}`} className="text-sm">
+                                Bevollmächtigter <span className="text-red-600">*</span>
+                              </Label>
+                              <Input
+                                id={`bevollmaechtigter-${item.key}`}
+                                type="text"
+                                placeholder="Name der bevollmächtigten Person"
+                                value={uploadMetadata[item.key]?.bevollmaechtigter || ''}
+                                onChange={(e) => setUploadMetadata(prev => ({
+                                  ...prev,
+                                  [item.key]: { ...prev[item.key], bevollmaechtigter: e.target.value }
+                                }))}
+                                className="mt-1"
+                              />
+                              <p className="text-xs text-warmgray-500 mt-1">Person, die im Notfall Entscheidungen treffen darf</p>
+                            </div>
+
+                            <div>
+                              <Label htmlFor={`ausstellungsdatum-${item.key}`} className="text-sm">
+                                Ausstellungsdatum <span className="text-red-600">*</span>
+                              </Label>
+                              <Input
+                                id={`ausstellungsdatum-${item.key}`}
+                                type="date"
+                                value={uploadMetadata[item.key]?.ausstellungsdatum || ''}
+                                onChange={(e) => setUploadMetadata(prev => ({
+                                  ...prev,
+                                  [item.key]: { ...prev[item.key], ausstellungsdatum: e.target.value }
+                                }))}
+                                className="mt-1"
+                              />
+                            </div>
+
+                            <div>
+                              <Label htmlFor={`gueltig-bis-${item.key}`} className="text-sm">
+                                Gültig bis (optional)
+                              </Label>
+                              <Input
+                                id={`gueltig-bis-${item.key}`}
+                                type="date"
+                                value={uploadMetadata[item.key]?.gueltig_bis || ''}
+                                onChange={(e) => setUploadMetadata(prev => ({
+                                  ...prev,
+                                  [item.key]: { ...prev[item.key], gueltig_bis: e.target.value }
+                                }))}
+                                className="mt-1"
+                              />
+                              <p className="text-xs text-warmgray-500 mt-1">Leer lassen, wenn unbegrenzt gültig</p>
+                            </div>
+
+                            <div className="flex gap-2 pt-2">
+                              <Button
+                                size="sm"
+                                onClick={async () => {
+                                  const data = uploadMetadata[item.key]
+                                  if (!data?.file || !data.bevollmaechtigter || !data.ausstellungsdatum) {
+                                    alert('Bitte füllen Sie alle Pflichtfelder aus.')
+                                    return
+                                  }
+                                  await handleVollmachtUpload(item.key, data.file, {
+                                    bevollmaechtigter: data.bevollmaechtigter,
+                                    ausstellungsdatum: data.ausstellungsdatum,
+                                    gueltig_bis: data.gueltig_bis || undefined
+                                  })
+                                }}
+                                disabled={isUploadingDoc === item.key}
+                              >
+                                {isUploadingDoc === item.key ? (
+                                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                ) : null}
+                                Hochladen
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setShowMetadataForm(null)
+                                  setUploadMetadata(prev => ({ ...prev, [item.key]: { file: null, bevollmaechtigter: '', ausstellungsdatum: '', gueltig_bis: '' } }))
+                                }}
+                              >
+                                Abbrechen
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       {item.has && (item.location || item.holder) && (
                         <p className="text-sm text-warmgray-600 ml-8 mt-1">{item.holder ? `Bevollmächtigte(r): ${item.holder}` : `Aufbewahrungsort: ${item.location}`}</p>
                       )}

@@ -32,39 +32,46 @@ export default async function DashboardPage() {
     redirect('/anmelden')
   }
 
-  // Get user profile and check onboarding
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name, onboarding_completed, storage_used')
-    .eq('id', user.id)
-    .single() as { data: ProfileRow | null }
+  // Parallel execution of all queries
+  const [profile, documents, trustedPersons, reminders] = await Promise.all([
+    // Profile query
+    supabase
+      .from('profiles')
+      .select('full_name, onboarding_completed, storage_used')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => data as ProfileRow | null),
+
+    // Documents query
+    supabase
+      .from('documents')
+      .select('category')
+      .eq('user_id', user.id)
+      .then(({ data }) => data as DocumentRow[] | null),
+
+    // Trusted persons query
+    supabase
+      .from('trusted_persons')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .then(({ data }) => data as TrustedPersonRow[] | null),
+
+    // Reminders query
+    supabase
+      .from('reminders')
+      .select('id, title, due_date')
+      .eq('user_id', user.id)
+      .eq('is_completed', false)
+      .order('due_date', { ascending: true })
+      .limit(3)
+      .then(({ data }) => data as ReminderRow[] | null),
+  ])
 
   // Redirect to onboarding if no profile or not completed
   if (!profile || !profile.onboarding_completed) {
     redirect('/onboarding')
   }
-
-  // Get document counts by category
-  const { data: documents } = await supabase
-    .from('documents')
-    .select('category')
-    .eq('user_id', user.id) as { data: DocumentRow[] | null }
-
-  // Get trusted persons count
-  const { data: trustedPersons } = await supabase
-    .from('trusted_persons')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('is_active', true) as { data: TrustedPersonRow[] | null }
-
-  // Get upcoming reminders (only top 3)
-  const { data: reminders } = await supabase
-    .from('reminders')
-    .select('id, title, due_date')
-    .eq('user_id', user.id)
-    .eq('is_completed', false)
-    .order('due_date', { ascending: true })
-    .limit(3) as { data: ReminderRow[] | null }
 
   return (
     <DashboardContent

@@ -33,7 +33,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DocumentPreview } from "@/components/ui/document-preview";
+const DocumentPreview = dynamic(
+  () => import("@/components/ui/document-preview").then((mod) => mod.DocumentPreview),
+  {
+    loading: () => <div className="text-warmgray-600">Laden...</div>,
+    ssr: false,
+  }
+);
 import {
   User,
   Wallet,
@@ -119,8 +125,8 @@ const categoryColorMap: Record<string, string> = {
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 
 const UploadDialog = dynamic(() => import("./UploadDialog"), {
+  loading: () => <div className="text-warmgray-600">Laden...</div>,
   ssr: false,
-  loading: () => null,
 });
 
 export default function DocumentsPage() {

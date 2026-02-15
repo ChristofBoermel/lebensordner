@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -38,7 +39,6 @@ import {
   Lock
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { GlobalSearch } from '@/components/search/global-search'
 import { useTheme } from '@/components/theme/theme-provider'
 
 import { TierConfig, hasFeatureAccess } from '@/lib/subscription-tiers'
@@ -74,6 +74,14 @@ const fontSizeLabels = {
   large: 'Groß',
   xlarge: 'Sehr Groß'
 }
+
+const GlobalSearch = dynamic(
+  () => import('@/components/search/global-search').then((mod) => ({ default: mod.GlobalSearch })),
+  {
+    loading: () => null,
+    ssr: false,
+  }
+)
 
 export function DashboardNav({ user, tier }: DashboardNavProps) {
   const pathname = usePathname()
