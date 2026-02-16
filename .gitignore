@@ -92,4 +92,5 @@ playwright/.cache/
 # E2E test storage states (contain real auth tokens)
 **/auth/*.json
 
-*pdf
+# Documentation archive (not for version control)
+docs-archive/
