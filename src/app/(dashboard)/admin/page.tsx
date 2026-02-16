@@ -12,7 +12,6 @@ const AdminDashboard = dynamic(
         <div className="text-warmgray-600">Laden...</div>
       </div>
     ),
-    ssr: false,
   }
 )
 
