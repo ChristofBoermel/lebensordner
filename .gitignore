@@ -93,4 +93,4 @@ playwright/.cache/
 **/auth/*.json
 
 # Documentation archive (not for version control)
-docs-archive/
+/docs-archive/
