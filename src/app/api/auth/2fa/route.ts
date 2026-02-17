@@ -5,7 +5,6 @@ import { encrypt, decrypt, getEncryptionKey, type EncryptedData } from '@/lib/se
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_2FA } from '@/lib/security/rate-limit'
 import { logSecurityEvent, EVENT_TWO_FACTOR_ENABLED, EVENT_TWO_FACTOR_DISABLED } from '@/lib/security/audit-log'
 
-// Generate new 2FA secret
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient()
@@ -15,7 +14,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
     }
 
-    // Extract client IP
     const forwarded = request.headers.get('x-forwarded-for') || ''
     const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
 
@@ -58,7 +56,6 @@ export async function POST(request: Request) {
     const { action, token } = await request.json()
 
     if (action === 'generate') {
-      // Generate new secret
       const secret = new OTPAuth.Secret({ size: 20 })
       
       const totp = new OTPAuth.TOTP({
@@ -97,7 +94,6 @@ export async function POST(request: Request) {
     }
 
     if (action === 'verify') {
-      // Get stored secret
       const { data: profile } = await supabase
         .from('profiles')
         .select('two_factor_secret, two_factor_secret_encrypted')
@@ -122,7 +118,6 @@ export async function POST(request: Request) {
         secretBase32 = profile.two_factor_secret
       }
 
-      // Verify token
       const totp = new OTPAuth.TOTP({
         issuer: 'Lebensordner',
         label: user.email || 'user',
@@ -138,7 +133,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Ungültiger Code' }, { status: 400 })
       }
 
-      // Enable 2FA
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -162,7 +156,6 @@ export async function POST(request: Request) {
     }
 
     if (action === 'disable') {
-      // Get stored secret
       const { data: profile } = await supabase
         .from('profiles')
         .select('two_factor_secret, two_factor_enabled, two_factor_secret_encrypted')
@@ -203,7 +196,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Ungültiger Code' }, { status: 400 })
       }
 
-      // Disable 2FA
       const { error } = await supabase
         .from('profiles')
         .update({

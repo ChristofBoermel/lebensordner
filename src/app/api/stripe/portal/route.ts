@@ -11,7 +11,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
     }
 
-    // Get user profile with Stripe customer ID
     const { data: profile } = await supabase
       .from('profiles')
       .select('stripe_customer_id')
@@ -25,7 +24,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create billing portal session
     const session = await stripe.billingPortal.sessions.create({
       customer: profile.stripe_customer_id,
       return_url: `${request.headers.get('origin')}/abo`,

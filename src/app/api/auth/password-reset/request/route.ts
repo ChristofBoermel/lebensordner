@@ -89,7 +89,6 @@ export async function POST(request: NextRequest) {
 
     // --- Rate Limiting ---
 
-    // Check IP-based rate limit
     const ipRateLimit = await checkRateLimit({
       identifier: `password_reset_ip:${clientIp}`,
       endpoint: '/api/auth/password-reset/request',
@@ -111,7 +110,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check email-based rate limit
     const emailRateLimit = await checkRateLimit({
       identifier: `password_reset_email:${normalizedEmail}`,
       endpoint: '/api/auth/password-reset/request',

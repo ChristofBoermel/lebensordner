@@ -94,3 +94,5 @@ playwright/.cache/
 
 # Documentation archive (not for version control)
 /docs-archive/
+
+*pdf

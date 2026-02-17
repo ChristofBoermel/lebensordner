@@ -22,7 +22,6 @@ export async function POST(request: NextRequest) {
     const forwarded = request.headers.get('x-forwarded-for') || ''
     const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
 
-    // Get user profile for name
     const { data: profile } = await supabase
       .from('profiles')
       .select('full_name')
@@ -31,14 +30,12 @@ export async function POST(request: NextRequest) {
 
     const userName = profile?.full_name || 'Benutzer'
 
-    // Send notification
     await sendSecurityNotification('password_changed', user.email!, {
       userName,
       timestamp: new Date().toISOString(),
       ipAddress: clientIp,
     })
 
-    // Log to audit log
     await logSecurityEvent({
       user_id: user.id,
       event_type: 'password_changed',

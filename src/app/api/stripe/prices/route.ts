@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  // Return the Stripe price IDs from server-side environment variables
   return NextResponse.json({
     basic: {
       monthly: process.env.STRIPE_PRICE_BASIC_MONTHLY || '',

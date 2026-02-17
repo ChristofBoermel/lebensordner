@@ -25,7 +25,6 @@ export async function isNewDevice(
     const supabase = createServiceClient()
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-    // Look for a recent login_success event with the same user agent
     const { data, error } = await supabase
       .from('security_audit_log')
       .select('id')
@@ -40,7 +39,6 @@ export async function isNewDevice(
       return false
     }
 
-    // If no matching login found with this user agent, it's a new device
     return !data || data.length === 0
   } catch (error) {
     console.error('Device detection error:', error)

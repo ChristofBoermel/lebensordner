@@ -38,12 +38,10 @@ export async function POST() {
 
     const version = consent.version || CONSENT_VERSION
 
-    // Record analytics consent if present
     if (typeof consent.analytics === 'boolean') {
       await recordConsent(user.id, 'analytics', consent.analytics, version)
     }
 
-    // Record marketing consent if present
     if (typeof consent.marketing === 'boolean') {
       await recordConsent(user.id, 'marketing', consent.marketing, version)
     }

@@ -12,7 +12,6 @@ const getSupabaseAdmin = () => {
   )
 }
 
-// Verify 2FA token during login
 export async function POST(request: Request) {
   try {
     const { userId, token } = await request.json()
@@ -25,7 +24,6 @@ export async function POST(request: Request) {
 
     const supabase = getSupabaseAdmin()
 
-    // Get user's 2FA secret
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('two_factor_secret, two_factor_enabled, email, two_factor_secret_encrypted')
@@ -62,7 +60,6 @@ export async function POST(request: Request) {
       secretBase32 = profile.two_factor_secret
     }
 
-    // Verify token
     const totp = new OTPAuth.TOTP({
       issuer: 'Lebensordner',
       label: profile.email || 'user',

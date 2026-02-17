@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Unlock account and reset failure count
     await Promise.all([
       unlockAccount(email),
       resetFailureCount(email),

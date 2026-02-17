@@ -20,8 +20,7 @@ export async function getUserTier(): Promise<TierConfig> {
     }
 
     const { data: profile } = await supabase
-        .from('profiles') // Assuming 'profiles' table, requirements said 'users' but codebase uses 'profiles' usually. Checking logic...
-        // Codebase used 'profiles' in earlier tasks. I'll stick to 'profiles'.
+        .from('profiles')
         .select('subscription_status, stripe_price_id') // Adjust based on schema
         .eq('id', user.id)
         .single()
@@ -48,7 +47,6 @@ export async function requireFeature(
     const tier = await getUserTier()
 
     if (!hasFeatureAccess(tier, feature)) {
-        // Redirect to upgrade page with context (matches vp-dashboard upgrade flow)
         redirect(`/abo?upgrade=${String(feature)}`)
     }
 

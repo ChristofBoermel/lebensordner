@@ -11,7 +11,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
     }
 
-    // Get price ID from request body or use default
     let priceId = SUBSCRIPTION_PRICE_ID
     try {
       const body = await request.json()
@@ -19,10 +18,8 @@ export async function POST(request: Request) {
         priceId = body.priceId
       }
     } catch {
-      // No body or invalid JSON, use default price
     }
 
-    // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
       .select('stripe_customer_id, email, full_name')
@@ -31,7 +28,6 @@ export async function POST(request: Request) {
 
     let customerId = profile?.stripe_customer_id
 
-    // Create Stripe customer if not exists
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: profile?.email || user.email,
@@ -42,14 +38,12 @@ export async function POST(request: Request) {
       })
       customerId = customer.id
 
-      // Save customer ID to profile
       await supabase
         .from('profiles')
         .update({ stripe_customer_id: customerId })
         .eq('id', user.id)
     }
 
-    // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',

@@ -54,15 +54,12 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Refresh session if expired
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Define protected routes
   const protectedRoutes = ['/dashboard', '/dokumente', '/notfall', '/zugriff']
   const authRoutes = ['/anmelden', '/registrieren']
   const pathname = request.nextUrl.pathname
 
-  // Redirect logic
   if (!user && protectedRoutes.some(route => pathname.startsWith(route))) {
     return NextResponse.redirect(new URL('/anmelden', request.url))
   }

@@ -140,7 +140,6 @@ export function CookieConsent() {
       <Card className="w-full max-w-lg shadow-2xl">
         <CardContent className="pt-6">
           {!showSettings ? (
-            // Main Banner
             <div className="space-y-4">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
@@ -205,7 +204,6 @@ export function CookieConsent() {
               </p>
             </div>
           ) : (
-            // Detailed Settings
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-warmgray-900">Cookie-Einstellungen</h3>
@@ -219,7 +217,6 @@ export function CookieConsent() {
               </div>
 
               <div className="space-y-3">
-                {/* Necessary */}
                 <div className="flex items-center justify-between p-3 rounded-lg bg-warmgray-50">
                   <div>
                     <p className="font-medium text-warmgray-900">Notwendige Cookies</p>
@@ -230,7 +227,6 @@ export function CookieConsent() {
                   </div>
                 </div>
 
-                {/* Analytics */}
                 <label className="flex items-center justify-between p-3 rounded-lg bg-warmgray-50 cursor-pointer">
                   <div>
                     <p className="font-medium text-warmgray-900">Analyse-Cookies</p>
@@ -246,7 +242,6 @@ export function CookieConsent() {
                   </button>
                 </label>
 
-                {/* Marketing - disabled in Phase 1 */}
                 <div className="flex items-center justify-between p-3 rounded-lg bg-warmgray-50">
                   <div>
                     <p className="font-medium text-warmgray-900">Marketing-Cookies</p>
