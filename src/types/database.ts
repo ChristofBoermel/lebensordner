@@ -271,6 +271,9 @@ export interface Database {
           reminder_watcher_id: string | null
           reminder_watcher_notified_at: string | null
           metadata: Record<string, string> | null
+          is_encrypted: boolean
+          encryption_version: string | null
+          encryption_metadata: Json | null
         }
         Insert: {
           id?: string
@@ -292,6 +295,9 @@ export interface Database {
           reminder_watcher_id?: string | null
           reminder_watcher_notified_at?: string | null
           metadata?: Record<string, string> | null
+          is_encrypted?: boolean
+          encryption_version?: string | null
+          encryption_metadata?: Json | null
         }
         Update: {
           id?: string
@@ -313,6 +319,9 @@ export interface Database {
           reminder_watcher_id?: string | null
           reminder_watcher_notified_at?: string | null
           metadata?: Record<string, string> | null
+          is_encrypted?: boolean
+          encryption_version?: string | null
+          encryption_metadata?: Json | null
         }
       }
       subcategories: {
