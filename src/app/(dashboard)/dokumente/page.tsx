@@ -262,7 +262,7 @@ export default function DocumentsPage() {
         "Bitte geben Sie Ihr Dokumenten-Passwort ein. Dieses wird nur in Ihrem Browser für die aktuelle Sitzung gespeichert.",
       );
     } catch {
-      input = 'test-document-passphrase';
+      input = null;
     }
 
     if ((!input || !input.trim()) && (process.env.NODE_ENV as string) === 'test') {
