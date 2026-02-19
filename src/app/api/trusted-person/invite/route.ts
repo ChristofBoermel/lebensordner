@@ -155,7 +155,7 @@ export async function POST(request: Request) {
       .update({
         invitation_token: invitationToken,
         invitation_sent_at: new Date().toISOString(),
-        invitation_status: 'sent',
+        invitation_status: 'pending',
         email_status: 'sending',
       })
       .eq('id', trustedPersonId)
@@ -188,6 +188,7 @@ export async function POST(request: Request) {
           await updateEmailStatus(trustedPersonId, 'sent', {
             email_sent_at: new Date().toISOString(),
             email_error: null,
+            invitation_status: 'sent',
           })
           console.log(JSON.stringify({
             event: 'invitation_email_sent_background',
@@ -202,6 +203,7 @@ export async function POST(request: Request) {
           await updateEmailStatus(trustedPersonId, 'failed', {
             email_error: backgroundResult.error,
             email_retry_count: retryCount + 1,
+            invitation_status: 'failed',
           })
           await addToRetryQueue(
             trustedPersonId,
@@ -225,6 +227,7 @@ export async function POST(request: Request) {
       await updateEmailStatus(trustedPersonId, 'sent', {
         email_sent_at: new Date().toISOString(),
         email_error: null,
+        invitation_status: 'sent',
       })
 
       console.log(JSON.stringify({
@@ -269,6 +272,7 @@ export async function POST(request: Request) {
       // Send was actually aborted/canceled - safe to queue for retry
       await updateEmailStatus(trustedPersonId, 'pending', {
         email_error: emailResult.error || 'Email sending timed out',
+        invitation_status: 'failed',
       })
 
       await addToRetryQueue(
@@ -300,6 +304,7 @@ export async function POST(request: Request) {
       await updateEmailStatus(trustedPersonId, 'failed', {
         email_error: emailResult.error,
         email_retry_count: currentRetryCount + 1,
+        invitation_status: 'failed',
       })
 
       await addToRetryQueue(

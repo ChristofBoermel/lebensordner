@@ -89,148 +89,123 @@ export async function DELETE(request: NextRequest) {
       // Don't block deletion
     }
 
-    // Step 4: Delete storage files
+    // Step 4: Fetch storage file paths (must happen before RPC deletes the DB rows)
     const serviceClient = createServiceClient()
 
-    // Delete documents from storage
     const { data: documents } = await serviceClient
       .from('documents')
       .select('file_path')
       .eq('user_id', user.id)
 
-    if (documents && documents.length > 0) {
-      const filePaths = documents.map((d) => d.file_path).filter(Boolean)
-      if (filePaths.length > 0) {
-        await serviceClient.storage.from('documents').remove(filePaths)
-      }
-    }
+    const filePaths = (documents || []).map((d) => d.file_path).filter(Boolean)
 
-    // Delete profile picture
     const { data: profileData } = await serviceClient
       .from('profiles')
       .select('profile_picture_url')
       .eq('id', user.id)
       .single()
 
-    if (profileData?.profile_picture_url) {
-      const picturePath = profileData.profile_picture_url.split('/').pop()
-      if (picturePath) {
-        await serviceClient.storage.from('avatars').remove([`${user.id}/${picturePath}`])
-      }
-    }
+    const avatarPath = profileData?.profile_picture_url
+      ? profileData.profile_picture_url.split('/').pop()
+      : null
 
-    // Step 5: Delete all user data from tables
-    await serviceClient.from('documents').delete().eq('user_id', user.id)
-    await serviceClient.from('reminders').delete().eq('user_id', user.id)
+    // Step 5a: Delete DB data (must succeed before external cleanup)
+    const { error: rpcError } = await serviceClient.rpc('delete_user_account', { p_user_id: user.id, p_email: user.email! })
+    if (rpcError) throw rpcError
 
-    // Delete email retry queue entries for user's trusted persons
-    const { data: tpIds } = await serviceClient
-      .from('trusted_persons')
-      .select('id')
-      .eq('user_id', user.id)
-
-    if (tpIds && tpIds.length > 0) {
-      const ids = tpIds.map((tp) => tp.id)
-      await serviceClient.from('email_retry_queue').delete().in('trusted_person_id', ids)
-    }
-
-    await serviceClient.from('trusted_persons').delete().eq('user_id', user.id)
-    await serviceClient.from('emergency_contacts').delete().eq('user_id', user.id)
-    await serviceClient.from('medical_info').delete().eq('user_id', user.id)
-    await serviceClient.from('advance_directives').delete().eq('user_id', user.id)
-    await serviceClient.from('funeral_wishes').delete().eq('user_id', user.id)
-    await serviceClient.from('custom_categories').delete().eq('user_id', user.id)
-    await serviceClient.from('subcategories').delete().eq('user_id', user.id)
-    await serviceClient.from('consent_ledger').delete().eq('user_id', user.id)
-    await serviceClient.from('download_tokens').delete().eq('user_id', user.id)
-    await serviceClient.from('onboarding_feedback').delete().eq('user_id', user.id)
-
-    // Delete rate limits associated with user's email
-    await serviceClient
-      .from('rate_limits')
-      .delete()
-      .like('identifier', `%${user.email}%`)
-
-    // Delete auth lockouts for user's email
-    await serviceClient
-      .from('auth_lockouts')
-      .delete()
-      .eq('email', user.email!)
-
-    // Delete profile last (other tables may reference it)
-    await serviceClient.from('profiles').delete().eq('id', user.id)
-
-    // Step 6: PostHog Deletion Request
-    try {
-      const posthogApiKey = process.env.POSTHOG_API_KEY
-      const posthogProjectId = process.env.POSTHOG_PROJECT_ID
-      const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://eu.posthog.com'
-
-      if (posthogApiKey && posthogProjectId) {
-        await fetch(
-          `${posthogHost}/api/projects/${posthogProjectId}/persons/?distinct_id=${user.id}`,
-          {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${posthogApiKey}`,
-            },
+    // Step 5b: Best-effort external cleanup
+    await Promise.all([
+      // a. Delete storage files
+      (async () => {
+        try {
+          if (filePaths.length > 0) {
+            await serviceClient.storage.from('documents').remove(filePaths)
           }
-        ).then(async (res) => {
-          if (res.ok) {
-            const data = await res.json()
-            if (data.results && data.results.length > 0) {
-              const personId = data.results[0].id
-              await fetch(
-                `${posthogHost}/api/projects/${posthogProjectId}/persons/${personId}/`,
-                {
-                  method: 'DELETE',
-                  headers: {
-                    Authorization: `Bearer ${posthogApiKey}`,
-                  },
+          if (avatarPath) {
+            await serviceClient.storage.from('avatars').remove([`${user.id}/${avatarPath}`])
+          }
+        } catch (error) {
+          console.error('Storage cleanup failed:', error)
+          // Don't block account deletion
+        }
+      })(),
+
+      // b. PostHog deletion request
+      (async () => {
+        try {
+          const posthogApiKey = process.env.POSTHOG_API_KEY
+          const posthogProjectId = process.env.POSTHOG_PROJECT_ID
+          const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://eu.posthog.com'
+
+          if (posthogApiKey && posthogProjectId) {
+            await fetch(
+              `${posthogHost}/api/projects/${posthogProjectId}/persons/?distinct_id=${user.id}`,
+              {
+                method: 'GET',
+                headers: {
+                  Authorization: `Bearer ${posthogApiKey}`,
+                },
+              }
+            ).then(async (res) => {
+              if (res.ok) {
+                const data = await res.json()
+                if (data.results && data.results.length > 0) {
+                  const personId = data.results[0].id
+                  await fetch(
+                    `${posthogHost}/api/projects/${posthogProjectId}/persons/${personId}/`,
+                    {
+                      method: 'DELETE',
+                      headers: {
+                        Authorization: `Bearer ${posthogApiKey}`,
+                      },
+                    }
+                  )
                 }
-              )
-            }
+              }
+            })
+
+            console.log(
+              JSON.stringify({
+                event: 'posthog_deletion_requested',
+                user_id: user.id,
+                timestamp: new Date().toISOString(),
+              })
+            )
           }
-        })
+        } catch (error) {
+          console.error('PostHog deletion request failed:', error)
+          // Don't block account deletion
+        }
+      })(),
 
-        console.log(
-          JSON.stringify({
-            event: 'posthog_deletion_requested',
-            user_id: user.id,
-            timestamp: new Date().toISOString(),
-          })
-        )
-      }
-    } catch (error) {
-      console.error('PostHog deletion request failed:', error)
-      // Don't block account deletion
-    }
+      // c. Stripe customer metadata
+      (async () => {
+        try {
+          if (stripeCustomerId) {
+            const stripe = getStripe()
+            await stripe.customers.update(stripeCustomerId, {
+              metadata: {
+                account_deleted: 'true',
+                deleted_at: new Date().toISOString(),
+              },
+            })
 
-    // Step 7: Stripe Customer Metadata
-    try {
-      if (stripeCustomerId) {
-        const stripe = getStripe()
-        await stripe.customers.update(stripeCustomerId, {
-          metadata: {
-            account_deleted: 'true',
-            deleted_at: new Date().toISOString(),
-          },
-        })
+            console.log(
+              JSON.stringify({
+                event: 'stripe_customer_marked_deleted',
+                stripe_customer_id: stripeCustomerId,
+                timestamp: new Date().toISOString(),
+              })
+            )
+          }
+        } catch (error) {
+          console.error('Stripe metadata update failed:', error)
+          // Don't block account deletion
+        }
+      })(),
+    ])
 
-        console.log(
-          JSON.stringify({
-            event: 'stripe_customer_marked_deleted',
-            stripe_customer_id: stripeCustomerId,
-            timestamp: new Date().toISOString(),
-          })
-        )
-      }
-    } catch (error) {
-      console.error('Stripe metadata update failed:', error)
-      // Don't block account deletion
-    }
-
-    // Step 8: Delete Auth User
+    // Step 6: Delete Auth User
     const { error: deleteUserError } = await serviceClient.auth.admin.deleteUser(user.id)
 
     if (deleteUserError) {
@@ -238,7 +213,7 @@ export async function DELETE(request: NextRequest) {
       // User data is already gone, log but continue
     }
 
-    // Step 9: Send Confirmation Email
+    // Step 7: Send Confirmation Email
     try {
       await sendSecurityNotification('account_deleted', userEmail, {
         userName,
@@ -249,7 +224,7 @@ export async function DELETE(request: NextRequest) {
       // Don't fail the deletion if email fails
     }
 
-    // Step 10: Log deletion completed
+    // Step 8: Log deletion completed
     await logSecurityEvent({
       user_id: user.id,
       event_type: 'account_deletion_completed',
@@ -257,7 +232,7 @@ export async function DELETE(request: NextRequest) {
       request,
     })
 
-    // Step 11: Sign Out and Return
+    // Step 9: Sign Out and Return
     await supabase.auth.signOut()
 
     return NextResponse.json({ success: true })

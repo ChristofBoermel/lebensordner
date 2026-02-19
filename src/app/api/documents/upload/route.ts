@@ -177,20 +177,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Fehler beim Upload zu Supabase' }, { status: 500 })
         }
 
-        // 7. Update Database: Increment storage_used
-        // Note: We do this *after* successful upload.
-        // Ideally we would do this in a transaction or use a trigger, but client requirements asked for an API check.
-        // For robust 'storage_used' tracking, reliable method depends on implementation.
-        // Here we manually increment.
-
-        // Convert file size to integer bytes just in case
-        const newStorageUsed = (profile?.storage_used || 0) + file.size
-
-        await supabase.from('profiles').update({
-            storage_used: newStorageUsed,
-            updated_at: new Date().toISOString()
-        }).eq('id', user.id)
-
         let insertedDocument: unknown = null
 
         if (bucket === 'documents') {

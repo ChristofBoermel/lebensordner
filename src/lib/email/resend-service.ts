@@ -199,6 +199,7 @@ export async function updateEmailStatus(
     email_sent_at?: string | null
     email_error?: string | null
     email_retry_count?: number
+    invitation_status?: string
   } = {}
 ): Promise<void> {
   const supabase = getSupabaseAdmin()

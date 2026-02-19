@@ -55,39 +55,51 @@ export async function GET() {
       console.error('Error fetching incoming links:', inError)
     }
 
-    // Get profiles for incoming links
-    const incomingMembers: FamilyMember[] = []
-    if (incomingLinks) {
-      for (const link of incomingLinks) {
-        const { data: profile } = await adminClient
-          .from('profiles')
-          .select('full_name, email, subscription_status, stripe_price_id')
-          .eq('id', link.user_id)
-          .single()
+    // Get profiles and document counts for incoming links in batch
+    let incomingMembers: FamilyMember[] = []
+    if (incomingLinks && incomingLinks.length > 0) {
+      const userIds = incomingLinks.map(link => link.user_id)
 
-        if (profile) {
-          // Get tier information for the owner
+      const [{ data: profiles }, { data: docCounts }] = await Promise.all([
+        adminClient
+          .from('profiles')
+          .select('id, full_name, email, subscription_status, stripe_price_id')
+          .in('id', userIds),
+        adminClient
+          .rpc('get_document_counts', { p_user_ids: userIds }),
+      ])
+
+      const profileMap = new Map<string, (typeof profiles extends (infer T)[] | null ? T : never)>()
+      for (const p of profiles || []) {
+        profileMap.set(p.id, p)
+      }
+
+      const docCountMap = new Map<string, number>()
+      for (const row of docCounts || []) {
+        docCountMap.set(row.user_id, Number(row.doc_count))
+      }
+
+      incomingMembers = incomingLinks
+        .map(link => {
+          const profile = profileMap.get(link.user_id)
+          if (!profile) return null
+
           const ownerTier = getTierFromSubscription(
             profile.subscription_status || null,
             profile.stripe_price_id || null
           )
           const tierDisplay = getTierDisplayInfo(ownerTier)
           const canDownload = allowsFamilyDownloads(ownerTier)
+          const docsCount = docCountMap.get(link.user_id) ?? 0
 
-          // Get document count for this member
-          const { count: docsCount } = await adminClient
-            .from('documents')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', link.user_id)
-
-          incomingMembers.push({
+          return {
             id: link.user_id,
             name: profile.full_name || profile.email.split('@')[0],
             email: profile.email,
             relationship: link.relationship,
-            direction: 'incoming',
+            direction: 'incoming' as const,
             linkedAt: link.invitation_accepted_at,
-            docsCount: docsCount ?? 0,
+            docsCount,
             tier: {
               id: ownerTier.id,
               name: tierDisplay.name,
@@ -96,9 +108,9 @@ export async function GET() {
               canDownload,
               viewOnly: tierDisplay.viewOnly,
             },
-          })
-        }
-      }
+          }
+        })
+        .filter((m): m is FamilyMember => m !== null)
     }
 
     // Get people I added as trusted persons who have accepted
