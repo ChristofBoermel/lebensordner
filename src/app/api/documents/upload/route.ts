@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_UPLOAD } from '@/lib/security/rate-limit'
 import type { DocumentCategory } from '@/types/database'
 import { CATEGORY_METADATA_FIELDS } from '@/types/database'
+import { isDocumentEncryptionMetadata } from '@/lib/security/document-e2ee'
 
 // New endpoint for secure server-side uploads
 export async function POST(req: NextRequest) {
@@ -63,6 +64,9 @@ export async function POST(req: NextRequest) {
         const path = formData.get('path') as string // folder path e.g. 'identitaet/ausweis'
         const bucket = (formData.get('bucket') as string) || 'documents'
         const reminderWatcherIdRaw = formData.get('reminder_watcher_id') as string | null
+        const isEncryptedRaw = formData.get('is_encrypted') as string | null
+        const encryptionMetadataRaw = formData.get('encryption_metadata') as string | null
+        const isEncrypted = isEncryptedRaw === 'true'
         const reminderWatcherId =
             reminderWatcherIdRaw && reminderWatcherIdRaw.trim().length > 0
                 ? reminderWatcherIdRaw
@@ -80,10 +84,38 @@ export async function POST(req: NextRequest) {
 
         // 2. Validate File Type
         const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'] // Added webp for avatars
-        if (!validTypes.includes(file.type)) {
+        const originalFileType = ((formData.get('file_type') as string) || file.type || 'application/octet-stream').trim()
+
+        if (isEncrypted) {
+            if (!validTypes.includes(originalFileType)) {
+                return NextResponse.json({
+                    error: 'Ungültiges Format. Erlaubt sind PDF, JPG, PNG und WebP.'
+                }, { status: 400 })
+            }
+            if (file.type !== 'application/octet-stream') {
+                return NextResponse.json({ error: 'Ungültiges verschlüsseltes Dateiformat' }, { status: 400 })
+            }
+        } else if (!validTypes.includes(file.type)) {
             return NextResponse.json({
                 error: 'Ungültiges Format. Erlaubt sind PDF, JPG, PNG und WebP.'
             }, { status: 400 })
+        }
+
+        let encryptionMetadata: unknown = null
+        if (isEncrypted) {
+            if (!encryptionMetadataRaw) {
+                return NextResponse.json({ error: 'Fehlende Verschlüsselungsmetadaten' }, { status: 400 })
+            }
+
+            try {
+                encryptionMetadata = JSON.parse(encryptionMetadataRaw)
+            } catch {
+                return NextResponse.json({ error: 'Ungültige Verschlüsselungsmetadaten' }, { status: 400 })
+            }
+
+            if (!isDocumentEncryptionMetadata(encryptionMetadata)) {
+                return NextResponse.json({ error: 'Nicht unterstützte Verschlüsselungsmetadaten' }, { status: 400 })
+            }
         }
 
         // 3. Validate File Size (Hard Limit: 25MB)
@@ -188,7 +220,7 @@ export async function POST(req: NextRequest) {
             const expiryDate = (formData.get('expiry_date') as string) || null
             const customReminderDaysRaw = (formData.get('custom_reminder_days') as string) || null
             const fileName = (formData.get('file_name') as string) || file.name
-            const fileType = (formData.get('file_type') as string) || file.type || 'application/octet-stream'
+            const fileType = originalFileType
 
             const customReminderDays = customReminderDaysRaw
                 ? Number(customReminderDaysRaw)
@@ -265,6 +297,9 @@ export async function POST(req: NextRequest) {
                     custom_reminder_days: customReminderDays,
                     reminder_watcher_id: reminderWatcherId,
                     metadata,
+                    is_encrypted: isEncrypted,
+                    encryption_version: isEncrypted ? 'e2ee-v1' : null,
+                    encryption_metadata: isEncrypted ? encryptionMetadata : null,
                 })
                 .select()
                 .single()
