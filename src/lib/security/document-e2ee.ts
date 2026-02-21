@@ -25,25 +25,28 @@ export const generateDEK = async (): Promise<CryptoKey> =>
   ]);
 
 export const encryptFile = async (
-  buffer: ArrayBuffer | ArrayBufferView,
+  buffer: ArrayBuffer,
   dek: CryptoKey,
   iv?: Uint8Array,
   aad?: Uint8Array,
 ): Promise<{ ciphertext: ArrayBuffer; iv: string }> => {
   const actualIv = iv ?? globalThis.crypto.getRandomValues(new Uint8Array(12));
-  const data = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
+
   const params: AesGcmParams = {
     name: "AES-GCM",
     iv: actualIv as Uint8Array<ArrayBuffer>,
   };
+
   if (aad) {
     params.additionalData = aad as Uint8Array<ArrayBuffer>;
   }
+
   const ciphertext = await globalThis.crypto.subtle.encrypt(
     params,
     dek,
-    data,
+    buffer,
   );
+
   return {
     ciphertext,
     iv: toBase64(actualIv),
