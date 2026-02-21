@@ -274,6 +274,11 @@ export interface Database {
           is_encrypted: boolean
           encryption_version: string | null
           encryption_metadata: Json | null
+          wrapped_dek: string | null
+          file_iv: string | null
+          title_encrypted: string | null
+          notes_encrypted: string | null
+          file_name_encrypted: string | null
         }
         Insert: {
           id?: string
@@ -298,6 +303,11 @@ export interface Database {
           is_encrypted?: boolean
           encryption_version?: string | null
           encryption_metadata?: Json | null
+          wrapped_dek?: string | null
+          file_iv?: string | null
+          title_encrypted?: string | null
+          notes_encrypted?: string | null
+          file_name_encrypted?: string | null
         }
         Update: {
           id?: string
@@ -322,6 +332,11 @@ export interface Database {
           is_encrypted?: boolean
           encryption_version?: string | null
           encryption_metadata?: Json | null
+          wrapped_dek?: string | null
+          file_iv?: string | null
+          title_encrypted?: string | null
+          notes_encrypted?: string | null
+          file_name_encrypted?: string | null
         }
       }
       subcategories: {
@@ -937,6 +952,139 @@ export interface Database {
           additional_wishes_encrypted?: boolean
         }
       }
+      user_vault_keys: {
+        Row: {
+          id: string
+          user_id: string
+          kdf_salt: string
+          kdf_params: Json
+          wrapped_mk: string
+          wrapped_mk_with_recovery: string
+          recovery_key_salt: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          kdf_salt: string
+          kdf_params: Json
+          wrapped_mk: string
+          wrapped_mk_with_recovery: string
+          recovery_key_salt?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          kdf_salt?: string
+          kdf_params?: Json
+          wrapped_mk?: string
+          wrapped_mk_with_recovery?: string
+          recovery_key_salt?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      document_relationship_keys: {
+        Row: {
+          id: string
+          owner_id: string
+          trusted_person_id: string
+          wrapped_rk: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          trusted_person_id: string
+          wrapped_rk: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          trusted_person_id?: string
+          wrapped_rk?: string
+          created_at?: string
+        }
+      }
+      document_share_tokens: {
+        Row: {
+          id: string
+          document_id: string
+          owner_id: string
+          trusted_person_id: string
+          wrapped_dek_for_tp: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          document_id: string
+          owner_id: string
+          trusted_person_id: string
+          wrapped_dek_for_tp: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          document_id?: string
+          owner_id?: string
+          trusted_person_id?: string
+          wrapped_dek_for_tp?: string
+          created_at?: string
+        }
+      }
+      download_link_documents: {
+        Row: {
+          id: string
+          download_token_id: string
+          document_id: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          download_token_id: string
+          document_id: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          download_token_id?: string
+          document_id?: string
+          created_at?: string | null
+        }
+      }
+      download_link_wrapped_deks: {
+        Row: {
+          id: string
+          download_token_id: string
+          document_id: string
+          wrapped_dek_for_share: string
+          file_iv: string
+          file_name_encrypted: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          download_token_id: string
+          document_id: string
+          wrapped_dek_for_share: string
+          file_iv: string
+          file_name_encrypted?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          download_token_id?: string
+          document_id?: string
+          wrapped_dek_for_share?: string
+          file_iv?: string
+          file_name_encrypted?: string | null
+          created_at?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -1085,6 +1233,11 @@ export type MedicalInfo = Database['public']['Tables']['medical_info']['Row']
 export type EmergencyContact = Database['public']['Tables']['emergency_contacts']['Row']
 export type AdvanceDirective = Database['public']['Tables']['advance_directives']['Row']
 export type FuneralWishes = Database['public']['Tables']['funeral_wishes']['Row']
+export type UserVaultKey = Database['public']['Tables']['user_vault_keys']['Row']
+export type DocumentRelationshipKey = Database['public']['Tables']['document_relationship_keys']['Row']
+export type DocumentShareToken = Database['public']['Tables']['document_share_tokens']['Row']
+export type DownloadLinkDocument = Database['public']['Tables']['download_link_documents']['Row']
+export type DownloadLinkWrappedDek = Database['public']['Tables']['download_link_wrapped_deks']['Row']
 
 // Subcategory for folder structure
 export interface Subcategory {

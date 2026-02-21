@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, useRef } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Download, Loader2, AlertTriangle, CheckCircle2, Leaf, XCircle, Clock, Eye } from 'lucide-react'
+import { Download, Loader2, AlertTriangle, CheckCircle2, Leaf, XCircle, Clock, Eye, Lock, FileText } from 'lucide-react'
 import Link from 'next/link'
 
 interface TokenInfo {
@@ -13,6 +14,17 @@ interface TokenInfo {
   senderName?: string
   expiresAt?: string
   linkType?: 'view' | 'download'
+  requiresClientDecryption?: boolean
+  documents?: Array<{
+    id: string
+    category: string
+    file_type: string
+    is_encrypted: boolean
+    wrappedDekForShare?: string
+    fileIv?: string
+    fileNameEncrypted?: string
+    signedUrl: string
+  }>
   error?: string
 }
 
@@ -23,11 +35,23 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadComplete, setDownloadComplete] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [shareKey, setShareKey] = useState<string>('')
+  const [manualKeyInput, setManualKeyInput] = useState('')
+  const [decryptProgress, setDecryptProgress] = useState<{ current: number; total: number; currentName: string } | null>(null)
+  const manualKeyInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.slice(1)
+      if (hash) {
+        setShareKey(hash)
+      }
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+
     async function checkToken() {
       try {
-        const response = await fetch(`/api/download-link/verify/${resolvedParams.token}`)
+        const response = await fetch(`/api/download-link/${resolvedParams.token}/metadata`)
         const data = await response.json()
 
         if (response.ok) {
@@ -38,14 +62,21 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
             senderName: data.senderName,
             expiresAt: data.expiresAt,
             linkType: data.linkType || 'download',
+            requiresClientDecryption: data.requiresClientDecryption,
+            documents: data.documents || [],
           })
         } else {
+          const isExpired = response.status === 410 && data.error?.includes('abgelaufen')
+          const isUsed = response.status === 410 && data.error?.includes('verwendet')
           setTokenInfo({
             valid: false,
-            expired: response.status === 410 && data.error?.includes('abgelaufen'),
-            used: response.status === 410 && data.error?.includes('verwendet'),
+            expired: isExpired,
+            used: isUsed,
             error: data.error,
           })
+          if (response.status === 409) {
+            setError(data.error || 'Fehler beim Laden')
+          }
         }
       } catch (err) {
         setTokenInfo({
@@ -61,6 +92,33 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
     checkToken()
   }, [resolvedParams.token])
 
+  const categoryNames: Record<string, string> = {
+    identitaet: 'Identität',
+    finanzen: 'Finanzen',
+    versicherungen: 'Versicherungen',
+    wohnen: 'Wohnen',
+    gesundheit: 'Gesundheit',
+    vertraege: 'Verträge',
+    rente: 'Rente & Pension',
+    familie: 'Familie',
+    arbeit: 'Arbeit',
+    religion: 'Religion',
+    sonstige: 'Sonstige',
+  }
+
+  const getFallbackFileName = (doc: NonNullable<TokenInfo['documents']>[number], index: number) => {
+    try {
+      const url = new URL(doc.signedUrl)
+      const pathName = url.pathname.split('/').pop()
+      if (pathName) {
+        return decodeURIComponent(pathName)
+      }
+    } catch {
+      // ignore
+    }
+    return `Dokument_${index + 1}`
+  }
+
   const handleAction = async () => {
     // For view mode, redirect to the view page
     if (tokenInfo?.linkType === 'view') {
@@ -68,7 +126,70 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
       return
     }
 
-    // For download mode, proceed with the download
+    if (tokenInfo?.requiresClientDecryption) {
+      if (!shareKey) {
+        manualKeyInputRef.current?.focus()
+        return
+      }
+
+      setIsDownloading(true)
+      setError(null)
+
+      try {
+        const { importRawHexKey, unwrapKey, decryptFile, decryptField } = await import('@/lib/security/document-e2ee')
+        const JSZip = (await import('jszip')).default
+        const zip = new JSZip()
+        const shareKeyAes = await importRawHexKey(shareKey, ['wrapKey', 'unwrapKey'])
+        const documents = tokenInfo.documents || []
+
+        for (let i = 0; i < documents.length; i++) {
+          const doc = documents[i]
+          const displayName = getFallbackFileName(doc, i)
+          setDecryptProgress({
+            current: i + 1,
+            total: documents.length,
+            currentName: displayName,
+          })
+
+          const categoryFolder = categoryNames[doc.category] || doc.category
+          const response = await fetch(doc.signedUrl)
+          const arrayBuffer = await response.arrayBuffer()
+
+          if (doc.is_encrypted) {
+            const dek = await unwrapKey(doc.wrappedDekForShare!, shareKeyAes, 'AES-GCM')
+            const plaintext = await decryptFile(arrayBuffer, dek, doc.fileIv!)
+            const fileName = doc.fileNameEncrypted
+              ? await decryptField(doc.fileNameEncrypted, dek).catch(() => displayName)
+              : displayName
+            zip.file(`${categoryFolder}/${fileName}`, plaintext)
+          } else {
+            zip.file(`${categoryFolder}/${displayName}`, arrayBuffer)
+          }
+        }
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' })
+        const url = window.URL.createObjectURL(zipBlob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'Lebensordner_Dokumente.zip'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+
+        fetch(`/api/download-link/${resolvedParams.token}/mark-used`, { method: 'POST' }).catch(() => {})
+
+        setDownloadComplete(true)
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setDecryptProgress(null)
+        setIsDownloading(false)
+      }
+
+      return
+    }
+
     setIsDownloading(true)
     setError(null)
 
@@ -159,6 +280,66 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
                   </div>
                 )}
 
+                {tokenInfo.requiresClientDecryption && !shareKey && (
+                  <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 space-y-3">
+                    <div className="flex items-start gap-2 text-amber-800 text-sm">
+                      <Lock className="w-4 h-4 mt-0.5" />
+                      <span>Für diesen Link wird ein Zugriffsschlüssel benötigt. Geben Sie den Schlüssel aus der E-Mail ein.</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        ref={manualKeyInputRef}
+                        value={manualKeyInput}
+                        onChange={(event) => setManualKeyInput(event.target.value)}
+                        placeholder="Zugriffsschlüssel eingeben"
+                        className="font-mono text-sm"
+                      />
+                      <Button
+                        onClick={() => setShareKey(manualKeyInput.trim())}
+                        disabled={!manualKeyInput.trim()}
+                      >
+                        Zugang bestätigen
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {decryptProgress && (
+                  <div className="p-4 rounded-lg border border-sage-200 bg-sage-50 space-y-3">
+                    <div className="flex items-center justify-between text-sm text-warmgray-700">
+                      <span>Dokumente werden vorbereitet...</span>
+                      <span className="font-medium">{decryptProgress.current}/{decryptProgress.total}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-warmgray-200 overflow-hidden">
+                      <div
+                        className="h-full bg-sage-600 transition-all duration-300"
+                        style={{ width: `${Math.round((decryptProgress.current / decryptProgress.total) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-warmgray-600">
+                      Aktuell: {decryptProgress.currentName}
+                    </div>
+                    <div className="space-y-2">
+                      {(tokenInfo.documents || []).map((doc, index) => (
+                        <div key={doc.id} className="flex items-center justify-between text-xs text-warmgray-600">
+                          <div className="flex items-center gap-2">
+                            {doc.is_encrypted ? (
+                              <Lock className="w-3.5 h-3.5 text-sage-600" />
+                            ) : (
+                              <FileText className="w-3.5 h-3.5 text-warmgray-500" />
+                            )}
+                            <span>{getFallbackFileName(doc, index)}</span>
+                          </div>
+                          <span>{index < decryptProgress.current ? 'bereit' : 'wartet'}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-warmgray-500">
+                      Die Entschlüsselung findet lokal in Ihrem Browser statt. Es werden keine Schlüssel übertragen.
+                    </p>
+                  </div>
+                )}
+
                 {error && (
                   <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5 flex-shrink-0" />
@@ -227,6 +408,11 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
                   ? 'Dieser Link wurde bereits für einen Download verwendet. Aus Sicherheitsgründen kann jeder Link nur einmal verwendet werden.'
                   : 'Dieser Download-Link ist ungültig oder existiert nicht.'}
               </p>
+              {tokenInfo?.error && !tokenInfo?.expired && !tokenInfo?.used && (
+                <p className="text-sm text-red-600">
+                  {tokenInfo.error}
+                </p>
+              )}
             </div>
           )}
 

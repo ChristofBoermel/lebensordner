@@ -60,6 +60,24 @@ export async function GET(
       )
     }
 
+    const { data: wrappedDekRows, error: wrappedDekError } = await adminClient
+      .from('download_link_wrapped_deks')
+      .select('id')
+      .eq('download_token_id', downloadToken.id)
+      .limit(1)
+
+    if (wrappedDekError) {
+      console.error('Error checking wrapped DEKs:', wrappedDekError)
+      return NextResponse.json(
+        { error: 'Fehler beim Laden der Dokumente' },
+        { status: 500 }
+      )
+    }
+
+    if (wrappedDekRows && wrappedDekRows.length > 0) {
+      return NextResponse.json({ requiresClientDecryption: true }, { status: 200 })
+    }
+
     // Get user profile for folder naming
     const { data: profile } = await adminClient
       .from('profiles')
@@ -69,13 +87,58 @@ export async function GET(
 
     const userName = profile?.full_name || profile?.email || 'Lebensordner'
 
-    // Get all documents for the user
-    const { data: documents, error: docsError } = await adminClient
+    const { data: snapshotRows, error: snapshotError } = await adminClient
+      .from('download_link_documents')
+      .select('document_id')
+      .eq('download_token_id', downloadToken.id)
+
+    if (snapshotError) {
+      console.error('Error fetching download link documents:', snapshotError)
+      return NextResponse.json(
+        { error: 'Fehler beim Laden der Dokumente' },
+        { status: 500 }
+      )
+    }
+
+    let documentsQuery = adminClient
       .from('documents')
       .select('*')
-      .eq('user_id', downloadToken.user_id)
       .order('category')
       .order('title')
+
+    let snapshotIds: string[] | null = null
+
+    if (snapshotRows && snapshotRows.length > 0) {
+      snapshotIds = snapshotRows.map((row) => row.document_id)
+      documentsQuery = documentsQuery.in('id', snapshotIds)
+    } else {
+      const { data: encryptedDocument, error: encryptedDocumentError } = await adminClient
+        .from('documents')
+        .select('id')
+        .eq('user_id', downloadToken.user_id)
+        .eq('is_encrypted', true)
+        .limit(1)
+        .maybeSingle()
+
+      if (encryptedDocumentError) {
+        console.error('Error checking encrypted documents:', encryptedDocumentError)
+        return NextResponse.json(
+          { error: 'Fehler beim Laden der Dokumente' },
+          { status: 500 }
+        )
+      }
+
+      if (encryptedDocument) {
+        return NextResponse.json(
+          { error: 'Dieser Link unterstützt keine verschlüsselten Dokumente. Bitte bitten Sie den Absender, einen neuen Link zu erstellen.' },
+          { status: 409 }
+        )
+      }
+
+      documentsQuery = documentsQuery.eq('user_id', downloadToken.user_id)
+    }
+
+    const { data: documents, error: docsError } = await documentsQuery
 
     if (docsError) {
       console.error('Error fetching documents:', docsError)
@@ -85,7 +148,18 @@ export async function GET(
       )
     }
 
-    if (!documents || documents.length === 0) {
+    let orderedDocuments = documents || []
+
+    if (snapshotIds && orderedDocuments.length > 0) {
+      const indexById = new Map(snapshotIds.map((id, index) => [id, index]))
+      orderedDocuments = [...orderedDocuments].sort((a, b) => {
+        const indexA = indexById.get(a.id) ?? 0
+        const indexB = indexById.get(b.id) ?? 0
+        return indexA - indexB
+      })
+    }
+
+    if (!orderedDocuments || orderedDocuments.length === 0) {
       return NextResponse.json(
         { error: 'Keine Dokumente zum Herunterladen vorhanden' },
         { status: 404 }
@@ -111,7 +185,7 @@ export async function GET(
     }
 
     // Download each document and add to ZIP
-    for (const doc of documents) {
+    for (const doc of orderedDocuments) {
       try {
         // Get file from storage
         const { data: fileData, error: fileError } = await adminClient.storage
@@ -146,7 +220,7 @@ export async function GET(
       event_data: {
         owner_id: downloadToken.user_id,
         recipient_email: downloadToken.recipient_email,
-        document_count: documents?.length || 0,
+        document_count: orderedDocuments?.length || 0,
         download_link_token: token,
         link_type: 'download',
       },

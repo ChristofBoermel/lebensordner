@@ -17,6 +17,9 @@ const getResend = () => new Resend(process.env.RESEND_API_KEY)
 interface CreateDownloadLinkRequest {
   recipientName: string
   recipientEmail: string
+  documentIds?: string[]
+  shareKey?: string
+  wrappedDeks?: { documentId: string; wrappedDekForShare: string; fileIv: string; fileNameEncrypted?: string }[]
 }
 
 export async function POST(request: Request) {
@@ -28,7 +31,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
     }
 
-    const { recipientName, recipientEmail } = await request.json() as CreateDownloadLinkRequest
+    const { recipientName, recipientEmail, documentIds, shareKey, wrappedDeks } = await request.json() as CreateDownloadLinkRequest
 
     if (!recipientName || !recipientEmail) {
       return NextResponse.json(
@@ -110,7 +113,7 @@ export async function POST(request: Request) {
     const adminClient = getSupabaseAdmin()
 
     // Create the download token
-    const { error: insertError } = await adminClient
+    const { data: newToken, error: insertError } = await adminClient
       .from('download_tokens')
       .insert({
         user_id: user.id,
@@ -120,6 +123,8 @@ export async function POST(request: Request) {
         recipient_email: recipientEmail,
         link_type: linkType,
       })
+      .select('id')
+      .single()
 
     if (insertError) {
       console.error('Error creating download token:', insertError)
@@ -127,6 +132,71 @@ export async function POST(request: Request) {
         { error: 'Fehler beim Erstellen des Download-Links' },
         { status: 500 }
       )
+    }
+
+    if (documentIds?.length) {
+      const { data: ownedDocuments, error: ownedDocumentsError } = await supabase
+        .from('documents')
+        .select('id')
+        .eq('user_id', user.id)
+        .in('id', documentIds)
+
+      if (ownedDocumentsError) {
+        return NextResponse.json(
+          { error: 'Fehler beim Validieren der Dokumente' },
+          { status: 500 }
+        )
+      }
+
+      const ownedDocumentIds = new Set((ownedDocuments ?? []).map((document) => document.id))
+      const hasUnownedDocument = documentIds.some((documentId) => !ownedDocumentIds.has(documentId))
+
+      if (hasUnownedDocument) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+
+      if (wrappedDeks?.length) {
+        const hasUnownedWrappedDek = wrappedDeks.some(
+          (entry) => !ownedDocumentIds.has(entry.documentId)
+        )
+
+        if (hasUnownedWrappedDek) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
+      }
+    }
+
+    if (documentIds?.length) {
+      const { error: documentsInsertError } = await adminClient
+        .from('download_link_documents')
+        .insert(
+          documentIds.map((documentId) => ({
+            download_token_id: newToken.id,
+            document_id: documentId,
+          }))
+        )
+
+      if (documentsInsertError) {
+        console.error('Error inserting download link documents:', documentsInsertError)
+      }
+    }
+
+    if (wrappedDeks?.length) {
+      const { error: wrappedDeksInsertError } = await adminClient
+        .from('download_link_wrapped_deks')
+        .insert(
+          wrappedDeks.map((entry) => ({
+            download_token_id: newToken.id,
+            document_id: entry.documentId,
+            wrapped_dek_for_share: entry.wrappedDekForShare,
+            file_iv: entry.fileIv,
+            file_name_encrypted: entry.fileNameEncrypted ?? null,
+          }))
+        )
+
+      if (wrappedDeksInsertError) {
+        console.error('Error inserting download link wrapped deks:', wrappedDeksInsertError)
+      }
     }
 
     // Log security event for download link creation
@@ -145,6 +215,7 @@ export async function POST(request: Request) {
     // Create the download URL
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://lebensordner.org'
     const downloadUrl = `${baseUrl}/herunterladen/${token}`
+    const emailUrl = `${baseUrl}/herunterladen/${token}${shareKey ? `#${shareKey}` : ''}`
 
     // Send email to recipient with tier-specific content
     const isViewOnly = linkType === 'view'
@@ -200,7 +271,7 @@ export async function POST(request: Request) {
             </p>
 
             <div style="margin: 24px 0; text-align: center;">
-              <a href="${downloadUrl}"
+              <a href="${emailUrl}"
                  style="display: inline-block; background-color: #5d6b5d; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 500;">
                 ${buttonText}
               </a>

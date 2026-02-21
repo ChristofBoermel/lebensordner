@@ -30,6 +30,8 @@ import { formatDate } from '@/lib/utils'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import QRCode from 'qrcode'
+import { useVault } from '@/lib/vault/VaultContext'
+import { VaultUnlockModal } from '@/components/vault/VaultUnlockModal'
 
 interface DocumentRow {
   id: string
@@ -40,6 +42,12 @@ interface DocumentRow {
   file_path: string | null
   created_at: string
   expiry_date: string | null
+  is_encrypted: boolean
+  wrapped_dek: string | null
+  file_iv: string | null
+  title_encrypted: string | null
+  notes_encrypted: string | null
+  file_name_encrypted: string | null
 }
 
 interface TrustedPersonRow {
@@ -100,6 +108,8 @@ export default function ExportPage() {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null)
   const [isGeneratingQR, setIsGeneratingQR] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null)
+  const [isVaultModalOpen, setIsVaultModalOpen] = useState(false)
+  const vaultContext = useVault()
 
   const supabase = createClient()
 
@@ -155,7 +165,7 @@ export default function ExportPage() {
       // Fetch documents (not encrypted, direct Supabase query is fine)
       const { data: docsData } = await supabase
         .from('documents')
-        .select('id, category, title, notes, file_name, file_path, created_at, expiry_date')
+        .select('id, category, title, notes, file_name, file_path, created_at, expiry_date, is_encrypted, wrapped_dek, file_iv, title_encrypted, notes_encrypted, file_name_encrypted')
         .eq('user_id', user.id)
         .order('category') as { data: DocumentRow[] | null }
 
@@ -473,6 +483,13 @@ export default function ExportPage() {
     setIsBackingUp(true)
     setBackupProgress(0)
     const failedFiles: string[] = []
+    const hasEncryptedDocs = documents.some(d => d.is_encrypted)
+    if (hasEncryptedDocs && !vaultContext.isUnlocked) {
+      setIsVaultModalOpen(true)
+      setIsBackingUp(false)
+      return
+    }
+    const masterKey = vaultContext.masterKey
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -492,7 +509,6 @@ export default function ExportPage() {
 
       // Add documents metadata
       setBackupProgress(20)
-      dataFolder?.file('dokumente.json', JSON.stringify(documents, null, 2))
 
       // Add trusted persons
       setBackupProgress(30)
@@ -514,6 +530,7 @@ export default function ExportPage() {
       const filesFolder = zip.folder('dateien')
       const totalDocs = documents.length
       let successCount = 0
+      const patchedDocuments: DocumentRow[] = []
 
       for (let i = 0; i < documents.length; i++) {
         const doc = documents[i]
@@ -528,19 +545,40 @@ export default function ExportPage() {
 
           if (fileData && !error) {
             const categoryName = DOCUMENT_CATEGORIES[doc.category]?.name || doc.category
-            const safeFileName = doc.file_name.replace(/[^a-zA-Z0-9.-]/g, '_')
-            filesFolder?.file(`${categoryName}/${doc.title}_${safeFileName}`, fileData)
+            if (doc.is_encrypted && masterKey && doc.wrapped_dek && doc.file_iv) {
+              const { unwrapKey, decryptFile, decryptField } = await import('@/lib/security/document-e2ee')
+              const encBuffer = await fileData.arrayBuffer()
+              const dek = await unwrapKey(doc.wrapped_dek, masterKey, 'AES-GCM')
+              const plainBuffer = await decryptFile(encBuffer, dek, doc.file_iv)
+              const realFileName = doc.file_name_encrypted
+                ? await decryptField(doc.file_name_encrypted, dek).catch(() => doc.file_name)
+                : doc.file_name
+              const realTitle = doc.title_encrypted
+                ? await decryptField(doc.title_encrypted, dek).catch(() => doc.title)
+                : doc.title
+              const safeFileName = realFileName.replace(/[^a-zA-Z0-9.-]/g, '_')
+              filesFolder?.file(`${categoryName}/${realTitle}_${safeFileName}`, plainBuffer)
+              patchedDocuments.push({ ...doc, title: realTitle, file_name: realFileName })
+            } else {
+              const safeFileName = doc.file_name.replace(/[^a-zA-Z0-9.-]/g, '_')
+              filesFolder?.file(`${categoryName}/${doc.title}_${safeFileName}`, fileData)
+              patchedDocuments.push(doc)
+            }
             successCount++
           } else {
             const errorMsg = error?.message || 'Unbekannter Fehler'
             console.warn(`Datei nicht herunterladbar: ${doc.file_name} (${errorMsg})`)
             failedFiles.push(doc.file_name)
+            patchedDocuments.push(doc)
           }
         } catch (err) {
           console.warn(`Fehler beim Download: ${doc.file_name}`, err)
           failedFiles.push(doc.file_name)
+          patchedDocuments.push(doc)
         }
       }
+
+      dataFolder?.file('dokumente.json', JSON.stringify(patchedDocuments, null, 2))
 
       // Add README
       setBackupProgress(98)
@@ -561,6 +599,7 @@ Benutzer: ${profile?.email}
 
 ### /dateien
 Alle hochgeladenen Dokumente, sortiert nach Kategorie.
+Alle Dokumente wurden vor dem Export entschlüsselt und liegen im Klartext vor.
 ${failedFiles.length > 0 ? `\n### Fehlende Dateien\nDie folgenden Dateien konnten nicht heruntergeladen werden:\n${failedFiles.map(f => `- ${f}`).join('\n')}` : ''}
 
 ## Hinweis
@@ -1102,6 +1141,11 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
           </div>
         </CardContent>
       </Card>
+
+      <VaultUnlockModal
+        isOpen={isVaultModalOpen}
+        onClose={() => setIsVaultModalOpen(false)}
+      />
     </div>
   )
 }

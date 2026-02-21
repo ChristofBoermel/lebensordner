@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
+import { useVault } from '@/lib/vault/VaultContext'
+import { VaultUnlockModal } from '@/components/vault/VaultUnlockModal'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,7 +42,8 @@ import {
   Lock,
   Calendar,
   ArrowRight,
-  FileText
+  FileText,
+  Key
 } from 'lucide-react'
 import type { TrustedPerson, DocumentMetadata } from '@/types/database'
 import { SUBSCRIPTION_TIERS, canPerformAction, allowsFamilyDownloads, type TierConfig } from '@/lib/subscription-tiers'
@@ -97,6 +100,12 @@ export default function ZugriffPage() {
   const [generatedLink, setGeneratedLink] = useState<{ url: string; expiresAt: string; linkType?: 'view' | 'download' } | null>(null)
   const [isGeneratingLink, setIsGeneratingLink] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
+  const vaultContext = useVault()
+  const [isVaultModalOpen, setIsVaultModalOpen] = useState(false)
+  const [rkShareUrl, setRkShareUrl] = useState<string | null>(null)
+  const [isGeneratingRk, setIsGeneratingRk] = useState<string | null>(null)
+  const [rkDialogOpen, setRkDialogOpen] = useState(false)
+  const [rkLinkCopied, setRkLinkCopied] = useState(false)
 
   const [form, setForm] = useState({
     name: '',
@@ -441,12 +450,66 @@ export default function ZugriffPage() {
     setError(null)
 
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        throw new Error('Nicht angemeldet')
+      }
+
+      const { data: documents, error: documentsError } = await supabase
+        .from('documents')
+        .select('id, is_encrypted, wrapped_dek, file_iv, file_name_encrypted, file_name')
+        .eq('user_id', user.id)
+
+      if (documentsError) {
+        throw new Error('Fehler beim Laden der Dokumente')
+      }
+
+      const hasEncryptedDocuments = (documents || []).some((doc) => doc.is_encrypted)
+
+      if (hasEncryptedDocuments && !vaultContext.isUnlocked) {
+        setIsVaultModalOpen(true)
+        return
+      }
+
+      let shareKey: string | undefined
+      let wrappedDeks: { documentId: string; wrappedDekForShare: string; fileIv: string; fileNameEncrypted?: string }[] | undefined
+
+      if (hasEncryptedDocuments && vaultContext.isUnlocked) {
+        const { unwrapKey, importRawHexKey, wrapKey } = await import('@/lib/security/document-e2ee')
+        const randomBytes = crypto.getRandomValues(new Uint8Array(32))
+        shareKey = Array.from(randomBytes)
+          .map((byte) => byte.toString(16).padStart(2, '0'))
+          .join('')
+
+        const shareKeyAes = await importRawHexKey(shareKey, ['wrapKey', 'unwrapKey'])
+
+        wrappedDeks = await Promise.all(
+          (documents || [])
+            .filter((doc) => doc.is_encrypted)
+            .map(async (doc) => {
+              const dek = await unwrapKey(doc.wrapped_dek, vaultContext.masterKey!, 'AES-GCM')
+              const wrappedDekForShare = await wrapKey(dek, shareKeyAes)
+              return {
+                documentId: doc.id,
+                wrappedDekForShare,
+                fileIv: doc.file_iv,
+                fileNameEncrypted: doc.file_name_encrypted || undefined,
+              }
+            })
+        )
+      }
+
+      const documentIds = (documents || []).map((doc) => doc.id)
+
       const response = await fetch('/api/download-link/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recipientName: downloadLinkForm.name,
           recipientEmail: downloadLinkForm.email,
+          documentIds,
+          shareKey,
+          wrappedDeks,
         }),
       })
 
@@ -465,6 +528,76 @@ export default function ZugriffPage() {
       setError(err.message)
     } finally {
       setIsGeneratingLink(false)
+    }
+  }
+
+  const handleGenerateRelationshipKey = async (person: TrustedPerson) => {
+    if (!vaultContext.isUnlocked || !vaultContext.masterKey) {
+      setIsVaultModalOpen(true)
+      return
+    }
+
+    setIsGeneratingRk(person.id)
+
+    try {
+      const { generateRelationshipKey, importRawHexKey, wrapKey, unwrapKey } = await import('@/lib/security/document-e2ee')
+      const rk = await generateRelationshipKey()
+      const rkCryptoKey = await importRawHexKey(rk, ['wrapKey', 'unwrapKey'])
+      const wrapped_rk = await wrapKey(rkCryptoKey, vaultContext.masterKey)
+
+      await fetch('/api/trusted-person/relationship-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trustedPersonId: person.id,
+          wrapped_rk,
+        }),
+      })
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        throw new Error('Nicht angemeldet')
+      }
+
+      const { data: documents, error: documentsError } = await supabase
+        .from('documents')
+        .select('id, wrapped_dek, file_iv, is_encrypted')
+        .eq('user_id', user.id)
+        .eq('is_encrypted', true)
+
+      if (documentsError) {
+        throw new Error('Fehler beim Laden der Dokumente')
+      }
+
+      await Promise.all(
+        (documents || []).map(async (doc) => {
+          try {
+            const dek = await unwrapKey(doc.wrapped_dek, vaultContext.masterKey!, 'AES-GCM')
+            const wrapped_dek_for_tp = await wrapKey(dek, rkCryptoKey)
+
+            await fetch('/api/documents/share-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                documentId: doc.id,
+                trustedPersonId: person.id,
+                wrapped_dek_for_tp,
+              }),
+            })
+          } catch {
+            // Skip documents that fail to re-wrap for this trusted person.
+          }
+        })
+      )
+
+      const shareUrl = `${window.location.origin}/zugriff/access?ownerId=${user.id}#${rk}`
+
+      setRkShareUrl(shareUrl)
+      setRkDialogOpen(true)
+    } catch (err: any) {
+      alert('Fehler beim Erstellen des Zugriffslinks: ' + err.message)
+    } finally {
+      setIsGeneratingRk(null)
     }
   }
 
@@ -968,6 +1101,27 @@ export default function ZugriffPage() {
                                 <CheckCircle2 className="w-3 h-3" />
                                 Verbunden
                               </span>
+                            )}
+                            {person.invitation_status === 'accepted' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleGenerateRelationshipKey(person)}
+                                disabled={isGeneratingRk === person.id}
+                                className="text-sage-600 hover:text-sage-700"
+                              >
+                                {isGeneratingRk === person.id ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                    Zugriffslink
+                                  </>
+                                ) : (
+                                  <>
+                                    <Key className="w-4 h-4 mr-1" />
+                                    Zugriffslink
+                                  </>
+                                )}
+                              </Button>
                             )}
                             <Button
                               variant="ghost"
@@ -1615,6 +1769,69 @@ export default function ZugriffPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {rkDialogOpen && rkShareUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border border-warmgray-100">
+            <div className="p-6 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-sage-100 flex items-center justify-center flex-shrink-0">
+                  <Key className="w-5 h-5 text-sage-700" aria-hidden="true" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-warmgray-900">Zugriffslink erstellt</h3>
+                  <p className="text-sm text-warmgray-600">
+                    Teilen Sie diesen Link sicher mit der Vertrauensperson.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-warmgray-50 border border-warmgray-100 rounded-lg p-3 font-mono text-xs sm:text-sm text-warmgray-700 break-all">
+                {rkShareUrl}
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-xs sm:text-sm">
+                Bewahren Sie diesen Link vertraulich auf. Jeder mit dem Link kann auf Ihre freigegebenen Dokumente zugreifen.
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(rkShareUrl)
+                    setRkLinkCopied(true)
+                    setTimeout(() => setRkLinkCopied(false), 2000)
+                  }}
+                  className="flex-1 justify-center"
+                >
+                  {rkLinkCopied ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Kopiert!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-2" />
+                      Link kopieren
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setRkDialogOpen(false)
+                    setRkShareUrl(null)
+                  }}
+                  className="flex-1 justify-center"
+                >
+                  Schließen
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <VaultUnlockModal isOpen={isVaultModalOpen} onClose={() => setIsVaultModalOpen(false)} />
     </div>
     </TooltipProvider>
   )

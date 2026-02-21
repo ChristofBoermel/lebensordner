@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
- 
+
 import {
   Dialog,
   DialogContent,
@@ -34,11 +34,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const DocumentPreview = dynamic(
-  () => import("@/components/ui/document-preview").then((mod) => mod.DocumentPreview),
+  () =>
+    import("@/components/ui/document-preview").then(
+      (mod) => mod.DocumentPreview,
+    ),
   {
     loading: () => <div className="text-warmgray-600">Laden...</div>,
     ssr: false,
-  }
+  },
 );
 import {
   User,
@@ -93,13 +96,10 @@ import {
 } from "@/lib/subscription-tiers";
 import { UpgradeNudge, UpgradeModal } from "@/components/upgrade";
 import Link from "next/link";
-import {
-  decryptDocumentBlob,
-  encryptDocumentFile,
-  isDocumentEncryptionMetadata,
-} from "@/lib/security/document-e2ee";
-
-const DOCUMENT_VAULT_PASSPHRASE_KEY = "document_vault_passphrase";
+import { decryptField, unwrapKey } from "@/lib/security/document-e2ee";
+import { useVault } from "@/lib/vault/VaultContext";
+import { VaultSetupModal } from "@/components/vault/VaultSetupModal";
+import { VaultUnlockModal } from "@/components/vault/VaultUnlockModal";
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   user: User,
@@ -227,9 +227,13 @@ export default function DocumentsPage() {
   const [uploadReminderWatcher, setUploadReminderWatcher] = useState<
     string | null
   >(null);
-  const [uploadMetadata, setUploadMetadata] = useState<Record<string, string>>({});
+  const [uploadMetadata, setUploadMetadata] = useState<Record<string, string>>(
+    {},
+  );
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isVaultSetupModalOpen, setIsVaultSetupModalOpen] = useState(false);
+  const [isVaultUnlockModalOpen, setIsVaultUnlockModalOpen] = useState(false);
 
   // Family members for reminder watcher
   interface FamilyMember {
@@ -240,42 +244,8 @@ export default function DocumentsPage() {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
 
   const supabase = createClient();
+  const vaultContext = useVault();
   const { capture } = usePostHog();
-
-  const getVaultPassphrase = useCallback(() => {
-    if (typeof window === "undefined") return null;
-
-    const existing = window.sessionStorage.getItem(DOCUMENT_VAULT_PASSPHRASE_KEY);
-    if (existing && existing.trim().length > 0) {
-      return existing;
-    }
-
-    if ((process.env.NODE_ENV as string) === 'test') {
-      const fallback = 'test-document-passphrase';
-      window.sessionStorage.setItem(DOCUMENT_VAULT_PASSPHRASE_KEY, fallback);
-      return fallback;
-    }
-
-    let input: string | null = null;
-    try {
-      input = window.prompt(
-        "Bitte geben Sie Ihr Dokumenten-Passwort ein. Dieses wird nur in Ihrem Browser für die aktuelle Sitzung gespeichert.",
-      );
-    } catch {
-      input = 'test-document-passphrase';
-    }
-
-    if ((!input || !input.trim()) && (process.env.NODE_ENV as string) === 'test') {
-      input = 'test-document-passphrase';
-    }
-
-    if (!input || !input.trim()) {
-      return null;
-    }
-
-    window.sessionStorage.setItem(DOCUMENT_VAULT_PASSPHRASE_KEY, input.trim());
-    return input.trim();
-  }, []);
 
   // Fetch user tier
   useEffect(() => {
@@ -420,6 +390,35 @@ export default function DocumentsPage() {
       };
     }
   }, [highlightedDoc, documents]);
+
+  const [decryptedTitles, setDecryptedTitles] = useState<
+    Record<string, string>
+  >({});
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [previewNotes, setPreviewNotes] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!vaultContext.isUnlocked || !vaultContext.masterKey) {
+      setDecryptedTitles({});
+      return;
+    }
+    const masterKey = vaultContext.masterKey;
+    const entries: Record<string, string> = {};
+    const decryptTitles = async () => {
+      for (const doc of documents) {
+        if (doc.is_encrypted && doc.wrapped_dek && doc.title_encrypted) {
+          try {
+            const dek = await unwrapKey(doc.wrapped_dek, masterKey, "AES-GCM");
+            entries[doc.id] = await decryptField(doc.title_encrypted, dek);
+          } catch {
+            /* skip */
+          }
+        }
+      }
+      setDecryptedTitles(entries);
+    };
+    decryptTitles();
+  }, [vaultContext.isUnlocked, vaultContext.masterKey, documents]);
 
   const validateAndSetFile = (file: File) => {
     if (file.size > MAX_FILE_SIZE) {
@@ -585,33 +584,66 @@ export default function DocumentsPage() {
       }
     }
 
+    // Vault gate: once vault is set up, all uploads must be encrypted
+    if (!vaultContext.isUnlocked) {
+      if (!vaultContext.isSetUp) {
+        setIsVaultSetupModalOpen(true);
+      } else {
+        setIsVaultUnlockModalOpen(true);
+      }
+      return;
+    }
+
     setIsUploading(true);
     setUploadError(null);
 
     try {
-      // 1. Upload via Server-Side API
       const formData = new FormData();
-      const passphrase = getVaultPassphrase();
-      if (!passphrase) {
-        throw new Error("Kein Dokumenten-Passwort angegeben");
+
+      if (vaultContext.isUnlocked && vaultContext.masterKey) {
+        const { generateDEK, encryptFile, encryptField, wrapKey } =
+          await import("@/lib/security/document-e2ee");
+        const buffer = await uploadFile.arrayBuffer();
+        const dek = await generateDEK();
+        const { ciphertext, iv: file_iv } = await encryptFile(buffer, dek);
+        const title_encrypted = await encryptField(
+          uploadTitle.trim() || uploadFile.name,
+          dek,
+        );
+        const file_name_encrypted = await encryptField(uploadFile.name, dek);
+        const wrapped_dek = await wrapKey(dek, vaultContext.masterKey);
+        formData.append(
+          "file",
+          new Blob([ciphertext], { type: "application/octet-stream" }),
+          "encrypted",
+        );
+        formData.append("title", "[Verschlüsselt]");
+        formData.append("file_name", "encrypted");
+        formData.append("is_encrypted", "true");
+        formData.append("encryption_version", "e2ee-v1");
+        formData.append("wrapped_dek", wrapped_dek);
+        formData.append("file_iv", file_iv);
+        formData.append("title_encrypted", title_encrypted);
+        formData.append("file_name_encrypted", file_name_encrypted);
+        formData.append(
+          "file_type",
+          uploadFile.type || "application/octet-stream",
+        );
+        if (uploadNotes) {
+          formData.append(
+            "notes_encrypted",
+            await encryptField(uploadNotes, dek),
+          );
+        }
+      } else {
+        formData.append("file", uploadFile, uploadFile.name);
+        formData.append("title", uploadTitle.trim());
+        formData.append("file_name", uploadFile.name);
+        if (uploadNotes) formData.append("notes", uploadNotes);
       }
 
-      const { encryptedFile, metadata: encryptionMetadata } =
-        await encryptDocumentFile(uploadFile, passphrase);
-
-      formData.append("file", encryptedFile);
-      formData.append("path", uploadCategory || "sonstige"); // Use category as path folder
-      formData.append("bucket", "documents");
-      formData.append("category", uploadCategory);
-      formData.append("title", uploadTitle.trim());
-      formData.append("file_name", uploadFile.name);
-      formData.append("file_type", uploadFile.type || "application/octet-stream");
-      formData.append("is_encrypted", "true");
-      formData.append("encryption_metadata", JSON.stringify(encryptionMetadata));
-
-      if (uploadNotes.trim()) {
-        formData.append("notes", uploadNotes.trim());
-      }
+      formData.append("path", uploadCategory || "sonstige");
+      formData.append("category", uploadCategory || "sonstige");
 
       if (uploadSubcategory) {
         formData.append("subcategory_id", uploadSubcategory);
@@ -721,6 +753,52 @@ export default function DocumentsPage() {
 
       // Fetch in background to ensure consistency
       fetchDocuments();
+      // Share new encrypted doc with all trusted persons who have relationship keys
+      if (
+        vaultContext.isUnlocked &&
+        vaultContext.masterKey &&
+        insertedDoc?.is_encrypted
+      ) {
+        try {
+          const { unwrapKey, wrapKey } =
+            await import("@/lib/security/document-e2ee");
+          const { data: rkRows } = await supabase
+            .from("document_relationship_keys")
+            .select("trusted_person_id, wrapped_rk")
+            .eq("owner_id", (await supabase.auth.getUser()).data.user!.id);
+
+          if (rkRows && rkRows.length > 0) {
+            const dek = await unwrapKey(
+              insertedDoc.wrapped_dek!,
+              vaultContext.masterKey,
+              "AES-GCM",
+            );
+            for (const row of rkRows) {
+              try {
+                const rkKey = await unwrapKey(
+                  row.wrapped_rk,
+                  vaultContext.masterKey,
+                  "AES-KW",
+                );
+                const wrapped_dek_for_tp = await wrapKey(dek, rkKey);
+                await fetch("/api/documents/share-token", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    documentId: insertedDoc.id,
+                    trustedPersonId: row.trusted_person_id,
+                    wrapped_dek_for_tp,
+                  }),
+                });
+              } catch {
+                // Non-fatal — TP can request new link
+              }
+            }
+          }
+        } catch {
+          // Non-fatal
+        }
+      }
     } catch (error: any) {
       capture(ANALYTICS_EVENTS.ERROR_OCCURRED, {
         error_type: "document_upload_failed",
@@ -774,43 +852,95 @@ export default function DocumentsPage() {
   };
 
   const handleDownload = async (doc: Document) => {
+    if (doc.is_encrypted) {
+      if (!vaultContext.masterKey) {
+        setIsVaultUnlockModalOpen(true);
+        return;
+      }
+      try {
+        const { data } = await supabase.storage
+          .from("documents")
+          .download(doc.file_path);
+        if (!data) throw new Error("Download fehlgeschlagen");
+        const buffer = await data.arrayBuffer();
+        const { unwrapKey: uw, decryptFile } =
+          await import("@/lib/security/document-e2ee");
+        const dek = await uw(
+          doc.wrapped_dek!,
+          vaultContext.masterKey,
+          "AES-GCM",
+        );
+        const plain = await decryptFile(buffer, dek, doc.file_iv!);
+        const blob = new Blob([plain], {
+          type: doc.file_type || "application/octet-stream",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = window.document.createElement("a");
+        a.href = url;
+        let downloadName = doc.file_name || "dokument";
+        if (doc.file_name_encrypted) {
+          try {
+            const { decryptField: df2 } =
+              await import("@/lib/security/document-e2ee");
+            downloadName = await df2(doc.file_name_encrypted, dek);
+          } catch {
+            /* fallback to placeholder */
+          }
+        }
+        a.download = downloadName;
+
+        window.document.body.appendChild(a);
+        a.click();
+        URL.revokeObjectURL(url);
+        window.document.body.removeChild(a);
+      } catch {
+        alert("Fehler beim Herunterladen des Dokuments");
+      }
+      return;
+    }
     const { data } = await supabase.storage
       .from("documents")
       .createSignedUrl(doc.file_path, 60);
+    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+  };
 
-    if (data?.signedUrl) {
-      if (!doc.is_encrypted) {
-        window.open(data.signedUrl, "_blank");
-        return;
-      }
-
-      if (!isDocumentEncryptionMetadata(doc.encryption_metadata)) {
-        alert("Dokument-Metadaten sind unvollständig. Download nicht möglich.");
-        return;
-      }
-
-      const passphrase = getVaultPassphrase();
-      if (!passphrase) {
-        alert("Kein Dokumenten-Passwort angegeben.");
-        return;
-      }
-
-      const encryptedResponse = await fetch(data.signedUrl);
-      const encryptedBlob = await encryptedResponse.blob();
-      const decryptedBlob = await decryptDocumentBlob(
-        encryptedBlob,
-        passphrase,
-        doc.encryption_metadata,
+  const handleOpenDocument = async (doc: Document) => {
+    if (!doc.is_encrypted) {
+      setPreviewBlob(null);
+      setPreviewNotes(null);
+      setPreviewDocument(doc);
+      return;
+    }
+    if (!vaultContext.masterKey) {
+      setIsVaultUnlockModalOpen(true);
+      return;
+    }
+    try {
+      const { data } = await supabase.storage
+        .from("documents")
+        .download(doc.file_path);
+      if (!data) throw new Error("Download fehlgeschlagen");
+      const buffer = await data.arrayBuffer();
+      const {
+        unwrapKey: uw,
+        decryptFile,
+        decryptField: df,
+      } = await import("@/lib/security/document-e2ee");
+      const dek = await uw(doc.wrapped_dek!, vaultContext.masterKey, "AES-GCM");
+      const plain = await decryptFile(buffer, dek, doc.file_iv!);
+      setPreviewBlob(
+        new Blob([plain], {
+          type: doc.file_type || "application/octet-stream",
+        }),
       );
-
-      const blobUrl = URL.createObjectURL(decryptedBlob);
-      const link = window.document.createElement("a");
-      link.href = blobUrl;
-      link.download = doc.file_name;
-      window.document.body.appendChild(link);
-      link.click();
-      window.document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
+      setPreviewNotes(
+        doc.notes_encrypted
+          ? await df(doc.notes_encrypted, dek).catch(() => null)
+          : null,
+      );
+      setPreviewDocument(doc);
+    } catch {
+      alert("Fehler beim Öffnen des Dokuments");
     }
   };
 
@@ -1200,7 +1330,7 @@ export default function DocumentsPage() {
       if (d.notes?.toLowerCase().includes(q)) return true;
       if (d.metadata) {
         return Object.values(d.metadata).some(
-          (val) => typeof val === 'string' && val.toLowerCase().includes(q)
+          (val) => typeof val === "string" && val.toLowerCase().includes(q),
         );
       }
       return false;
@@ -1299,7 +1429,7 @@ export default function DocumentsPage() {
           </div>
           <div className="flex-1 min-w-0 overflow-hidden">
             <p className="font-medium text-warmgray-900 truncate leading-tight">
-              {doc.title}
+              {decryptedTitles[doc.id] ?? doc.title}
             </p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-warmgray-500 mt-0.5">
               <span className="truncate">{category.name}</span>
@@ -1344,7 +1474,7 @@ export default function DocumentsPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem
-                onClick={() => setPreviewDocument(doc)}
+                onClick={() => handleOpenDocument(doc)}
                 className="py-3"
               >
                 <Eye className="w-4 h-4 mr-2" />
@@ -1650,7 +1780,6 @@ export default function DocumentsPage() {
           Unterordnern
         </p>
       </div>
-
       {/* Storage Info */}
       <Card>
         <CardContent className="pt-6">
@@ -1707,7 +1836,6 @@ export default function DocumentsPage() {
           )}
         </CardContent>
       </Card>
-
       {/* Upgrade Nudge - shows when approaching document limit */}
       {userTier.limits.maxDocuments !== -1 && (
         <UpgradeNudge
@@ -1716,7 +1844,6 @@ export default function DocumentsPage() {
           maxCount={userTier.limits.maxDocuments}
         />
       )}
-
       {/* Search and View Toggle */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
@@ -1737,7 +1864,6 @@ export default function DocumentsPage() {
           Dokument hinzufügen
         </Button>
       </div>
-
       {/* Category Tabs */}
       <Tabs
         value={activeTab}
@@ -1980,7 +2106,6 @@ export default function DocumentsPage() {
           </TabsContent>
         ))}
       </Tabs>
-
       {/* Category Cards (when no category is selected) */}
       {!selectedCategory && !searchQuery && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2045,7 +2170,9 @@ export default function DocumentsPage() {
           <UploadDialog
             customCategories={customCategories}
             familyMembers={familyMembers}
-            getCategorySubcategoriesForUpload={getCategorySubcategoriesForUpload}
+            getCategorySubcategoriesForUpload={
+              getCategorySubcategoriesForUpload
+            }
             handleCreateSubcategory={handleCreateSubcategory}
             handleUpload={handleUpload}
             isCreatingSubcategory={isCreatingSubcategory}
@@ -2079,14 +2206,37 @@ export default function DocumentsPage() {
           />
         ) : null}
       </Dialog>
-
       {/* Document Preview */}
-      <DocumentPreview
-        isOpen={!!previewDocument}
-        onClose={() => setPreviewDocument(null)}
-        document={previewDocument}
+      <VaultSetupModal
+        isOpen={isVaultSetupModalOpen}
+        onClose={() => setIsVaultSetupModalOpen(false)}
+      />
+      <VaultUnlockModal
+        isOpen={isVaultUnlockModalOpen}
+        onClose={() => setIsVaultUnlockModalOpen(false)}
       />
 
+      <DocumentPreview
+        isOpen={!!previewDocument}
+        onClose={() => {
+          setPreviewDocument(null);
+          setPreviewBlob(null);
+          setPreviewNotes(null);
+        }}
+        document={
+          previewDocument
+            ? {
+                ...previewDocument,
+                notes:
+                  previewNotes ??
+                  (previewDocument.is_encrypted
+                    ? "[Verschlüsselt]"
+                    : previewDocument.notes),
+              }
+            : null
+        }
+        decryptedBlob={previewBlob}
+      />
       {/* Move Dialog */}
       <Dialog open={isMoveDialogOpen} onOpenChange={setIsMoveDialogOpen}>
         <DialogContent className="sm:max-w-md">
@@ -2204,7 +2354,6 @@ export default function DocumentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Bulk Action Bar - Fixed at bottom when documents selected */}
       {selectedDocuments.size > 0 && (
         <div className="fixed bottom-4 inset-x-4 sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 sm:w-auto bg-warmgray-900 text-white rounded-lg shadow-xl px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between sm:justify-start gap-2 sm:gap-6 z-50 overflow-hidden">
@@ -2239,7 +2388,6 @@ export default function DocumentsPage() {
           </div>
         </div>
       )}
-
       {/* Category Dialog */}
       <Dialog
         open={isCategoryDialogOpen}
@@ -2319,7 +2467,6 @@ export default function DocumentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Upgrade Modal - friendly limit notification */}
       <UpgradeModal
         isOpen={upgradeModalOpen}

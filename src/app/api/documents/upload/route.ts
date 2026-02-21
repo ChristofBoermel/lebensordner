@@ -1,334 +1,390 @@
-
-import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { getUserTier } from '@/lib/auth/tier-guard'
-import { canUploadFile } from '@/lib/subscription-tiers'
-import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, incrementRateLimit, RATE_LIMIT_UPLOAD } from '@/lib/security/rate-limit'
-import type { DocumentCategory } from '@/types/database'
-import { CATEGORY_METADATA_FIELDS } from '@/types/database'
-import { isDocumentEncryptionMetadata } from '@/lib/security/document-e2ee'
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getUserTier } from "@/lib/auth/tier-guard";
+import { canUploadFile } from "@/lib/subscription-tiers";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  checkRateLimit,
+  incrementRateLimit,
+  RATE_LIMIT_UPLOAD,
+} from "@/lib/security/rate-limit";
+import type { DocumentCategory } from "@/types/database";
+import { CATEGORY_METADATA_FIELDS } from "@/types/database";
 
 // New endpoint for secure server-side uploads
 export async function POST(req: NextRequest) {
-    const supabase = await createServerSupabaseClient()
+  const supabase = await createServerSupabaseClient();
 
-    // 1. Auth Check (handled by tier-guard + basic check here)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-        return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
+  // 1. Auth Check (handled by tier-guard + basic check here)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: "Nicht authentifiziert" },
+      { status: 401 },
+    );
+  }
+
+  // Extract client IP
+  const forwarded = req.headers.get("x-forwarded-for") || "";
+  const clientIp = forwarded.split(",")[0]?.trim() || "127.0.0.1";
+
+  // IP-based rate limiting
+  const ipRateLimitConfig = {
+    identifier: `upload_ip:${clientIp}`,
+    endpoint: "/api/documents/upload",
+    ...RATE_LIMIT_UPLOAD,
+  };
+
+  const ipRateLimit = await checkRateLimit(ipRateLimitConfig);
+  if (!ipRateLimit.allowed) {
+    const retryAfterSeconds = Math.ceil(
+      (ipRateLimit.resetAt.getTime() - Date.now()) / 1000,
+    );
+    return NextResponse.json(
+      { error: "Too many requests", retryAfterSeconds },
+      { status: 429 },
+    );
+  }
+
+  // Per-user rate limiting
+  const rateLimitConfig = {
+    identifier: `upload:${user.id}`,
+    endpoint: "/api/documents/upload",
+    ...RATE_LIMIT_UPLOAD,
+  };
+
+  const rateLimit = await checkRateLimit(rateLimitConfig);
+  if (!rateLimit.allowed) {
+    const retryAfterSeconds = Math.ceil(
+      (rateLimit.resetAt.getTime() - Date.now()) / 1000,
+    );
+    return NextResponse.json(
+      { error: "Too many requests", retryAfterSeconds },
+      { status: 429 },
+    );
+  }
+
+  try {
+    const formData = await req.formData();
+    const file = formData.get("file") as File | null;
+    const path = formData.get("path") as string; // folder path e.g. 'identitaet/ausweis'
+    const bucket = (formData.get("bucket") as string) || "documents";
+    const reminderWatcherIdRaw = formData.get("reminder_watcher_id") as
+      | string
+      | null;
+    const isEncryptedRaw = formData.get("is_encrypted") as string | null;
+    const wrappedDek = formData.get("wrapped_dek") as string | null;
+    const fileIv = formData.get("file_iv") as string | null;
+    const titleEncrypted = formData.get("title_encrypted") as string | null;
+    const notesEncrypted = formData.get("notes_encrypted") as string | null;
+    const fileNameEncrypted = formData.get("file_name_encrypted") as
+      | string
+      | null;
+    const encryptionVersion = formData.get("encryption_version") as
+      | string
+      | null;
+
+    // AFTER
+    const isEncrypted = isEncryptedRaw === "true";
+    if (isEncrypted && (!wrappedDek || !fileIv || !titleEncrypted)) {
+      return NextResponse.json(
+        { error: "Fehlende Verschlüsselungsfelder" },
+        { status: 400 },
+      );
     }
 
-    // Extract client IP
-    const forwarded = req.headers.get('x-forwarded-for') || ''
-    const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
+    const reminderWatcherId =
+      reminderWatcherIdRaw && reminderWatcherIdRaw.trim().length > 0
+        ? reminderWatcherIdRaw
+        : null;
 
-    // IP-based rate limiting
-    const ipRateLimitConfig = {
-        identifier: `upload_ip:${clientIp}`,
-        endpoint: '/api/documents/upload',
-        ...RATE_LIMIT_UPLOAD,
+    if (!file || !path) {
+      return NextResponse.json(
+        { error: "Keine Datei oder Pfad angegeben" },
+        { status: 400 },
+      );
     }
 
-    const ipRateLimit = await checkRateLimit(ipRateLimitConfig)
-    if (!ipRateLimit.allowed) {
-        const retryAfterSeconds = Math.ceil(
-            (ipRateLimit.resetAt.getTime() - Date.now()) / 1000
-        )
+    // Validate Bucket
+    const ALLOWED_BUCKETS = ["documents", "avatars"];
+    if (!ALLOWED_BUCKETS.includes(bucket)) {
+      return NextResponse.json(
+        { error: "Ungültiger Storage Bucket" },
+        { status: 400 },
+      );
+    }
+
+    // 2. Validate File Type
+    const validTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ]; // Added webp for avatars
+    const originalFileType = (
+      (formData.get("file_type") as string) ||
+      file.type ||
+      "application/octet-stream"
+    ).trim();
+
+    if (isEncrypted) {
+      if (!validTypes.includes(originalFileType)) {
         return NextResponse.json(
-            { error: 'Too many requests', retryAfterSeconds },
-            { status: 429 }
-        )
-    }
-
-    // Per-user rate limiting
-    const rateLimitConfig = {
-        identifier: `upload:${user.id}`,
-        endpoint: '/api/documents/upload',
-        ...RATE_LIMIT_UPLOAD,
-    }
-
-    const rateLimit = await checkRateLimit(rateLimitConfig)
-    if (!rateLimit.allowed) {
-        const retryAfterSeconds = Math.ceil(
-            (rateLimit.resetAt.getTime() - Date.now()) / 1000
-        )
+          {
+            error: "Ungültiges Format. Erlaubt sind PDF, JPG, PNG und WebP.",
+          },
+          { status: 400 },
+        );
+      }
+      if (file.type !== "application/octet-stream") {
         return NextResponse.json(
-            { error: 'Too many requests', retryAfterSeconds },
-            { status: 429 }
-        )
+          { error: "Ungültiges verschlüsseltes Dateiformat" },
+          { status: 400 },
+        );
+      }
+    } else if (!validTypes.includes(file.type)) {
+      return NextResponse.json(
+        {
+          error: "Ungültiges Format. Erlaubt sind PDF, JPG, PNG und WebP.",
+        },
+        { status: 400 },
+      );
     }
 
-    try {
-        const formData = await req.formData()
-        const file = formData.get('file') as File | null
-        const path = formData.get('path') as string // folder path e.g. 'identitaet/ausweis'
-        const bucket = (formData.get('bucket') as string) || 'documents'
-        const reminderWatcherIdRaw = formData.get('reminder_watcher_id') as string | null
-        const isEncryptedRaw = formData.get('is_encrypted') as string | null
-        const encryptionMetadataRaw = formData.get('encryption_metadata') as string | null
-        const isEncrypted = isEncryptedRaw === 'true'
-        const reminderWatcherId =
-            reminderWatcherIdRaw && reminderWatcherIdRaw.trim().length > 0
-                ? reminderWatcherIdRaw
-                : null
+    // 3. Validate File Size (Hard Limit: 25MB)
+    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        {
+          error: "Datei ist zu groß (Maximal 25 MB).",
+        },
+        { status: 400 },
+      );
+    }
 
-        if (!file || !path) {
-            return NextResponse.json({ error: 'Keine Datei oder Pfad angegeben' }, { status: 400 })
+    // 4. Get User Tier & Current Storage
+    const tier = await getUserTier();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("storage_used")
+      .eq("id", user.id)
+      .single();
+
+    const currentStorageMB = (profile?.storage_used || 0) / (1024 * 1024);
+    const fileSizeMB = file.size / (1024 * 1024);
+
+    // 5. Check Storage Limit
+    const storageCheck = canUploadFile(tier, currentStorageMB, fileSizeMB);
+    if (!storageCheck.allowed) {
+      return NextResponse.json({ error: storageCheck.reason }, { status: 403 });
+    }
+
+    if (reminderWatcherId && !tier.limits.familyDashboard) {
+      return NextResponse.json(
+        {
+          error:
+            "Diese Funktion ist nur für Basic- und Premium-Nutzer verfügbar",
+        },
+        { status: 403 },
+      );
+    }
+
+    // 6. Upload to Supabase Storage (Server-Side)
+    // We upload to the user's private folder: {user_id}/{path}/{timestamp}_{filename}
+    const timestamp = Date.now();
+    const safeFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+    // For avatars, path might be just user ID, but we enforce user isolation
+    // If bucket is avatars, path is usually just the filename or simpler structure.
+    // We trust 'path' passed from client but ensure it starts with user.id or we prepend it?
+    // Current client logic:
+    // Documents: `${user.id}/${Date.now()}.${fileExt}`
+    // Avatars: `${user.id}/${Date.now()}.${fileExt}`
+    // Client passes `path` which effectively corresponds to the full path relative to bucket root?
+    // Wait, client passes 'path' in formData.
+    // In my previous code: `const fullPath = `${user.id}/${path}/${timestamp}_${safeFilename}``
+    // This forcibly structured it.
+    // Clients might expect to control the path more.
+    // Let's adjust:
+    // If client provides 'path' meant to be the full path, we should validate it starts with user.id.
+    // OR we stick to the imposed structure.
+
+    // DECISION: To support existing client logic which generates formatted paths:
+    // We should accept 'fullPath' if possible, OR we reconstruct it.
+    // Existing client logic generates: `${user.id}/${Date.now()}.${fileExt}`.
+    // If I force `${user.id}/${path}/${timestamp}...` it changes the structure.
+
+    // Improved Logic:
+    // Client sends 'path' which effectively serves as the "folder" or "usage context".
+    // But to match client expectation of file location?
+    // Actually, client uses the returned `path` (or constructs it).
+    // If I change the path structure, I must return it to the client.
+
+    // Let's stick to the secure enforced path: `${user.id}/${path}/${timestamp}_${safeFilename}`
+    // Client currently sends: `const fileName = `${user.id}/${Date.now()}.${fileExt}``
+    // If I want to match client exactly, I'd need to let client dictate path (Insecure?).
+    // Better: Client sends `path` as just the filename or subdir?
+    // Let's treat `path` param as "target directory relative to user root".
+    // Example: Client uploads to `documents`. Path param = `identitaet`.
+    // Result: `userid/identitaet/timestamp_filename`.
+
+    // For Avatars: Path param = `profile`.
+    // Result: `userid/profile/timestamp_filename`.
+
+    // Update: my previous code used `const fullPath = `${user.id}/${path}/${timestamp}_${safeFilename}``
+    // This is good. It enforces user isolation.
+
+    const fullPath = `${user.id}/${path}/${timestamp}_${safeFilename}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from(bucket) // Use dynamic bucket
+      .upload(fullPath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("Upload Error:", uploadError);
+      return NextResponse.json(
+        { error: "Fehler beim Upload zu Supabase" },
+        { status: 500 },
+      );
+    }
+
+    let insertedDocument: unknown = null;
+
+    if (bucket === "documents") {
+      const category = (formData.get("category") as string) || null;
+      const subcategoryId = (formData.get("subcategory_id") as string) || null;
+      const customCategoryId =
+        (formData.get("custom_category_id") as string) || null;
+      const title = (formData.get("title") as string) || "";
+      const notes = (formData.get("notes") as string) || null;
+      const expiryDate = (formData.get("expiry_date") as string) || null;
+      const customReminderDaysRaw =
+        (formData.get("custom_reminder_days") as string) || null;
+      const fileName = (formData.get("file_name") as string) || file.name;
+      const fileType = originalFileType;
+
+      const customReminderDays = customReminderDaysRaw
+        ? Number(customReminderDaysRaw)
+        : null;
+
+      if (!category || !title.trim()) {
+        return NextResponse.json(
+          { error: "Fehlende Dokument-Metadaten" },
+          { status: 400 },
+        );
+      }
+
+      if (customReminderDaysRaw && Number.isNaN(customReminderDays)) {
+        return NextResponse.json(
+          { error: "Ungültige Erinnerungsoption" },
+          { status: 400 },
+        );
+      }
+
+      // Parse and validate metadata
+      const metadataRaw = formData.get("metadata") as string | null;
+      let metadata: Record<string, string> | null = null;
+      if (metadataRaw && metadataRaw.trim().length > 0) {
+        try {
+          const parsed = JSON.parse(metadataRaw);
+          if (
+            typeof parsed === "object" &&
+            parsed !== null &&
+            !Array.isArray(parsed)
+          ) {
+            // Validate all values are strings
+            const sanitized: Record<string, string> = {};
+            for (const [k, v] of Object.entries(parsed)) {
+              if (typeof v === "string" && v.trim().length > 0) {
+                sanitized[k] = v.trim();
+              }
+            }
+            if (Object.keys(sanitized).length > 0) {
+              metadata = sanitized;
+            }
+          }
+        } catch {
+          return NextResponse.json(
+            { error: "Ungültige Metadaten" },
+            { status: 400 },
+          );
         }
+      }
 
-        // Validate Bucket
-        const ALLOWED_BUCKETS = ['documents', 'avatars']
-        if (!ALLOWED_BUCKETS.includes(bucket)) {
-            return NextResponse.json({ error: 'Ungültiger Storage Bucket' }, { status: 400 })
+      // Validate required metadata fields
+      const metadataFields =
+        CATEGORY_METADATA_FIELDS[category as DocumentCategory];
+      if (metadataFields) {
+        const missingRequired = metadataFields
+          .filter((f) => f.required && (!metadata || !metadata[f.key]))
+          .map((f) => f.label);
+        if (missingRequired.length > 0) {
+          return NextResponse.json(
+            { error: `Pflichtfelder fehlen: ${missingRequired.join(", ")}` },
+            { status: 400 },
+          );
         }
+      }
 
-        // 2. Validate File Type
-        const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'] // Added webp for avatars
-        const originalFileType = ((formData.get('file_type') as string) || file.type || 'application/octet-stream').trim()
-
-        if (isEncrypted) {
-            if (!validTypes.includes(originalFileType)) {
-                return NextResponse.json({
-                    error: 'Ungültiges Format. Erlaubt sind PDF, JPG, PNG und WebP.'
-                }, { status: 400 })
-            }
-            if (file.type !== 'application/octet-stream') {
-                return NextResponse.json({ error: 'Ungültiges verschlüsseltes Dateiformat' }, { status: 400 })
-            }
-        } else if (!validTypes.includes(file.type)) {
-            return NextResponse.json({
-                error: 'Ungültiges Format. Erlaubt sind PDF, JPG, PNG und WebP.'
-            }, { status: 400 })
-        }
-
-        let encryptionMetadata: unknown = null
-        if (isEncrypted) {
-            if (!encryptionMetadataRaw) {
-                return NextResponse.json({ error: 'Fehlende Verschlüsselungsmetadaten' }, { status: 400 })
-            }
-
-            try {
-                encryptionMetadata = JSON.parse(encryptionMetadataRaw)
-            } catch {
-                return NextResponse.json({ error: 'Ungültige Verschlüsselungsmetadaten' }, { status: 400 })
-            }
-
-            if (!isDocumentEncryptionMetadata(encryptionMetadata)) {
-                return NextResponse.json({ error: 'Nicht unterstützte Verschlüsselungsmetadaten' }, { status: 400 })
-            }
-        }
-
-        // 3. Validate File Size (Hard Limit: 25MB)
-        const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
-        if (file.size > MAX_FILE_SIZE) {
-            return NextResponse.json({
-                error: 'Datei ist zu groß (Maximal 25 MB).'
-            }, { status: 400 })
-        }
-
-        // 4. Get User Tier & Current Storage
-        const tier = await getUserTier()
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('storage_used')
-            .eq('id', user.id)
-            .single()
-
-        const currentStorageMB = (profile?.storage_used || 0) / (1024 * 1024)
-        const fileSizeMB = file.size / (1024 * 1024)
-
-        // 5. Check Storage Limit
-        const storageCheck = canUploadFile(tier, currentStorageMB, fileSizeMB)
-        if (!storageCheck.allowed) {
-            return NextResponse.json({ error: storageCheck.reason }, { status: 403 })
-        }
-
-        if (reminderWatcherId && !tier.limits.familyDashboard) {
-            return NextResponse.json(
-                { error: 'Diese Funktion ist nur für Basic- und Premium-Nutzer verfügbar' },
-                { status: 403 }
-            )
-        }
-
-        // 6. Upload to Supabase Storage (Server-Side)
-        // We upload to the user's private folder: {user_id}/{path}/{timestamp}_{filename}
-        const timestamp = Date.now()
-        const safeFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-        // For avatars, path might be just user ID, but we enforce user isolation
-        // If bucket is avatars, path is usually just the filename or simpler structure.
-        // We trust 'path' passed from client but ensure it starts with user.id or we prepend it?
-        // Current client logic:
-        // Documents: `${user.id}/${Date.now()}.${fileExt}`
-        // Avatars: `${user.id}/${Date.now()}.${fileExt}`
-        // Client passes `path` which effectively corresponds to the full path relative to bucket root?
-        // Wait, client passes 'path' in formData.
-        // In my previous code: `const fullPath = `${user.id}/${path}/${timestamp}_${safeFilename}``
-        // This forcibly structured it.
-        // Clients might expect to control the path more.
-        // Let's adjust:
-        // If client provides 'path' meant to be the full path, we should validate it starts with user.id.
-        // OR we stick to the imposed structure.
-
-        // DECISION: To support existing client logic which generates formatted paths:
-        // We should accept 'fullPath' if possible, OR we reconstruct it.
-        // Existing client logic generates: `${user.id}/${Date.now()}.${fileExt}`.
-        // If I force `${user.id}/${path}/${timestamp}...` it changes the structure.
-
-        // Improved Logic:
-        // Client sends 'path' which effectively serves as the "folder" or "usage context".
-        // But to match client expectation of file location?
-        // Actually, client uses the returned `path` (or constructs it).
-        // If I change the path structure, I must return it to the client.
-
-        // Let's stick to the secure enforced path: `${user.id}/${path}/${timestamp}_${safeFilename}`
-        // Client currently sends: `const fileName = `${user.id}/${Date.now()}.${fileExt}``
-        // If I want to match client exactly, I'd need to let client dictate path (Insecure?).
-        // Better: Client sends `path` as just the filename or subdir?
-        // Let's treat `path` param as "target directory relative to user root".
-        // Example: Client uploads to `documents`. Path param = `identitaet`.
-        // Result: `userid/identitaet/timestamp_filename`.
-
-        // For Avatars: Path param = `profile`.
-        // Result: `userid/profile/timestamp_filename`.
-
-        // Update: my previous code used `const fullPath = `${user.id}/${path}/${timestamp}_${safeFilename}``
-        // This is good. It enforces user isolation.
-
-        const fullPath = `${user.id}/${path}/${timestamp}_${safeFilename}`
-
-        const { data: uploadData, error: uploadError } = await supabase
-            .storage
-            .from(bucket) // Use dynamic bucket
-            .upload(fullPath, file, {
-                cacheControl: '3600',
-                upsert: false
-            })
-
-        if (uploadError) {
-            console.error('Upload Error:', uploadError)
-            return NextResponse.json({ error: 'Fehler beim Upload zu Supabase' }, { status: 500 })
-        }
-
-        let insertedDocument: unknown = null
-
-        if (bucket === 'documents') {
-            const category = (formData.get('category') as string) || null
-            const subcategoryId = (formData.get('subcategory_id') as string) || null
-            const customCategoryId = (formData.get('custom_category_id') as string) || null
-            const title = (formData.get('title') as string) || ''
-            const notes = (formData.get('notes') as string) || null
-            const expiryDate = (formData.get('expiry_date') as string) || null
-            const customReminderDaysRaw = (formData.get('custom_reminder_days') as string) || null
-            const fileName = (formData.get('file_name') as string) || file.name
-            const fileType = originalFileType
-
-            const customReminderDays = customReminderDaysRaw
-                ? Number(customReminderDaysRaw)
-                : null
-
-            if (!category || !title.trim()) {
-                return NextResponse.json(
-                    { error: 'Fehlende Dokument-Metadaten' },
-                    { status: 400 }
-                )
-            }
-
-            if (customReminderDaysRaw && Number.isNaN(customReminderDays)) {
-                return NextResponse.json(
-                    { error: 'Ungültige Erinnerungsoption' },
-                    { status: 400 }
-                )
-            }
-
-            // Parse and validate metadata
-            const metadataRaw = formData.get('metadata') as string | null
-            let metadata: Record<string, string> | null = null
-            if (metadataRaw && metadataRaw.trim().length > 0) {
-                try {
-                    const parsed = JSON.parse(metadataRaw)
-                    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-                        // Validate all values are strings
-                        const sanitized: Record<string, string> = {}
-                        for (const [k, v] of Object.entries(parsed)) {
-                            if (typeof v === 'string' && v.trim().length > 0) {
-                                sanitized[k] = v.trim()
-                            }
-                        }
-                        if (Object.keys(sanitized).length > 0) {
-                            metadata = sanitized
-                        }
-                    }
-                } catch {
-                    return NextResponse.json(
-                        { error: 'Ungültige Metadaten' },
-                        { status: 400 }
-                    )
-                }
-            }
-
-            // Validate required metadata fields
-            const metadataFields = CATEGORY_METADATA_FIELDS[category as DocumentCategory]
-            if (metadataFields) {
-                const missingRequired = metadataFields
-                    .filter(f => f.required && (!metadata || !metadata[f.key]))
-                    .map(f => f.label)
-                if (missingRequired.length > 0) {
-                    return NextResponse.json(
-                        { error: `Pflichtfelder fehlen: ${missingRequired.join(', ')}` },
-                        { status: 400 }
-                    )
-                }
-            }
-
-            const { data: documentData, error: documentError } = await supabase
-                .from('documents')
-                .insert({
-                    user_id: user.id,
-                    category,
-                    subcategory_id: subcategoryId || null,
-                    custom_category_id: customCategoryId || null,
-                    title: title.trim(),
-                    notes: notes && notes.trim().length > 0 ? notes : null,
-                    file_name: fileName,
-                    file_path: fullPath,
-                    file_size: file.size,
-                    file_type: fileType,
-                    expiry_date: expiryDate || null,
-                    custom_reminder_days: customReminderDays,
-                    reminder_watcher_id: reminderWatcherId,
-                    metadata,
-                    is_encrypted: isEncrypted,
-                    encryption_version: isEncrypted ? 'e2ee-v1' : null,
-                    encryption_metadata: isEncrypted ? encryptionMetadata : null,
-                })
-                .select()
-                .single()
-
-            if (documentError) {
-                console.error('Document Insert Error:', documentError)
-                return NextResponse.json(
-                    { error: 'Fehler beim Speichern des Dokuments' },
-                    { status: 500 }
-                )
-            }
-
-            insertedDocument = documentData
-        }
-
-        await incrementRateLimit(rateLimitConfig)
-        await incrementRateLimit(ipRateLimitConfig)
-
-        // Success
-        return NextResponse.json({
-            success: true,
-            path: fullPath,
-            size: file.size,
-            document: insertedDocument,
-            message: 'Upload erfolgreich'
+      const { data: documentData, error: documentError } = await supabase
+        .from("documents")
+        .insert({
+          user_id: user.id,
+          category,
+          subcategory_id: subcategoryId || null,
+          custom_category_id: customCategoryId || null,
+          title: title.trim(),
+          notes: notes && notes.trim().length > 0 ? notes : null,
+          file_name: fileName,
+          file_path: fullPath,
+          file_size: file.size,
+          file_type: fileType,
+          expiry_date: expiryDate || null,
+          custom_reminder_days: customReminderDays,
+          reminder_watcher_id: reminderWatcherId,
+          metadata,
+          encryption_metadata: null,
+          is_encrypted: isEncrypted,
+          encryption_version: encryptionVersion ?? null,
+          wrapped_dek: wrappedDek ?? null,
+          file_iv: fileIv ?? null,
+          title_encrypted: titleEncrypted ?? null,
+          notes_encrypted: notesEncrypted ?? null,
+          file_name_encrypted: fileNameEncrypted ?? null,
         })
+        .select()
+        .single();
 
-    } catch (error: any) {
-        console.error('Server Upload Error:', error)
-        return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 })
+      if (documentError) {
+        console.error("Document Insert Error:", documentError);
+        return NextResponse.json(
+          { error: "Fehler beim Speichern des Dokuments" },
+          { status: 500 },
+        );
+      }
+
+      insertedDocument = documentData;
     }
+
+    await incrementRateLimit(rateLimitConfig);
+    await incrementRateLimit(ipRateLimitConfig);
+
+    // Success
+    return NextResponse.json({
+      success: true,
+      path: fullPath,
+      size: file.size,
+      document: insertedDocument,
+      message: "Upload erfolgreich",
+    });
+  } catch (error: any) {
+    console.error("Server Upload Error:", error);
+    return NextResponse.json(
+      { error: "Interner Serverfehler" },
+      { status: 500 },
+    );
+  }
 }

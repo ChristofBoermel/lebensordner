@@ -1,154 +1,212 @@
-const ENCRYPTION_VERSION = 'e2ee-v1'
-const DEFAULT_PBKDF2_ITERATIONS = 250000
-
-export interface DocumentEncryptionMetadata {
-  version: typeof ENCRYPTION_VERSION
-  algorithm: 'AES-GCM'
-  kdf: 'PBKDF2'
-  hash: 'SHA-256'
-  iterations: number
-  salt: string
-  iv: string
-  originalMimeType: string
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let binary = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+export const toBase64 = (buf: ArrayBuffer | Uint8Array): string => {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
   }
-  return btoa(binary)
-}
+  return btoa(binary);
+};
 
-function fromBase64(base64: string): Uint8Array {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
+export const fromBase64 = (value: string): Uint8Array<ArrayBuffer> => {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
   }
-  return bytes
-}
+  return bytes;
+};
 
+export const generateDEK = async (): Promise<CryptoKey> =>
+  globalThis.crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
+    "encrypt",
+    "decrypt",
+  ]);
 
-async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
-  const blobWithArrayBuffer = blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> }
-  if (typeof blobWithArrayBuffer.arrayBuffer === 'function') {
-    return blobWithArrayBuffer.arrayBuffer()
+export const encryptFile = async (
+  buffer: ArrayBuffer | ArrayBufferView,
+  dek: CryptoKey,
+  iv?: Uint8Array,
+  aad?: Uint8Array,
+): Promise<{ ciphertext: ArrayBuffer; iv: string }> => {
+  const actualIv = iv ?? globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const data = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
+  const params: AesGcmParams = {
+    name: "AES-GCM",
+    iv: actualIv as Uint8Array<ArrayBuffer>,
+  };
+  if (aad) {
+    params.additionalData = aad as Uint8Array<ArrayBuffer>;
   }
+  const ciphertext = await globalThis.crypto.subtle.encrypt(
+    params,
+    dek,
+    data,
+  );
+  return {
+    ciphertext,
+    iv: toBase64(actualIv),
+  };
+};
 
-  if (typeof FileReader !== 'undefined') {
-    return new Promise<ArrayBuffer>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as ArrayBuffer)
-      reader.onerror = () => reject(reader.error ?? new Error('Failed to read blob'))
-      reader.readAsArrayBuffer(blob)
-    })
+export const decryptFile = async (
+  ciphertext: ArrayBuffer,
+  dek: CryptoKey,
+  iv: string,
+  aad?: Uint8Array,
+): Promise<ArrayBuffer> => {
+  const ivBytes = fromBase64(iv);
+  const params: AesGcmParams = {
+    name: "AES-GCM",
+    iv: ivBytes as Uint8Array<ArrayBuffer>,
+  };
+  if (aad) {
+    params.additionalData = aad as Uint8Array<ArrayBuffer>;
   }
+  return globalThis.crypto.subtle.decrypt(params, dek, ciphertext);
+};
 
-  return new Response(blob).arrayBuffer()
-}
+export const encryptField = async (
+  value: string,
+  dek: CryptoKey,
+  aad?: Uint8Array,
+): Promise<string> => {
+  const plaintext = new TextEncoder().encode(value);
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const params: AesGcmParams = {
+    name: "AES-GCM",
+    iv: iv as Uint8Array<ArrayBuffer>,
+  };
+  if (aad) {
+    params.additionalData = aad as Uint8Array<ArrayBuffer>;
+  }
+  const ciphertext = await globalThis.crypto.subtle.encrypt(
+    params,
+    dek,
+    plaintext,
+  );
+  const payload = JSON.stringify({
+    iv: toBase64(iv),
+    ct: toBase64(ciphertext),
+  });
+  return toBase64(new TextEncoder().encode(payload));
+};
 
-function randomBytes(length: number): Uint8Array {
-  const bytes = new Uint8Array(length)
-  crypto.getRandomValues(bytes)
-  return bytes
-}
+export const decryptField = async (
+  encoded: string,
+  dek: CryptoKey,
+  aad?: Uint8Array,
+): Promise<string> => {
+  const payloadBytes = fromBase64(encoded);
+  const payloadText = new TextDecoder().decode(payloadBytes);
+  const payload = JSON.parse(payloadText) as { iv: string; ct: string };
+  const iv = fromBase64(payload.iv);
+  const params: AesGcmParams = {
+    name: "AES-GCM",
+    iv: iv as Uint8Array<ArrayBuffer>,
+  };
+  if (aad) {
+    params.additionalData = aad as Uint8Array<ArrayBuffer>;
+  }
+  const plaintext = await globalThis.crypto.subtle.decrypt(
+    params,
+    dek,
+    fromBase64(payload.ct),
+  );
+  return new TextDecoder().decode(plaintext);
+};
 
-async function deriveAesKey(passphrase: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
-  const encoder = new TextEncoder()
-  const baseKey = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(passphrase),
-    { name: 'PBKDF2' },
+export const deriveMasterKey = async (
+  passphrase: string,
+  salt: Uint8Array,
+  params: { iterations: number; hash: string },
+): Promise<CryptoKey> => {
+  const baseKey = await globalThis.crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(passphrase),
+    "PBKDF2",
     false,
-    ['deriveKey'],
-  )
-
-  return crypto.subtle.deriveKey(
+    ["deriveKey"],
+  );
+  return globalThis.crypto.subtle.deriveKey(
     {
-      name: 'PBKDF2',
-      salt: salt as BufferSource,
-      iterations,
-      hash: 'SHA-256',
+      name: "PBKDF2",
+      salt: salt as Uint8Array<ArrayBuffer>,
+      iterations: params.iterations,
+      hash: params.hash,
     },
     baseKey,
-    { name: 'AES-GCM', length: 256 },
+    { name: "AES-KW", length: 256 },
     false,
-    ['encrypt', 'decrypt'],
-  )
-}
+    ["wrapKey", "unwrapKey"],
+  );
+};
 
-export async function encryptDocumentFile(file: File, passphrase: string): Promise<{
-  encryptedFile: File
-  metadata: DocumentEncryptionMetadata
-}> {
-  const salt = randomBytes(16)
-  const iv = randomBytes(12)
-  const iterations = DEFAULT_PBKDF2_ITERATIONS
-  const key = await deriveAesKey(passphrase, salt, iterations)
+export const wrapKey = async (
+  keyToWrap: CryptoKey,
+  wrappingKey: CryptoKey,
+): Promise<string> => {
+  const wrapped = await globalThis.crypto.subtle.wrapKey(
+    "raw",
+    keyToWrap,
+    wrappingKey,
+    { name: "AES-KW" },
+  );
+  return toBase64(wrapped);
+};
 
-  const plainBuffer = await blobToArrayBuffer(file)
-  const cipherBuffer = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: iv as BufferSource },
-    key,
-    plainBuffer,
-  )
+export const unwrapKey = async (
+  wrapped: string,
+  wrappingKey: CryptoKey,
+  targetAlg: "AES-GCM" | "AES-KW",
+): Promise<CryptoKey> => {
+  const wrappedBytes = fromBase64(wrapped);
+  const algorithm =
+    targetAlg === "AES-GCM"
+      ? { name: "AES-GCM", length: 256 }
+      : { name: "AES-KW", length: 256 };
+  const usages: KeyUsage[] =
+    targetAlg === "AES-GCM" ? ["encrypt", "decrypt"] : ["wrapKey", "unwrapKey"];
 
-  const encryptedFile = new File([new Uint8Array(cipherBuffer)], 'encrypted.bin', {
-    type: 'application/octet-stream',
-    lastModified: Date.now(),
-  })
+  return globalThis.crypto.subtle.unwrapKey(
+    "raw",
+    wrappedBytes,
+    wrappingKey,
+    { name: "AES-KW" },
+    algorithm,
+    true,
+    usages,
+  );
+};
 
-  return {
-    encryptedFile,
-    metadata: {
-      version: ENCRYPTION_VERSION,
-      algorithm: 'AES-GCM',
-      kdf: 'PBKDF2',
-      hash: 'SHA-256',
-      iterations,
-      salt: toBase64(salt),
-      iv: toBase64(iv),
-      originalMimeType: file.type || 'application/octet-stream',
-    },
+export const generateRecoveryKey = async (): Promise<string> => {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+};
+
+export const generateRelationshipKey = async (): Promise<string> => {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+};
+
+export const importRawHexKey = async (
+  hex: string,
+  usage: KeyUsage[],
+): Promise<CryptoKey> => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = Number.parseInt(hex.slice(i, i + 2), 16);
   }
-}
-
-export async function decryptDocumentBlob(
-  encryptedBlob: Blob,
-  passphrase: string,
-  metadata: DocumentEncryptionMetadata,
-): Promise<Blob> {
-  if (metadata.version !== ENCRYPTION_VERSION) {
-    throw new Error('Unsupported encryption version')
-  }
-
-  const salt = fromBase64(metadata.salt)
-  const iv = fromBase64(metadata.iv)
-  const key = await deriveAesKey(passphrase, salt, metadata.iterations)
-
-  const encryptedBuffer = await blobToArrayBuffer(encryptedBlob)
-  const plainBuffer = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: iv as BufferSource },
-    key,
-    encryptedBuffer,
-  )
-
-  return new Blob([new Uint8Array(plainBuffer)], { type: metadata.originalMimeType || 'application/octet-stream' })
-}
-
-export function isDocumentEncryptionMetadata(value: unknown): value is DocumentEncryptionMetadata {
-  if (!value || typeof value !== 'object') return false
-  const candidate = value as Partial<DocumentEncryptionMetadata>
-  return (
-    candidate.version === ENCRYPTION_VERSION &&
-    candidate.algorithm === 'AES-GCM' &&
-    candidate.kdf === 'PBKDF2' &&
-    candidate.hash === 'SHA-256' &&
-    typeof candidate.iterations === 'number' &&
-    typeof candidate.salt === 'string' &&
-    typeof candidate.iv === 'string' &&
-    typeof candidate.originalMimeType === 'string'
-  )
-}
+  return globalThis.crypto.subtle.importKey(
+    "raw",
+    bytes,
+    { name: "AES-KW", length: 256 },
+    true,
+    usage,
+  );
+};

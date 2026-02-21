@@ -28,9 +28,6 @@ import {
 } from 'lucide-react'
 import type { DocumentCategory } from '@/types/database'
 import { CATEGORY_METADATA_FIELDS } from '@/types/database'
-import { decryptDocumentBlob, isDocumentEncryptionMetadata } from '@/lib/security/document-e2ee'
-
-const DOCUMENT_VAULT_PASSPHRASE_KEY = 'document_vault_passphrase'
 
 interface DocumentPreviewProps {
   isOpen: boolean
@@ -46,12 +43,11 @@ interface DocumentPreviewProps {
     notes?: string | null
     category?: string
     metadata?: Record<string, string> | null
-    is_encrypted?: boolean
-    encryption_metadata?: unknown
   } | null
+  decryptedBlob?: Blob | null
 }
 
-export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewProps) {
+export function DocumentPreview({ isOpen, onClose, document, decryptedBlob }: DocumentPreviewProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -62,6 +58,7 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
 
   useEffect(() => {
     let generatedBlobUrl: string | null = null
+    let decryptedBlobUrl: string | null = null
 
     if (!document || !isOpen) {
       setPreviewUrl(null)
@@ -74,58 +71,20 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
       setError(null)
 
       try {
+        if (decryptedBlob) {
+          decryptedBlobUrl = URL.createObjectURL(decryptedBlob)
+          setPreviewUrl(decryptedBlobUrl)
+          setIsLoading(false)
+          return
+        }
+
         const { data, error } = await supabase
           .storage
           .from('documents')
           .createSignedUrl(document.file_path, 3600) // 1 hour expiry
 
         if (error) throw error
-
-        if (!document.is_encrypted) {
-          setPreviewUrl(data.signedUrl)
-          return
-        }
-
-        if (!isDocumentEncryptionMetadata(document.encryption_metadata)) {
-          throw new Error('Invalid encryption metadata')
-        }
-
-        const existing = window.sessionStorage.getItem(DOCUMENT_VAULT_PASSPHRASE_KEY)
-        let prompted = existing || ''
-
-        if (!prompted && (process.env.NODE_ENV as string) === 'test') {
-          prompted = 'test-document-passphrase'
-          window.sessionStorage.setItem(DOCUMENT_VAULT_PASSPHRASE_KEY, prompted)
-        }
-
-        if (!prompted) {
-          try {
-            prompted = window.prompt('Bitte geben Sie Ihr Dokumenten-Passwort ein.') || ''
-          } catch {
-            prompted = 'test-document-passphrase'
-          }
-        }
-        if (!prompted.trim() && (process.env.NODE_ENV as string) === 'test') {
-          prompted = 'test-document-passphrase'
-        }
-
-        if (!prompted.trim()) {
-          throw new Error('Missing passphrase')
-        }
-        if (!existing) {
-          window.sessionStorage.setItem(DOCUMENT_VAULT_PASSPHRASE_KEY, prompted.trim())
-        }
-
-        const encryptedResponse = await fetch(data.signedUrl)
-        const encryptedBlob = await encryptedResponse.blob()
-        const decryptedBlob = await decryptDocumentBlob(
-          encryptedBlob,
-          prompted.trim(),
-          document.encryption_metadata,
-        )
-
-        generatedBlobUrl = URL.createObjectURL(decryptedBlob)
-        setPreviewUrl(generatedBlobUrl)
+        setPreviewUrl(data.signedUrl)
       } catch (err) {
         console.error('Preview error:', err)
         setError('Vorschau konnte nicht geladen werden')
@@ -140,8 +99,11 @@ export function DocumentPreview({ isOpen, onClose, document }: DocumentPreviewPr
       if (generatedBlobUrl) {
         URL.revokeObjectURL(generatedBlobUrl)
       }
+      if (decryptedBlobUrl) {
+        URL.revokeObjectURL(decryptedBlobUrl)
+      }
     }
-  }, [document, isOpen, supabase])
+  }, [document, isOpen, decryptedBlob, supabase])
 
   // Reset zoom and rotation when document changes
   useEffect(() => {

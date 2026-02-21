@@ -3,7 +3,8 @@
 import { useState, useEffect, use } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Loader2, AlertTriangle, Leaf, XCircle, Eye, ArrowLeft } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Loader2, AlertTriangle, Leaf, XCircle, Eye, ArrowLeft, Lock } from 'lucide-react'
 import Link from 'next/link'
 import { DocumentViewer } from '@/components/ui/document-viewer'
 import type { DocumentMetadata } from '@/types/database'
@@ -16,34 +17,128 @@ interface ViewData {
   expiresAt: string
 }
 
+interface MetadataDoc {
+  id: string
+  category: string
+  file_type: string
+  is_encrypted: boolean
+  wrappedDekForShare?: string
+  fileIv?: string
+  fileNameEncrypted?: string
+  signedUrl: string
+}
+
 export default function ViewPage({ params }: { params: Promise<{ token: string }> }) {
   const resolvedParams = use(params)
   const [viewData, setViewData] = useState<ViewData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [metadataDocuments, setMetadataDocuments] = useState<MetadataDoc[]>([])
+  const [requiresClientDecryption, setRequiresClientDecryption] = useState(false)
+  const [expiresAt, setExpiresAt] = useState<string | null>(null)
+  const [metadataLoading, setMetadataLoading] = useState(true)
+  const [metadataError, setMetadataError] = useState<string | null>(null)
+  const [viewLoading, setViewLoading] = useState(false)
+  const [shareKey, setShareKey] = useState('')
+  const [manualKeyInput, setManualKeyInput] = useState('')
+  const [objectUrls, setObjectUrls] = useState<Record<string, string>>({})
+  const [decryptingIds, setDecryptingIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.slice(1)
+      if (hash) {
+        setShareKey(hash)
+      }
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+
+    async function fetchMetadata() {
+      try {
+        setMetadataLoading(true)
+        setMetadataError(null)
+        const response = await fetch(`/api/download-link/${resolvedParams.token}/metadata`)
+        const data = await response.json()
+
+        if (!response.ok) {
+          setMetadataError(data.error || 'Fehler beim Laden der Dokumente')
+          return
+        }
+
+        setRequiresClientDecryption(!!data.requiresClientDecryption)
+        setMetadataDocuments(data.documents || [])
+        setExpiresAt(data.expiresAt || null)
+      } catch (err: any) {
+        setMetadataError(err.message || 'Verbindungsfehler')
+      } finally {
+        setMetadataLoading(false)
+      }
+    }
+
+    fetchMetadata()
+  }, [resolvedParams.token])
+
+  useEffect(() => {
+    if (metadataLoading || metadataError) return
+    if (requiresClientDecryption) {
+      setViewData(null)
+      return
+    }
+
     async function fetchDocuments() {
       try {
+        setViewLoading(true)
         const response = await fetch(`/api/download-link/${resolvedParams.token}/view`)
         const data = await response.json()
 
         if (!response.ok) {
-          setError(data.error || 'Fehler beim Laden der Dokumente')
+          setMetadataError(data.error || 'Fehler beim Laden der Dokumente')
           return
         }
 
         setViewData(data)
       } catch (err: any) {
-        setError(err.message || 'Verbindungsfehler')
+        setMetadataError(err.message || 'Verbindungsfehler')
       } finally {
-        setIsLoading(false)
+        setViewLoading(false)
       }
     }
-    fetchDocuments()
-  }, [resolvedParams.token])
 
-  if (isLoading) {
+    fetchDocuments()
+  }, [metadataLoading, metadataError, requiresClientDecryption, resolvedParams.token])
+
+  useEffect(() => {
+    return () => {
+      Object.values(objectUrls).forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [objectUrls])
+
+  const handleDecryptDocument = async (doc: MetadataDoc) => {
+    if (decryptingIds.has(doc.id) || objectUrls[doc.id]) {
+      return
+    }
+
+    setDecryptingIds((prev) => new Set([...prev, doc.id]))
+    try {
+      const { importRawHexKey, unwrapKey, decryptFile } = await import('@/lib/security/document-e2ee')
+      const shareKeyAes = await importRawHexKey(shareKey, ['wrapKey', 'unwrapKey'])
+      const response = await fetch(doc.signedUrl)
+      const arrayBuffer = await response.arrayBuffer()
+      const dek = await unwrapKey(doc.wrappedDekForShare!, shareKeyAes, 'AES-GCM')
+      const plaintext = await decryptFile(arrayBuffer, dek, doc.fileIv!)
+      const blob = new Blob([plaintext], { type: doc.file_type || 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      setObjectUrls((prev) => ({ ...prev, [doc.id]: url }))
+    } catch (err) {
+      setMetadataError('Entschlüsselung fehlgeschlagen. Bitte prüfen Sie den Schlüssel.')
+    } finally {
+      setDecryptingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(doc.id)
+        return next
+      })
+    }
+  }
+
+  if (metadataLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-cream-50 to-cream-100 flex items-center justify-center p-4">
         <Card className="max-w-lg w-full">
@@ -58,7 +153,7 @@ export default function ViewPage({ params }: { params: Promise<{ token: string }
     )
   }
 
-  if (error) {
+  if (metadataError) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-cream-50 to-cream-100 flex items-center justify-center p-4">
         <Card className="max-w-lg w-full">
@@ -75,12 +170,12 @@ export default function ViewPage({ params }: { params: Promise<{ token: string }
                 <XCircle className="w-8 h-8 text-red-600" />
               </div>
               <h3 className="text-lg font-semibold text-warmgray-900 mb-2">
-                {error.includes('abgelaufen') ? 'Link abgelaufen' :
-                 error.includes('verwendet') ? 'Link bereits verwendet' :
+                {metadataError.includes('abgelaufen') ? 'Link abgelaufen' :
+                 metadataError.includes('verwendet') ? 'Link bereits verwendet' :
                  'Zugriff nicht möglich'}
               </h3>
               <p className="text-warmgray-600 mb-6">
-                {error}
+                {metadataError}
               </p>
             </div>
 
@@ -99,7 +194,7 @@ export default function ViewPage({ params }: { params: Promise<{ token: string }
     )
   }
 
-  if (!viewData || viewData.documents.length === 0) {
+  if (!requiresClientDecryption && viewData && viewData.documents.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-cream-50 to-cream-100 flex items-center justify-center p-4">
         <Card className="max-w-lg w-full">
@@ -152,30 +247,166 @@ export default function ViewPage({ params }: { params: Promise<{ token: string }
         </div>
 
         {/* Expiry notice */}
-        {viewData.expiresAt && (
+        {expiresAt && (
           <Card className="border-amber-200 bg-amber-50 mb-6">
             <CardContent className="py-3">
               <p className="text-sm text-amber-700 text-center">
                 <AlertTriangle className="w-4 h-4 inline mr-1" />
                 Dieser Link ist gültig bis:{' '}
-                {new Date(viewData.expiresAt).toLocaleDateString('de-DE')}{' '}
-                {new Date(viewData.expiresAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
+                {new Date(expiresAt).toLocaleDateString('de-DE')}{' '}
+                {new Date(expiresAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
               </p>
             </CardContent>
           </Card>
         )}
 
-        {/* Document Viewer */}
-        <DocumentViewer
-          documents={viewData.documents}
-          ownerName={viewData.ownerName}
-          ownerTier={viewData.ownerTier}
-          categories={viewData.categories}
-          viewMode="page"
-          showHeader={true}
-          showInfoBanner={true}
-          streamUrlBase={`/api/download-link/${resolvedParams.token}/view/stream`}
-        />
+        {requiresClientDecryption && !shareKey && (
+          <Card className="border-amber-200 bg-amber-50 mb-6">
+            <CardContent className="py-6 space-y-4">
+              <div className="flex items-start gap-3 text-amber-800">
+                <Lock className="w-5 h-5 mt-0.5" />
+                <div>
+                  <p className="font-medium">Zugriffsschlüssel erforderlich</p>
+                  <p className="text-sm text-amber-700">
+                    Geben Sie den Schlüssel aus der E-Mail ein, um die Dokumente zu entschlüsseln.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={manualKeyInput}
+                  onChange={(event) => setManualKeyInput(event.target.value)}
+                  placeholder="Zugriffsschlüssel eingeben"
+                  className="font-mono text-sm"
+                />
+                <Button
+                  onClick={() => setShareKey(manualKeyInput.trim())}
+                  disabled={!manualKeyInput.trim()}
+                >
+                  Zugang bestätigen
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {requiresClientDecryption && shareKey && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {metadataDocuments.map((doc) => {
+              const objectUrl = objectUrls[doc.id]
+              const isPdf = doc.file_type?.includes('pdf')
+              const isImage = doc.file_type?.startsWith('image/')
+              const isDecrypting = decryptingIds.has(doc.id)
+
+              return (
+                <Card key={doc.id}>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      {doc.is_encrypted && <Lock className="w-4 h-4 text-sage-600" />}
+                      Dokument
+                    </CardTitle>
+                    <CardDescription>
+                      {doc.is_encrypted ? 'Verschlüsselt' : 'Unverschlüsselt'}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {doc.is_encrypted ? (
+                      objectUrl ? (
+                        isPdf ? (
+                          <iframe
+                            src={objectUrl}
+                            className="w-full h-80 rounded-md border"
+                            title="Dokument Vorschau"
+                          />
+                        ) : isImage ? (
+                          <img
+                            src={objectUrl}
+                            alt="Dokument Vorschau"
+                            className="w-full h-80 object-contain rounded-md border"
+                          />
+                        ) : (
+                          <a
+                            href={objectUrl}
+                            className="text-sage-700 underline text-sm"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Datei öffnen
+                          </a>
+                        )
+                      ) : (
+                        <Button
+                          onClick={() => handleDecryptDocument(doc)}
+                          disabled={isDecrypting}
+                          className="w-full"
+                        >
+                          {isDecrypting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                              Entschlüsselt...
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="w-4 h-4 mr-2" />
+                              Entschlüsseln
+                            </>
+                          )}
+                        </Button>
+                      )
+                    ) : (
+                      isPdf ? (
+                        <iframe
+                          src={doc.signedUrl}
+                          className="w-full h-80 rounded-md border"
+                          title="Dokument Vorschau"
+                        />
+                      ) : isImage ? (
+                        <img
+                          src={doc.signedUrl}
+                          alt="Dokument Vorschau"
+                          className="w-full h-80 object-contain rounded-md border"
+                        />
+                      ) : (
+                        <a
+                          href={doc.signedUrl}
+                          className="text-sage-700 underline text-sm"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Datei öffnen
+                        </a>
+                      )
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+
+        {!requiresClientDecryption && viewLoading && (
+          <Card className="border-sage-200 bg-sage-50">
+            <CardContent className="py-8">
+              <div className="flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-sage-600 mr-2" />
+                <span className="text-warmgray-600">Dokumente werden geladen...</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {!requiresClientDecryption && viewData && (
+          <DocumentViewer
+            documents={viewData.documents}
+            ownerName={viewData.ownerName}
+            ownerTier={viewData.ownerTier}
+            categories={viewData.categories}
+            viewMode="page"
+            showHeader={true}
+            showInfoBanner={true}
+            streamUrlBase={`/api/download-link/${resolvedParams.token}/view/stream`}
+          />
+        )}
 
         {/* Footer */}
         <div className="mt-12 text-center">
