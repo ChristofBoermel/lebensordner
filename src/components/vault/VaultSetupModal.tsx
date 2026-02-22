@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -26,7 +26,12 @@ export function VaultSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose:
   const [recoveryKeyHex, setRecoveryKeyHex] = useState('')
   const [savedChecked, setSavedChecked] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isTimedOut, setIsTimedOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const controllerRef = useRef<AbortController | null>(null)
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const isMountedRef = useRef(true)
+  const isTimedOutRef = useRef(false)
 
   useEffect(() => {
     if (!isOpen) {
@@ -48,13 +53,40 @@ export function VaultSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose:
 
   useEffect(() => {
     if (step === 4) {
+      isTimedOutRef.current = false
+      setIsTimedOut(false)
+      controllerRef.current?.abort()
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
+      controllerRef.current = new AbortController()
+      timerRef.current = setTimeout(() => {
+        isTimedOutRef.current = true
+        setIsTimedOut(true)
+        controllerRef.current?.abort()
+      }, 30000)
       setIsLoading(true)
       setError(null)
       ;(async () => {
         try {
-          await vault.setup(passphrase, recoveryKeyHex)
+          const controller = controllerRef.current
+          if (!controller) return
+          await vault.setup(passphrase, recoveryKeyHex, controller.signal)
+          if (!isMountedRef.current) return
+          if (timerRef.current) {
+            clearTimeout(timerRef.current)
+          }
           setIsLoading(false)
         } catch (err: any) {
+          if (!isMountedRef.current) return
+          if (err?.name === 'AbortError') {
+            if (isTimedOutRef.current) {
+              setIsLoading(false)
+              return
+            }
+            onClose()
+            return
+          }
           setIsLoading(false)
           setError(err?.message || 'Fehler beim Einrichten des Tresors')
           setStep(2)
@@ -62,6 +94,27 @@ export function VaultSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose:
       })()
     }
   }, [step, vault, passphrase, recoveryKeyHex])
+
+  useEffect(() => {
+    if (!isOpen) {
+      controllerRef.current?.abort()
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
+      controllerRef.current = null
+      timerRef.current = null
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      controllerRef.current?.abort()
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
+    }
+  }, [])
 
   const classes = [
     /[a-z]/.test(passphrase),
@@ -89,6 +142,46 @@ export function VaultSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose:
   const formattedRecoveryKey = recoveryKeyHex
     ? recoveryKeyHex.replace(/(.{8})/g, '$1 ').trim()
     : ''
+
+  const handleRetry = async () => {
+    isTimedOutRef.current = false
+    setIsTimedOut(false)
+    controllerRef.current?.abort()
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+    }
+    controllerRef.current = new AbortController()
+    timerRef.current = setTimeout(() => {
+      isTimedOutRef.current = true
+      setIsTimedOut(true)
+      controllerRef.current?.abort()
+    }, 30000)
+    setIsLoading(true)
+    setError(null)
+    try {
+      const controller = controllerRef.current
+      if (!controller) return
+      await vault.setup(passphrase, recoveryKeyHex, controller.signal)
+      if (!isMountedRef.current) return
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
+      setIsLoading(false)
+    } catch (err: any) {
+      if (!isMountedRef.current) return
+      if (err?.name === 'AbortError') {
+        if (isTimedOutRef.current) {
+          setIsLoading(false)
+          return
+        }
+        onClose()
+        return
+      }
+      setIsLoading(false)
+      setError(err?.message || 'Fehler beim Einrichten des Tresors')
+      setStep(2)
+    }
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
@@ -231,15 +324,43 @@ export function VaultSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose:
             </DialogHeader>
             <div className="mt-6 flex items-center gap-3 text-sm text-warmgray-700">
               {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isLoading ? 'Tresor wird eingerichtet...' : '✅ Tresor eingerichtet ✓'}
+              {isLoading ? 'Tresor wird eingerichtet...' : 'Tresor eingerichtet'}
             </div>
-            {error && (
+            {!isLoading && isTimedOut && (
+              <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                Die Verbindung hat zu lange gedauert. Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.
+              </div>
+            )}
+            {!isLoading && error && !isTimedOut && (
               <div className="mt-4 text-sm text-red-600">{error}</div>
             )}
             <DialogFooter className="mt-6">
-              <Button onClick={onClose} disabled={isLoading}>
-                Schließen
-              </Button>
+              {isLoading && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    controllerRef.current?.abort()
+                    onClose()
+                  }}
+                >
+                  Abbrechen
+                </Button>
+              )}
+              {!isLoading && isTimedOut && (
+                <>
+                  <Button variant="outline" onClick={onClose}>
+                    Abbrechen
+                  </Button>
+                  <Button onClick={handleRetry}>
+                    Erneut versuchen
+                  </Button>
+                </>
+              )}
+              {!isLoading && !isTimedOut && !error && (
+                <Button onClick={onClose}>
+                  Schließen
+                </Button>
+              )}
             </DialogFooter>
           </>
         )}

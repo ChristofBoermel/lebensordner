@@ -56,6 +56,9 @@ import Cookies from 'js-cookie'
 import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
 import Link from 'next/link'
 import { SecurityActivityLog } from '@/components/settings/security-activity-log'
+import { useVault } from '@/lib/vault/VaultContext'
+import { VaultSetupModal } from '@/components/vault/VaultSetupModal'
+import { VaultUnlockModal } from '@/components/vault/VaultUnlockModal'
 
 const GDPRExportDialog = dynamic(
   () => import('@/components/settings/gdpr-export-dialog').then((mod) => ({ default: mod.GDPRExportDialog })),
@@ -122,6 +125,11 @@ export default function EinstellungenPage() {
   const [consentHistory, setConsentHistory] = useState<ConsentRecord[]>([])
   const [showConsentHistory, setShowConsentHistory] = useState(false)
   const [isLoadingConsent, setIsLoadingConsent] = useState(false)
+
+  // Vault state
+  const [isVaultSetupModalOpen, setIsVaultSetupModalOpen] = useState(false)
+  const [isVaultUnlockModalOpen, setIsVaultUnlockModalOpen] = useState(false)
+  const vault = useVault()
 
   const router = useRouter()
   const routerRef = useRef(router)
@@ -799,6 +807,52 @@ export default function EinstellungenPage() {
                     <Smartphone className="mr-2 h-4 w-4" />{is2FAEnabled ? 'Verwalten' : 'Aktivieren'}
                   </Button>
                 </div>
+                <Separator />
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="font-medium text-warmgray-900">Dokument-Tresor</p>
+                    <p className="text-sm text-warmgray-500">
+                      {!vault.isSetUp && 'Noch nicht eingerichtet'}
+                      {vault.isSetUp && !vault.isUnlocked && 'Eingerichtet, aber aktuell gesperrt'}
+                      {vault.isSetUp && vault.isUnlocked && 'Aktiv — Dokumente können verschlüsselt werden'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!vault.isSetUp && (
+                      <>
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-warmgray-100 text-warmgray-600">
+                          Nicht eingerichtet
+                        </span>
+                        <Button size="lg" onClick={() => setIsVaultSetupModalOpen(true)}>
+                          Tresor einrichten
+                        </Button>
+                      </>
+                    )}
+                    {vault.isSetUp && !vault.isUnlocked && (
+                      <>
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                          Eingerichtet ✓
+                        </span>
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                          Gesperrt 🔒
+                        </span>
+                        <Button size="lg" onClick={() => setIsVaultUnlockModalOpen(true)}>
+                          Entsperren
+                        </Button>
+                      </>
+                    )}
+                    {vault.isSetUp && vault.isUnlocked && (
+                      <>
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                          Entsperrt 🔓
+                        </span>
+                        <Button variant="outline" size="lg" onClick={() => vault.lock()}>
+                          Sperren
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </>
@@ -919,6 +973,8 @@ export default function EinstellungenPage() {
         </Dialog>
         <TwoFactorSetup isOpen={is2FADialogOpen} onClose={() => setIs2FADialogOpen(false)} isEnabled={is2FAEnabled} onStatusChange={setIs2FAEnabled} />
         <DeleteAccountModal open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen} onDeleted={handleAccountDeleted} />
+        <VaultSetupModal isOpen={isVaultSetupModalOpen} onClose={() => setIsVaultSetupModalOpen(false)} />
+        <VaultUnlockModal isOpen={isVaultUnlockModalOpen} onClose={() => setIsVaultUnlockModalOpen(false)} />
       </div>
     )
   }
@@ -1233,6 +1289,65 @@ export default function EinstellungenPage() {
 
       {/* Security & Activity */}
       <SecurityActivityLog />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lock className="w-5 h-5 text-sage-600" />
+            Dokument-Tresor
+          </CardTitle>
+          <CardDescription>
+            Ende-zu-Ende-Verschlüsselung für Ihre Dokumente. Nur Sie haben Zugriff.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Tresor-Status</p>
+              <p className="text-sm text-warmgray-500">
+                {!vault.isSetUp && 'Noch nicht eingerichtet'}
+                {vault.isSetUp && !vault.isUnlocked && 'Eingerichtet, aber aktuell gesperrt'}
+                {vault.isSetUp && vault.isUnlocked && 'Aktiv — Dokumente können verschlüsselt werden'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {!vault.isSetUp && (
+                <>
+                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-warmgray-100 text-warmgray-600">
+                    Nicht eingerichtet
+                  </span>
+                  <Button onClick={() => setIsVaultSetupModalOpen(true)}>
+                    Tresor einrichten
+                  </Button>
+                </>
+              )}
+              {vault.isSetUp && !vault.isUnlocked && (
+                <>
+                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                    Eingerichtet ✓
+                  </span>
+                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                    Gesperrt 🔒
+                  </span>
+                  <Button onClick={() => setIsVaultUnlockModalOpen(true)}>
+                    Entsperren
+                  </Button>
+                </>
+              )}
+              {vault.isSetUp && vault.isUnlocked && (
+                <>
+                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                    Entsperrt 🔓
+                  </span>
+                  <Button variant="outline" onClick={() => vault.lock()}>
+                    Sperren
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Privacy & Data */}
       <Card id="privacy">
@@ -1661,6 +1776,8 @@ export default function EinstellungenPage() {
         onOpenChange={setIsDeleteDialogOpen}
         onDeleted={handleAccountDeleted}
       />
+      <VaultSetupModal isOpen={isVaultSetupModalOpen} onClose={() => setIsVaultSetupModalOpen(false)} />
+      <VaultUnlockModal isOpen={isVaultUnlockModalOpen} onClose={() => setIsVaultUnlockModalOpen(false)} />
 
       {/* Health Consent Withdrawal Dialog */}
       <HealthConsentWithdrawalDialog

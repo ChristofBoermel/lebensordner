@@ -111,7 +111,6 @@ interface UploadedDocument {
   title: string;
   file_path: string;
   is_encrypted?: boolean;
-  encryption_metadata?: unknown;
   wrapped_dek?: string | null;
   file_iv?: string | null;
   file_type?: string | null;
@@ -385,7 +384,7 @@ export default function NotfallPage() {
                 const { data: docs } = await supabase
                   .from("documents")
                   .select(
-                    "id, title, file_path, is_encrypted, encryption_metadata, wrapped_dek, file_iv, file_type, file_name_encrypted",
+                    "id, title, file_path, is_encrypted, wrapped_dek, file_iv, file_type, file_name_encrypted",
                   )
                   .in("id", docIds);
 

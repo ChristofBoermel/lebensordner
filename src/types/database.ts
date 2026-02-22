@@ -273,7 +273,6 @@ export interface Database {
           metadata: Record<string, string> | null
           is_encrypted: boolean
           encryption_version: string | null
-          encryption_metadata: Json | null
           wrapped_dek: string | null
           file_iv: string | null
           title_encrypted: string | null
@@ -302,7 +301,6 @@ export interface Database {
           metadata?: Record<string, string> | null
           is_encrypted?: boolean
           encryption_version?: string | null
-          encryption_metadata?: Json | null
           wrapped_dek?: string | null
           file_iv?: string | null
           title_encrypted?: string | null
@@ -331,7 +329,6 @@ export interface Database {
           metadata?: Record<string, string> | null
           is_encrypted?: boolean
           encryption_version?: string | null
-          encryption_metadata?: Json | null
           wrapped_dek?: string | null
           file_iv?: string | null
           title_encrypted?: string | null

@@ -346,7 +346,6 @@ export async function POST(req: NextRequest) {
           custom_reminder_days: customReminderDays,
           reminder_watcher_id: reminderWatcherId,
           metadata,
-          encryption_metadata: null,
           is_encrypted: isEncrypted,
           encryption_version: encryptionVersion ?? null,
           wrapped_dek: wrappedDek ?? null,

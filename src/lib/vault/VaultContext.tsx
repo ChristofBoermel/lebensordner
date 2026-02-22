@@ -13,7 +13,7 @@ interface VaultContextValue {
   isSetUp: boolean
   isUnlocked: boolean
   masterKey: CryptoKey | null
-  setup(passphrase: string, recoveryKeyHex: string): Promise<void>
+  setup(passphrase: string, recoveryKeyHex: string, signal?: AbortSignal): Promise<void>
   unlock(passphrase: string): Promise<void>
   unlockWithRecovery(recoveryKeyHex: string): Promise<void>
   lock(): void
@@ -55,7 +55,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const setup = useCallback(async (passphrase: string, recoveryKeyHex: string) => {
+  const setup = useCallback(async (passphrase: string, recoveryKeyHex: string, signal?: AbortSignal) => {
     const salt = globalThis.crypto.getRandomValues(new Uint8Array(32))
     const kdf_params = { iterations: 600000, hash: 'SHA-256' }
     const pdk = await deriveMasterKey(passphrase, salt, kdf_params)
@@ -71,6 +71,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     const res = await fetch('/api/vault/key-material', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal,
       body: JSON.stringify({
         kdf_salt: toBase64(salt),
         kdf_params,

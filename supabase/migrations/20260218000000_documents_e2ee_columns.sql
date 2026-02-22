@@ -1,3 +1,4 @@
+-- NOTE: This migration was never applied to production; the encryption_metadata column does not exist and should not be used.
 -- Add encryption metadata columns for encrypted document storage
 ALTER TABLE public.documents
   ADD COLUMN IF NOT EXISTS is_encrypted boolean NOT NULL DEFAULT false,
