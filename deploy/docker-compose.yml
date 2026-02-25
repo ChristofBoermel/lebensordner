@@ -230,7 +230,7 @@ services:
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
       NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY}
       NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_URL: ${REDIS_URL}
       CRON_SECRET: ${CRON_SECRET}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
     depends_on:
@@ -254,7 +254,7 @@ services:
     container_name: lebensordner-worker
     restart: unless-stopped
     environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_URL: ${REDIS_URL}
       NEXTJS_INTERNAL_URL: http://nextjs:3000
       CRON_SECRET: ${CRON_SECRET}
     depends_on:
