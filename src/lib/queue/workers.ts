@@ -1,10 +1,11 @@
 import { Worker } from 'bullmq'
 import { redisConnection } from './connection'
+import { cleanupExpiredLimits } from '@/lib/security/rate-limit'
 
 let workersStarted = false
 
 export function startWorkers() {
-  if (workersStarted) return
+  if (workersStarted) return []
   workersStarted = true
 
   // Reminder worker — processes daily reminder jobs
@@ -15,7 +16,7 @@ export function startWorkers() {
       try {
         // Call the existing cron endpoint internally
         const response = await fetch(
-          `http://localhost:${process.env.PORT || 3000}/api/cron/send-reminders`,
+          `${process.env.NEXTJS_INTERNAL_URL || 'http://localhost:3000'}/api/cron/send-reminders`,
           {
             method: 'GET',
             headers: {
@@ -53,7 +54,7 @@ export function startWorkers() {
         }
 
         const response = await fetch(
-          `http://localhost:${process.env.PORT || 3000}${endpoint}`,
+          `${process.env.NEXTJS_INTERNAL_URL || 'http://localhost:3000'}${endpoint}`,
           {
             method: 'GET',
             headers: {
@@ -79,9 +80,12 @@ export function startWorkers() {
     'cleanup',
     async (job) => {
       console.log(`[Worker] Processing cleanup job: ${job.name}`)
-      // Cleanup logic can be added here later
-      // For now, this is a placeholder for expired token cleanup, etc.
-      console.log(`[Worker] Cleanup job completed`)
+      if (job.name === 'cleanup-expired') {
+        const deleted = await cleanupExpiredLimits()
+        console.log(`[Worker] Cleanup job completed: deleted ${deleted} expired rate limit entries`)
+      } else {
+        console.warn(`[Worker] Unknown cleanup job: ${job.name}`)
+      }
     },
     { connection: redisConnection, concurrency: 1 }
   )
@@ -97,4 +101,5 @@ export function startWorkers() {
   }
 
   console.log('[Worker] All workers started')
+  return [reminderWorker, emailWorker, cleanupWorker]
 }

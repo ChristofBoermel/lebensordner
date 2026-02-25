@@ -30,6 +30,9 @@
 
 # Supabase Studio (admin only — restrict by IP or use Grafana credentials)
 studio.{$DOMAIN:lebensordner.org} {
+	basicauth {
+		{$STUDIO_USER} {$STUDIO_PASSWORD_HASH}
+	}
 	reverse_proxy studio:3000
 }
 
