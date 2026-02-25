@@ -18,7 +18,7 @@ services:
       JWT_EXP: 3600
     volumes:
       - /mnt/pg-data:/var/lib/postgresql/data
-      - ./supabase/roles.sql:/docker-entrypoint-initdb.d/00-roles.sql
+      - ./supabase/roles.sh:/docker-entrypoint-initdb.d/00-roles.sh
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "supabase_admin"]
       interval: 10s
