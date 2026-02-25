@@ -96,3 +96,10 @@ playwright/.cache/
 /docs-archive/
 
 *pdf
+
+# Deploy secrets (never commit production env)
+deploy/.env
+deploy/.env.production
+
+# Migration data (database dumps, storage exports)
+migration-data/
