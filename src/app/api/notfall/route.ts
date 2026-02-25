@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/auth/guards'
-import { encrypt, decrypt, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
+import { encrypt, decrypt, encryptJson, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
+import type { Medication } from '@/types/medication'
 import { hasHealthDataConsent } from '@/lib/consent/manager'
 
 // --- Encryption helpers ---
@@ -20,6 +21,29 @@ function decryptField(value: string | null | undefined, isEncrypted: boolean, ke
   } catch (e) {
     console.error('Failed to decrypt field:', e)
     return null
+  }
+}
+
+function decryptMedications(value: string | null | undefined, isEncrypted: boolean, key: string): Medication[] {
+  if (!value) return []
+  if (!isEncrypted) {
+    const raw = Array.isArray(value) ? value : (() => { try { return JSON.parse(value) } catch { return [] } })()
+    if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === 'string') {
+      return raw.map((s: string) => ({ wirkstoff: s }))
+    }
+    return raw
+  }
+  try {
+    const parsed: EncryptedData = JSON.parse(value)
+    const decrypted = decrypt(parsed, key)
+    const result = JSON.parse(decrypted)
+    if (Array.isArray(result) && result.length > 0 && typeof result[0] === 'string') {
+      return result.map((s: string) => ({ wirkstoff: s }))
+    }
+    return result as Medication[]
+  } catch (e) {
+    console.error('Failed to decrypt medications field:', e)
+    return []
   }
 }
 
@@ -49,12 +73,10 @@ function encryptMedicalInfo(data: any, key: string) {
   return {
     conditions: encryptArray(data.conditions, key),
     conditions_encrypted: !!(data.conditions?.length),
-    medications: encryptArray(data.medications, key),
+    medications: encryptJson(data.medications, key),
     medications_encrypted: !!(data.medications?.length),
     allergies: encryptArray(data.allergies, key),
     allergies_encrypted: !!(data.allergies?.length),
-    blood_type: encryptField(data.blood_type, key),
-    blood_type_encrypted: !!data.blood_type,
   }
 }
 
@@ -62,9 +84,8 @@ function decryptMedicalInfo(data: any, key: string) {
   return {
     ...data,
     conditions: decryptArray(data.conditions, data.conditions_encrypted, key),
-    medications: decryptArray(data.medications, data.medications_encrypted, key),
+    medications: decryptMedications(data.medications, data.medications_encrypted, key),
     allergies: decryptArray(data.allergies, data.allergies_encrypted, key),
-    blood_type: decryptField(data.blood_type, data.blood_type_encrypted, key) || '',
   }
 }
 
@@ -236,6 +257,7 @@ export async function PUT(request: Request) {
         organ_donor: medicalInfo.organ_donor,
         organ_donor_card_location: medicalInfo.organ_donor_card_location || null,
         organ_donor_notes: medicalInfo.organ_donor_notes || null,
+        ...(medicalInfo.medications !== undefined ? { medication_plan_updated_at: new Date().toISOString() } : {}),
       }
 
       if (medicalInfo.id) {

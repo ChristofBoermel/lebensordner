@@ -214,7 +214,7 @@ export default function AboPage() {
     }
 
     // Unrecognized price_id → basic (matches server logic)
-
+    console.warn(`Unrecognized price ID: ${priceId}, defaulting to basic tier`)
     return 'basic'
   }
 

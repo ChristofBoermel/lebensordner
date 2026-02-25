@@ -2,11 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import NotfallPage from '@/app/(dashboard)/notfall/page'
-
-const mockGetUser = vi.fn().mockResolvedValue({
-  data: { user: { id: 'test-user-id', email: 'test@example.com' } },
-  error: null,
-})
+import { createSupabaseMock } from '../mocks/supabase-client'
 
 const createMockBuilder = (tableName: string) => {
   const builder: Record<string, any> = {}
@@ -22,14 +18,29 @@ const createMockBuilder = (tableName: string) => {
   return builder
 }
 
-const mockSupabaseClient = {
-  auth: { getUser: mockGetUser },
-  from: (tableName: string) => createMockBuilder(tableName),
-  storage: { from: vi.fn(() => ({ createSignedUrl: vi.fn() })) },
-}
+const { client: mockSupabaseClient, getUser: mockGetUser } = createSupabaseMock()
+
+mockGetUser.mockResolvedValue({
+  data: { user: { id: 'test-user-id', email: 'test@example.com' } },
+  error: null,
+})
+mockSupabaseClient.from = vi.fn((tableName: string) => createMockBuilder(tableName)) as any
+;(mockSupabaseClient as any).storage = { from: vi.fn(() => ({ createSignedUrl: vi.fn() })) }
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => mockSupabaseClient,
+}))
+
+vi.mock('@/lib/vault/VaultContext', () => ({
+  useVault: () => ({
+    isSetUp: false,
+    isUnlocked: false,
+    masterKey: null,
+    setup: vi.fn(),
+    unlock: vi.fn(),
+    unlockWithRecovery: vi.fn(),
+    lock: vi.fn(),
+  }),
 }))
 
 const createResponse = (data: any, status = 200) => ({

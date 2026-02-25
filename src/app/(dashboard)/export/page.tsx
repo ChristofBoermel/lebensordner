@@ -32,6 +32,7 @@ import { saveAs } from 'file-saver'
 import QRCode from 'qrcode'
 import { useVault } from '@/lib/vault/VaultContext'
 import { VaultUnlockModal } from '@/components/vault/VaultUnlockModal'
+import type { Medication } from '@/types/medication'
 
 interface DocumentRow {
   id: string
@@ -62,6 +63,7 @@ interface TrustedPersonRow {
 interface ProfileRow {
   full_name: string | null
   email: string
+  date_of_birth: string | null
   phone: string | null
   address: string | null
 }
@@ -76,10 +78,11 @@ interface EmergencyContactRow {
 }
 
 interface MedicalInfoRow {
-  blood_type: string | null
   allergies: string[]
-  medications: string[]
+  medications: Medication[]
+  medication_plan_updated_at: string | null
   conditions: string[]
+  vaccinations?: Array<{ name: string; month?: number | null; year: number }>
   doctor_name: string | null
   doctor_phone: string | null
   insurance_number: string | null
@@ -131,6 +134,14 @@ export default function ExportPage() {
       }
       const notfallData = notfallResponse.ok ? await notfallResponse.json() : {}
 
+      // Fetch vaccinations
+      const vaccinationsResponse = await fetch('/api/vaccinations')
+      const vaccinationsData = vaccinationsResponse.ok ? await vaccinationsResponse.json() : {}
+      const savedVaccinations: Array<{ name: string; month: number | null; year: number }> =
+        (vaccinationsData.vaccinations || [])
+          .filter((v: any) => v.year !== null)
+          .map((v: any) => ({ name: v.name as string, month: (v.month ?? null) as number | null, year: v.year as number }))
+
       // Fetch decrypted profile fields from API (phone, address are encrypted in DB)
       const profileResponse = await fetch('/api/profile')
       const decryptedProfile = profileResponse.ok ? (await profileResponse.json()).profile : null
@@ -138,7 +149,7 @@ export default function ExportPage() {
       // Fetch basic profile data (full_name, email are not encrypted)
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('full_name, email')
+        .select('full_name, email, date_of_birth')
         .eq('id', user.id)
         .single()
 
@@ -146,6 +157,7 @@ export default function ExportPage() {
         setProfile({
           full_name: profileData.full_name,
           email: profileData.email,
+          date_of_birth: profileData.date_of_birth,
           phone: decryptedProfile?.phone || null,
           address: decryptedProfile?.address || null,
         })
@@ -156,7 +168,19 @@ export default function ExportPage() {
         setEmergencyContacts(notfallData.emergencyContacts)
       }
       if (notfallData.medicalInfo) {
-        setMedicalInfo(notfallData.medicalInfo)
+        setMedicalInfo({ ...notfallData.medicalInfo, vaccinations: savedVaccinations })
+      } else if (savedVaccinations.length > 0) {
+        setMedicalInfo({
+          allergies: [],
+          medications: [],
+          medication_plan_updated_at: null,
+          conditions: [],
+          vaccinations: savedVaccinations,
+          doctor_name: null,
+          doctor_phone: null,
+          insurance_number: null,
+          organ_donor: null,
+        })
       }
       if (notfallData.directives) {
         setAdvanceDirectives(notfallData.directives)
@@ -211,68 +235,89 @@ export default function ExportPage() {
   const generateEmergencyQR = useCallback(async () => {
     setIsGeneratingQR(true)
     try {
-      // Build human-readable German text block
-      const lines: string[] = []
-      lines.push('NOTFALL-INFORMATIONEN')
-      lines.push('')
+      const primaryContact = emergencyContacts.find((contact) => contact.is_primary) || emergencyContacts[0]
+      const contactValue = primaryContact
+        ? primaryContact.phone
+          ? `${primaryContact.name}, ${primaryContact.phone}`
+          : primaryContact.name
+            ? primaryContact.name
+            : 'Nicht angegeben'
+        : 'Nicht angegeben'
+      const birthDateValue = profile?.date_of_birth
+        ? formatDate(profile.date_of_birth)
+        : 'Nicht angegeben'
+      const doctorValue = (medicalInfo?.doctor_name || medicalInfo?.doctor_phone)
+        ? `${medicalInfo?.doctor_name || 'Nicht angegeben'}${medicalInfo?.doctor_phone ? `, ${medicalInfo.doctor_phone}` : ''}`
+        : 'Nicht angegeben'
+      const allergiesValue = medicalInfo?.allergies?.length
+        ? medicalInfo.allergies.join(', ')
+        : 'Keine'
+      const vaccinationsValue = medicalInfo?.vaccinations?.length
+        ? medicalInfo.vaccinations.map((vaccination) => `${vaccination.name} ${vaccination.year}`).join(', ')
+        : 'Keine'
 
-      // Personal info
-      if (profile?.full_name) {
-        lines.push(`Name: ${profile.full_name}`)
+      const lines: string[] = [
+        'NOTFALL-INFO',
+        `Name: ${profile?.full_name || 'Nicht angegeben'}`,
+        `Geburtsdatum: ${birthDateValue}`,
+        `Notfallkontakt: ${contactValue}`,
+        `Arzt: ${doctorValue}`,
+        `Allergien: ${allergiesValue}`,
+      ]
+
+      // Medication timestamp line
+      if (medicalInfo?.medication_plan_updated_at) {
+        const d = new Date(medicalInfo.medication_plan_updated_at)
+        const day = String(d.getDate()).padStart(2, '0')
+        const month = String(d.getMonth() + 1).padStart(2, '0')
+        const year = d.getFullYear()
+        lines.push(`Medikationsplan: Stand ${day}.${month}.${year}`)
       }
 
-      // Emergency contacts
-      if (emergencyContacts.length > 0) {
-        lines.push('')
-        lines.push('Notfall-Kontakte:')
-        emergencyContacts.slice(0, 2).forEach(c => {
-          lines.push(`- ${c.name} (${c.relationship}): ${c.phone}`)
-        })
-      }
-
-      // Medical info
-      if (medicalInfo) {
-        if (medicalInfo.blood_type) {
-          lines.push('')
-          lines.push(`Blutgruppe: ${medicalInfo.blood_type}`)
-        }
-        if (medicalInfo.allergies?.length > 0) {
-          lines.push(`Allergien: ${medicalInfo.allergies.join(', ')}`)
-        }
-        if (medicalInfo.medications?.length > 0) {
-          lines.push(`Medikamente: ${medicalInfo.medications.join(', ')}`)
-        }
-        if (medicalInfo.conditions?.length > 0) {
-          lines.push(`Vorerkrankungen: ${medicalInfo.conditions.join(', ')}`)
-        }
-        if (medicalInfo.doctor_name) {
-          let doctorLine = `Hausarzt: ${medicalInfo.doctor_name}`
-          if (medicalInfo.doctor_phone) doctorLine += ` (${medicalInfo.doctor_phone})`
-          lines.push(doctorLine)
-        }
-        if (medicalInfo.insurance_number) {
-          lines.push(`Versicherungsnummer: ${medicalInfo.insurance_number}`)
-        }
-        if (medicalInfo.organ_donor !== null) {
-          lines.push(`Organspender: ${medicalInfo.organ_donor ? 'Ja' : 'Nein'}`)
-        }
-      }
-
-      // Advance directives
-      if (advanceDirectives) {
-        const directives: string[] = []
-        if (advanceDirectives.has_patient_decree) directives.push('Patientenverfügung')
-        if (advanceDirectives.has_power_of_attorney) directives.push('Vorsorgevollmacht')
-        if (advanceDirectives.has_care_directive) directives.push('Betreuungsverfügung')
-        if (advanceDirectives.has_bank_power_of_attorney) directives.push('Bankvollmacht')
-        if (directives.length > 0) {
-          lines.push('')
-          lines.push(`Verfügungen: ${directives.join(', ')}`)
+      // Per-medication lines
+      if (medicalInfo?.medications?.length) {
+        for (const med of medicalInfo.medications) {
+          const name = med.wirkstoff && med.wirkstoff.trim()
+            ? med.wirkstoff
+            : med.pzn
+              ? `PZN: ${med.pzn}`
+              : null
+          if (!name) continue
+          const parts: string[] = [name]
+          if (med.staerke) parts.push(med.staerke)
+          const line = med.grund
+            ? `- ${parts.join(' ')} (${med.grund})`
+            : `- ${parts.join(' ')}`
+          lines.push(line)
         }
       }
 
-      // Generate QR code
-      const textData = lines.join('\n')
+      lines.push(`Impfungen: ${vaccinationsValue}`)
+
+      // Generate QR code — truncate medication lines if content exceeds 900 chars
+      let textData = lines.join('\n')
+      if (textData.length > 900) {
+        const medLineStart = lines.findIndex(l => l.startsWith('Medikationsplan: Stand') || l.startsWith('- '))
+        if (medLineStart !== -1) {
+          const before = lines.slice(0, medLineStart)
+          const medLines = lines.slice(medLineStart, lines.length - 1) // exclude last (Impfungen)
+          const after = [lines[lines.length - 1]]
+          const kept: string[] = []
+          let droppedCount = 0
+          for (const ml of medLines) {
+            const candidate = [...before, ...kept, ml, ...after].join('\n')
+            if (candidate.length <= 880) {
+              kept.push(ml)
+            } else {
+              droppedCount++
+            }
+          }
+          if (droppedCount > 0) {
+            kept.push(`+ ${droppedCount} weitere Medikamente (siehe App)`)
+          }
+          textData = [...before, ...kept, ...after].join('\n')
+        }
+      }
       const dataUrl = await QRCode.toDataURL(textData, {
         width: 300,
         margin: 2,
@@ -290,7 +335,7 @@ export default function ExportPage() {
     } finally {
       setIsGeneratingQR(false)
     }
-  }, [profile, emergencyContacts, medicalInfo, advanceDirectives])
+  }, [profile, emergencyContacts, medicalInfo])
 
   // Auto-generate QR code when data is loaded
   useEffect(() => {
@@ -375,19 +420,40 @@ export default function ExportPage() {
 
       // Medical Info
       try {
-        if (medicalInfo && (medicalInfo.blood_type || medicalInfo.allergies?.length > 0 || medicalInfo.medications?.length > 0)) {
+        if (medicalInfo && (
+          medicalInfo.allergies?.length > 0 ||
+          medicalInfo.medications?.length > 0 ||
+          medicalInfo.conditions?.length > 0 ||
+          medicalInfo.doctor_name ||
+          medicalInfo.doctor_phone ||
+          medicalInfo.insurance_number ||
+          medicalInfo.organ_donor !== null ||
+          (medicalInfo.vaccinations?.length ?? 0) > 0
+        )) {
           addSection('Medizinische Informationen')
-          if (medicalInfo.blood_type) {
-            doc.text(`Blutgruppe: ${medicalInfo.blood_type}`, 14, yPos); yPos += 6
-          }
           if (medicalInfo.allergies?.length > 0) {
             doc.text(`Allergien: ${medicalInfo.allergies.join(', ')}`, 14, yPos); yPos += 6
           }
           if (medicalInfo.medications?.length > 0) {
-            doc.text(`Medikamente: ${medicalInfo.medications.join(', ')}`, 14, yPos); yPos += 6
+            doc.text('Medikamente:', 14, yPos); yPos += 6
+            for (const med of medicalInfo.medications) {
+              const name = med.wirkstoff || (med.pzn ? `PZN: ${med.pzn}` : '?')
+              const detail = [med.staerke, med.grund].filter(Boolean).join(', ')
+              const line = detail ? `• ${name} (${detail})` : `• ${name}`
+              if (yPos > 270) { doc.addPage(); yPos = 20 }
+              doc.text(line, 18, yPos); yPos += 6
+            }
           }
-          if (medicalInfo.conditions?.length > 0) {
+          if ((medicalInfo.conditions?.length ?? 0) > 0) {
             doc.text(`Vorerkrankungen: ${medicalInfo.conditions.join(', ')}`, 14, yPos); yPos += 6
+          }
+          if ((medicalInfo.vaccinations?.length ?? 0) > 0) {
+            doc.text('Impfungen:', 14, yPos); yPos += 6
+            for (const vac of medicalInfo.vaccinations ?? []) {
+              const date = vac.month ? `${vac.month}/${vac.year}` : `${vac.year}`
+              if (yPos > 270) { doc.addPage(); yPos = 20 }
+              doc.text(`• ${vac.name} (${date})`, 18, yPos); yPos += 6
+            }
           }
           if (medicalInfo.doctor_name) {
             doc.text(`Hausarzt: ${medicalInfo.doctor_name} (${medicalInfo.doctor_phone || '-'})`, 14, yPos); yPos += 6
@@ -877,6 +943,9 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
                 )}
                 QR-Code aktualisieren
               </Button>
+              <p className="text-sm text-warmgray-500 text-center mt-1">
+                Scannen Sie diesen Code mit der Kamera-App Ihres Smartphones
+              </p>
             </div>
 
             {/* QR Code Content Summary */}
@@ -884,51 +953,54 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
               <h4 className="font-medium text-warmgray-900">Enthaltene Informationen:</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                 <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${profile?.full_name ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={profile?.full_name ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    {profile?.full_name ? `Name: ${profile.full_name}` : 'Name: Nicht angegeben'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${profile?.date_of_birth ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={profile?.date_of_birth ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    {profile?.date_of_birth ? `Geburtsdatum: ${formatDate(profile.date_of_birth)}` : 'Geburtsdatum: Nicht angegeben'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
                   <CheckCircle2 className={`w-4 h-4 ${emergencyContacts.length > 0 ? 'text-green-600' : 'text-warmgray-300'}`} />
                   <span className={emergencyContacts.length > 0 ? 'text-warmgray-700' : 'text-warmgray-400'}>
-                    Notfallkontakte ({emergencyContacts.length})
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.blood_type ? 'text-green-600' : 'text-warmgray-300'}`} />
-                  <span className={medicalInfo?.blood_type ? 'text-warmgray-700' : 'text-warmgray-400'}>
-                    Blutgruppe {medicalInfo?.blood_type ? `(${medicalInfo.blood_type})` : ''}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.allergies?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
-                  <span className={medicalInfo?.allergies?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
-                    Allergien ({medicalInfo?.allergies?.length || 0})
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.medications?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
-                  <span className={medicalInfo?.medications?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
-                    Medikamente ({medicalInfo?.medications?.length || 0})
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.conditions?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
-                  <span className={medicalInfo?.conditions?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
-                    Vorerkrankungen ({medicalInfo?.conditions?.length || 0})
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.organ_donor !== null ? 'text-green-600' : 'text-warmgray-300'}`} />
-                  <span className={medicalInfo?.organ_donor !== null ? 'text-warmgray-700' : 'text-warmgray-400'}>
-                    Organspende {medicalInfo?.organ_donor !== null ? (medicalInfo?.organ_donor ? '(Ja)' : '(Nein)') : ''}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className={`w-4 h-4 ${advanceDirectives?.has_patient_decree || advanceDirectives?.has_power_of_attorney ? 'text-green-600' : 'text-warmgray-300'}`} />
-                  <span className={advanceDirectives?.has_patient_decree || advanceDirectives?.has_power_of_attorney ? 'text-warmgray-700' : 'text-warmgray-400'}>
-                    Vollmachten (Ja/Nein)
+                    {emergencyContacts.length > 0
+                      ? (() => {
+                          const primaryContact = emergencyContacts.find(c => c.is_primary) || emergencyContacts[0]
+                          return `Notfallkontakt: ${primaryContact.name}${primaryContact.phone ? `, ${primaryContact.phone}` : ''}`
+                        })()
+                      : 'Notfallkontakt: Nicht angegeben'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.doctor_name ? 'text-green-600' : 'text-warmgray-300'}`} />
                   <span className={medicalInfo?.doctor_name ? 'text-warmgray-700' : 'text-warmgray-400'}>
-                    Hausarzt
+                    {medicalInfo?.doctor_name
+                      ? `Arzt: ${medicalInfo.doctor_name}${medicalInfo.doctor_phone ? `, ${medicalInfo.doctor_phone}` : ''}`
+                      : 'Arzt: Nicht angegeben'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.allergies?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={medicalInfo?.allergies?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    {medicalInfo?.allergies?.length ? `Allergien: ${medicalInfo.allergies.join(', ')}` : 'Allergien: Keine'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.medications?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={medicalInfo?.medications?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    {medicalInfo?.medications?.length ? `Medikamente: ${medicalInfo.medications.map(m => m.wirkstoff || (m.pzn ? `PZN: ${m.pzn}` : '?')).join(', ')}` : 'Medikamente: Keine'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.vaccinations?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
+                  <span className={medicalInfo?.vaccinations?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
+                    {medicalInfo?.vaccinations?.length
+                      ? `Impfungen: ${medicalInfo.vaccinations.map(v => `${v.name} ${v.year}`).join(', ')}`
+                      : 'Impfungen: Keine'}
                   </span>
                 </div>
               </div>

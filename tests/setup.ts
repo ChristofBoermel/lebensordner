@@ -31,6 +31,18 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
+// Mock next/headers to prevent "cookies called outside request scope" errors
+vi.mock('next/headers', () => ({
+  cookies: vi.fn(() => ({
+    get: vi.fn(),
+    set: vi.fn(),
+    delete: vi.fn(),
+    has: vi.fn(),
+    getAll: vi.fn(() => []),
+  })),
+  headers: vi.fn(() => new Headers()),
+}))
+
 // Start MSW server before all tests
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'bypass' })

@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { documentId, trustedPersonId, wrapped_dek_for_tp } = body || {}
+  const { documentId, trustedPersonId, wrapped_dek_for_tp, expires_at, permission } = body || {}
 
   if (!documentId || !trustedPersonId || !wrapped_dek_for_tp) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
   const { data: trustedPerson } = await supabase
     .from('trusted_persons')
-    .select('id')
+    .select('id, linked_user_id')
     .eq('id', trustedPersonId)
     .eq('user_id', user.id)
     .eq('invitation_status', 'accepted')
@@ -40,13 +40,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  if (trustedPerson.linked_user_id === null) {
+    return NextResponse.json({ error: 'Trusted person has not accepted the invitation' }, { status: 403 })
+  }
+
   const { error } = await supabase
     .from('document_share_tokens')
     .upsert({
       document_id: documentId,
       owner_id: user.id,
       trusted_person_id: trustedPersonId,
-      wrapped_dek_for_tp
+      wrapped_dek_for_tp,
+      expires_at: expires_at ?? null,
+      permission: permission ?? 'view'
     }, { onConflict: 'document_id,trusted_person_id' })
 
   if (error) {
@@ -88,7 +94,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from('document_share_tokens')
-    .select('document_id, wrapped_dek_for_tp')
+    .select('id, document_id, wrapped_dek_for_tp, expires_at, permission, revoked_at')
     .eq('owner_id', ownerId)
     .in('trusted_person_id', trustedPersonIds)
 
@@ -97,4 +103,41 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({ tokens: data ?? [] })
+}
+
+export async function DELETE(request: Request) {
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
+
+  if (!id) {
+    return NextResponse.json({ error: 'id parameter required' }, { status: 400 })
+  }
+
+  const { data: shareToken } = await supabase
+    .from('document_share_tokens')
+    .select('id, owner_id')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (!shareToken || shareToken.owner_id !== user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { error } = await supabase
+    .from('document_share_tokens')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('id', id)
+
+  if (error) {
+    return NextResponse.json({ error: 'Database error' }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
 }

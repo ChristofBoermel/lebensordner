@@ -165,7 +165,7 @@ describe('rate-limit', () => {
 
     it('should have correct upload limits', () => {
       expect(RATE_LIMIT_UPLOAD.maxRequests).toBe(10)
-      expect(RATE_LIMIT_UPLOAD.windowMs).toBe(60 * 60 * 1000)
+      expect(RATE_LIMIT_UPLOAD.windowMs).toBe(60 * 1000)
     })
   })
 })

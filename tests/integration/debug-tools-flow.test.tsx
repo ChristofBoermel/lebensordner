@@ -3,7 +3,7 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import AboPage from '@/app/(dashboard)/abo/page'
-import AdminPage from '@/app/(dashboard)/admin/page'
+import { AdminDashboard } from '@/app/(dashboard)/admin/admin-dashboard'
 import {
   STRIPE_PRICE_PREMIUM_MONTHLY,
   STRIPE_PRICE_UNKNOWN,
@@ -30,6 +30,32 @@ const mockRpc = vi.fn(async (fnName: string) => {
   }
   return { data: null, error: null }
 })
+
+vi.mock('@/lib/supabase/server', () => ({
+  createServerSupabaseClient: vi.fn(async () => ({
+    auth: {
+      getUser: vi.fn().mockResolvedValue({
+        data: { user: { id: 'admin-user-id', email: 'admin@example.com' } },
+        error: null,
+      }),
+    },
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          single: vi.fn().mockResolvedValue({
+            data: { role: 'admin' },
+            error: null,
+          }),
+        })),
+      })),
+    })),
+  })),
+}))
+
+vi.mock('@/lib/security/audit-log', () => ({
+  logSecurityEvent: vi.fn(),
+  EVENT_UNAUTHORIZED_ACCESS: 'unauthorized_access',
+}))
 
 vi.mock('@/lib/posthog', () => ({
   usePostHog: () => ({ capture: vi.fn() }),
@@ -95,7 +121,9 @@ describe('Debug Tools Integration Flow', () => {
         basic: { monthly: 'price_basic_monthly_test', yearly: 'price_basic_yearly_test' },
         premium: { monthly: STRIPE_PRICE_PREMIUM_MONTHLY, yearly: 'price_premium_yearly_test' },
         family: { monthly: 'price_family_monthly_test', yearly: 'price_family_yearly_test' },
-      }))
+      })),
+      http.get('http://localhost:3000/api/admin/stats', () => HttpResponse.json(mockStats)),
+      http.get('http://localhost:3000/api/admin/users', () => HttpResponse.json(mockUsers)),
     )
   })
 
@@ -122,7 +150,7 @@ describe('Debug Tools Integration Flow', () => {
 
       cleanup()
 
-      render(<AdminPage />)
+      render(<AdminDashboard initialStats={mockStats} initialUsers={mockUsers} />)
 
       await screen.findByText('Admin Dashboard')
       expect(screen.getByText('150')).toBeInTheDocument()

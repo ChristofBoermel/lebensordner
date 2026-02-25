@@ -1,51 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import AdminPage from '@/app/(dashboard)/admin/page'
+import { AdminDashboard } from '@/app/(dashboard)/admin/admin-dashboard'
 import { createMockPlatformStats } from '../utils/debug-helpers'
 
-let mockRole = 'admin'
 let mockStats = createMockPlatformStats()
 let mockUsers: any[] = []
 
-const mockRpc = vi.fn(async (fnName: string, args?: any) => {
-  if (fnName === 'get_platform_stats') {
-    return { data: mockStats, error: null }
-  }
-  if (fnName === 'get_all_users') {
-    return { data: mockUsers, error: null }
-  }
-  if (fnName === 'update_user_role') {
-    return { data: { success: true, ...args }, error: null }
-  }
-  return { data: null, error: null }
-})
-
-vi.mock('@/lib/supabase/client', () => ({
-  createClient: () => ({
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: 'admin-user-id', email: 'admin@example.com' } },
-        error: null,
-      }),
-    },
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn().mockResolvedValue({
-            data: { role: mockRole },
-            error: null,
-          }),
-        })),
-      })),
-    })),
-    rpc: mockRpc,
-  }),
-}))
-
 describe('Admin User Management', () => {
   beforeEach(() => {
-    mockRole = 'admin'
     mockStats = createMockPlatformStats()
     mockUsers = [
       {
@@ -79,26 +42,12 @@ describe('Admin User Management', () => {
         storage_used: 512,
       },
     ]
-    mockRpc.mockClear()
-    mockRpc.mockImplementation(async (fnName: string, args?: any) => {
-      if (fnName === 'get_platform_stats') {
-        return { data: mockStats, error: null }
-      }
-      if (fnName === 'get_all_users') {
-        return { data: mockUsers, error: null }
-      }
-      if (fnName === 'update_user_role') {
-        return { data: { success: true, ...args }, error: null }
-      }
-      return { data: null, error: null }
-    })
   })
 
-  it('renders user management table with all columns', async () => {
-    render(<AdminPage />)
+  it('renders user management table with all columns', () => {
+    render(<AdminDashboard initialStats={mockStats} initialUsers={mockUsers} />)
 
-    await screen.findByText('Benutzerverwaltung')
-
+    expect(screen.getByText('Benutzerverwaltung')).toBeInTheDocument()
     expect(screen.getByText('Benutzer')).toBeInTheDocument()
     expect(screen.getByText('Status')).toBeInTheDocument()
     expect(screen.getByText('Abo')).toBeInTheDocument()
@@ -111,8 +60,7 @@ describe('Admin User Management', () => {
   })
 
   it('filters users by search query', async () => {
-    render(<AdminPage />)
-    await screen.findByText('Benutzerverwaltung')
+    render(<AdminDashboard initialStats={mockStats} initialUsers={mockUsers} />)
 
     const searchInput = screen.getByPlaceholderText(/Nach E-Mail oder Name suchen/i)
     fireEvent.change(searchInput, { target: { value: 'trial' } })
@@ -124,9 +72,8 @@ describe('Admin User Management', () => {
     })
   })
 
-  it('shows subscription and onboarding badges', async () => {
-    render(<AdminPage />)
-    await screen.findByText('Benutzerverwaltung')
+  it('shows subscription and onboarding badges', () => {
+    render(<AdminDashboard initialStats={mockStats} initialUsers={mockUsers} />)
 
     expect(screen.getByText('Premium')).toBeInTheDocument()
     expect(screen.getByText('Trial')).toBeInTheDocument()
@@ -134,9 +81,8 @@ describe('Admin User Management', () => {
     expect(screen.getByText('Onboarding')).toBeInTheDocument()
   })
 
-  it('formats storage values and dates correctly', async () => {
-    render(<AdminPage />)
-    await screen.findByText('Benutzerverwaltung')
+  it('formats storage values and dates correctly', () => {
+    render(<AdminDashboard initialStats={mockStats} initialUsers={mockUsers} />)
 
     expect(screen.getByText('50.00 MB')).toBeInTheDocument()
     expect(screen.getByText('2.0 KB')).toBeInTheDocument()
@@ -154,25 +100,31 @@ describe('Admin User Management', () => {
 
   it('updates role when dropdown changes', async () => {
     const user = userEvent.setup()
-    render(<AdminPage />)
-    await screen.findByText('Benutzerverwaltung')
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
+    global.fetch = mockFetch
+
+    render(<AdminDashboard initialStats={mockStats} initialUsers={mockUsers} />)
 
     const roleSelects = screen.getAllByRole('combobox')
     await user.selectOptions(roleSelects[0], 'admin')
 
     await waitFor(() => {
-      expect(mockRpc).toHaveBeenCalledWith('update_user_role', expect.objectContaining({
-        target_user_id: 'user-1',
-        new_role: 'admin',
-      }))
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/admin/users/role',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('user-1'),
+        })
+      )
     })
+
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.targetUserId).toBe('user-1')
+    expect(body.newRole).toBe('admin')
   })
 
-  it('shows empty state when no users found', async () => {
-    mockUsers = []
-
-    render(<AdminPage />)
-    await screen.findByText('Benutzerverwaltung')
+  it('shows empty state when no users found', () => {
+    render(<AdminDashboard initialStats={mockStats} initialUsers={[]} />)
 
     expect(screen.getByText('Keine Benutzer gefunden')).toBeInTheDocument()
   })

@@ -7,6 +7,7 @@ import {
   STRIPE_PRICE_PREMIUM_MONTHLY,
 } from '../fixtures/stripe'
 import { setMockProfile, resetMockProfile } from '../mocks/supabase'
+import { createSupabaseMock } from '../mocks/supabase-client'
 
 type MockDocument = {
   id: string
@@ -101,23 +102,33 @@ const createMockBuilder = (tableName: string) => {
   return builder
 }
 
-const mockGetUser = async () => ({
+const { client: mockSupabaseClient } = createSupabaseMock()
+
+mockSupabaseClient.auth.getUser = async () => ({
   data: { user: { id: 'test-user-id', email: 'test@example.com' } },
   error: null,
 })
-
-const mockSupabaseClient = {
-  auth: { getUser: mockGetUser },
-  from: (tableName: string) => {
-    if (tableName === 'trusted_persons') {
-      trustedPersonsQueryCount += 1
-    }
-    return createMockBuilder(tableName)
-  },
-}
+mockSupabaseClient.from = vi.fn((tableName: string) => {
+  if (tableName === 'trusted_persons') {
+    trustedPersonsQueryCount += 1
+  }
+  return createMockBuilder(tableName)
+}) as any
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => mockSupabaseClient,
+}))
+
+vi.mock('@/lib/vault/VaultContext', () => ({
+  useVault: () => ({
+    isSetUp: false,
+    isUnlocked: true,
+    masterKey: null,
+    setup: vi.fn(),
+    unlock: vi.fn(),
+    unlockWithRecovery: vi.fn(),
+    lock: vi.fn(),
+  }),
 }))
 
 vi.mock('@/lib/posthog', () => ({
@@ -671,5 +682,253 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
 
     vi.doUnmock('react')
     vi.doUnmock('@/lib/supabase/client')
+  })
+})
+
+describe('Dokumente Suche', () => {
+  beforeEach(() => {
+    resetMockProfile()
+    mockTables.documents = []
+    mockTables.trusted_persons = []
+    mockTables.subcategories = []
+    mockTables.custom_categories = []
+    lastInsertPayload = null
+    lastUploadFormData = null
+    lastUploadDocument = null
+    mockUploadDocument = null
+    trustedPersonsQueryCount = 0
+    setMockFetch()
+    Object.defineProperty(window, 'innerWidth', { value: 1024, writable: true })
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('filtert Dokumente im Überblick nach Suche', async () => {
+    mockTables.documents = [
+      {
+        id: 'doc-1',
+        title: 'Reisepass',
+        file_name: 'reisepass.pdf',
+        file_path: '/docs/reisepass.pdf',
+        file_type: 'application/pdf',
+        file_size: 1234,
+        category: 'identitaet',
+        subcategory_id: null,
+        custom_category_id: null,
+        expiry_date: null,
+        notes: null,
+        created_at: '2025-01-01T10:00:00.000Z',
+      },
+      {
+        id: 'doc-2',
+        title: 'Führerschein',
+        file_name: 'fuehrerschein.pdf',
+        file_path: '/docs/fuehrerschein.pdf',
+        file_type: 'application/pdf',
+        file_size: 2345,
+        category: 'identitaet',
+        subcategory_id: null,
+        custom_category_id: null,
+        expiry_date: null,
+        notes: null,
+        created_at: '2025-01-02T10:00:00.000Z',
+      },
+      {
+        id: 'doc-3',
+        title: 'Steuerbescheid',
+        file_name: 'steuerbescheid.pdf',
+        file_path: '/docs/steuerbescheid.pdf',
+        file_type: 'application/pdf',
+        file_size: 3456,
+        category: 'finanzen',
+        subcategory_id: null,
+        custom_category_id: null,
+        expiry_date: null,
+        notes: null,
+        created_at: '2025-01-03T10:00:00.000Z',
+      },
+    ]
+
+    await renderPage()
+
+    const searchInput = screen.getByPlaceholderText('Dokumente durchsuchen...')
+    await userEvent.type(searchInput, 'Reise')
+
+    await waitFor(() => {
+      expect(screen.getByText('Reisepass')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Führerschein')).not.toBeInTheDocument()
+    expect(screen.queryByText('Steuerbescheid')).not.toBeInTheDocument()
+
+    await userEvent.clear(searchInput)
+
+    await waitFor(() => {
+      expect(screen.getByText('Führerschein')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Steuerbescheid')).toBeInTheDocument()
+  })
+})
+
+describe('Dokumente Kategorien — Vollmachten & Testament', () => {
+  beforeEach(() => {
+    resetMockProfile()
+    mockTables.documents = []
+    mockTables.trusted_persons = []
+    mockTables.subcategories = []
+    mockTables.custom_categories = []
+    lastInsertPayload = null
+    lastUploadFormData = null
+    lastUploadDocument = null
+    mockUploadDocument = null
+    trustedPersonsQueryCount = 0
+    setMockFetch()
+    Object.defineProperty(window, 'innerWidth', { value: 1024, writable: true })
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('"Vollmachten" erscheint in der Kategorie-Übersicht', async () => {
+    await renderPage()
+
+    expect(screen.getAllByText('Vollmachten').length).toBeGreaterThan(0)
+  })
+
+  it('"Bevollmächtigungen" erscheint nicht mehr', async () => {
+    await renderPage()
+
+    expect(screen.queryByText('Bevollmächtigungen')).toBeNull()
+  })
+
+  it('"Testament" erscheint in der Kategorie-Übersicht', async () => {
+    await renderPage()
+
+    expect(screen.getAllByText('Testament').length).toBeGreaterThan(0)
+  })
+
+  it('Dokument mit category="bevollmaechtigungen" wird unter "Vollmachten" angezeigt', async () => {
+    mockTables.documents = [
+      {
+        id: 'doc-vollmacht-1',
+        title: 'Vorsorgevollmacht',
+        file_name: 'vorsorgevollmacht.pdf',
+        file_path: '/docs/vorsorgevollmacht.pdf',
+        file_type: 'application/pdf',
+        file_size: 1234,
+        category: 'bevollmaechtigungen',
+        subcategory_id: null,
+        custom_category_id: null,
+        expiry_date: null,
+        notes: null,
+        created_at: '2025-01-01T10:00:00.000Z',
+      },
+    ]
+
+    await renderPage()
+
+    const vollmachtenCards = screen.getAllByText('Vollmachten')
+    await userEvent.click(vollmachtenCards[0])
+
+    await waitFor(() => {
+      expect(screen.getByText('Vorsorgevollmacht')).toBeInTheDocument()
+    })
+  })
+})
+
+describe('Dokumente UI Fixes — T-03', () => {
+  beforeEach(() => {
+    resetMockProfile()
+    mockTables.documents = []
+    mockTables.trusted_persons = []
+    mockTables.subcategories = []
+    mockTables.custom_categories = []
+    lastInsertPayload = null
+    lastUploadFormData = null
+    lastUploadDocument = null
+    mockUploadDocument = null
+    trustedPersonsQueryCount = 0
+    setMockFetch()
+    Object.defineProperty(window, 'innerWidth', { value: 1024, writable: true })
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('search bar switches to overview tab when user types while on a category tab', async () => {
+    mockTables.documents = [
+      {
+        id: 'doc-reisepass',
+        title: 'Reisepass',
+        file_name: 'reisepass.pdf',
+        file_path: 'test/reisepass.pdf',
+        file_type: 'application/pdf',
+        file_size: 1234,
+        category: 'identitaet',
+        subcategory_id: null,
+        custom_category_id: null,
+        expiry_date: null,
+        notes: null,
+        created_at: '2025-01-01T10:00:00.000Z',
+      },
+      {
+        id: 'doc-steuer',
+        title: 'Steuerbescheid',
+        file_name: 'steuerbescheid.pdf',
+        file_path: 'test/steuerbescheid.pdf',
+        file_type: 'application/pdf',
+        file_size: 2345,
+        category: 'finanzen',
+        subcategory_id: null,
+        custom_category_id: null,
+        expiry_date: null,
+        notes: null,
+        created_at: '2025-01-02T10:00:00.000Z',
+      },
+    ]
+
+    await renderPage()
+
+    const identitaetTab = screen.getByRole('tab', { name: /Identität/i })
+    await userEvent.click(identitaetTab)
+
+    const searchInput = screen.getByPlaceholderText('Dokumente durchsuchen...')
+    await userEvent.type(searchInput, 'Reise')
+
+    await waitFor(() => {
+      expect(screen.getByText('Suchergebnisse')).toBeInTheDocument()
+      expect(screen.getByText('Reisepass')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Steuerbescheid')).not.toBeInTheDocument()
+  })
+
+  it('custom categories section is visible when custom categories exist', async () => {
+    mockTables.custom_categories = [
+      { id: 'cat-1', name: 'Meine Kategorie', description: 'Test' } as any,
+    ]
+
+    await renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Eigene Kategorien')).toBeInTheDocument()
+      expect(screen.getByText('Meine Kategorie')).toBeInTheDocument()
+    })
+  })
+
+  it('upload dialog has scroll indicator gradient and correct header padding', async () => {
+    await renderPage()
+    await openUploadDialog()
+
+    const dialog = screen.getByRole('dialog')
+
+    const dialogHeader = dialog.querySelector('[class*="p-6"]')
+    expect(dialogHeader?.className).toContain('pr-14')
+
+    const gradient = dialog.querySelector('[class*="bg-gradient-to-t"]')
+    expect(gradient).toBeInTheDocument()
   })
 })

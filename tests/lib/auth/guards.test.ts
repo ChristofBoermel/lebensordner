@@ -5,6 +5,7 @@ import {
   UnauthorizedError,
   ForbiddenError,
 } from '@/lib/auth/guards'
+import { createSupabaseMock } from '../../mocks/supabase-client'
 
 // Mock logSecurityEvent
 const mockLogSecurityEvent = vi.fn()
@@ -13,22 +14,11 @@ vi.mock('@/lib/security/audit-log', () => ({
   EVENT_UNAUTHORIZED_ACCESS: 'unauthorized_access',
 }))
 
-// Mock Supabase client
-const mockGetUser = vi.fn()
-const mockSingle = vi.fn()
-const mockEq = vi.fn(() => ({ single: mockSingle }))
-const mockSelect = vi.fn(() => ({ eq: mockEq }))
-const mockFrom = vi.fn(() => ({ select: mockSelect }))
+// Mock Supabase client using factory
+const { client, getUser: mockGetUser, single: mockSingle } = createSupabaseMock()
 
 vi.mock('@/lib/supabase/server', () => ({
-  createServerSupabaseClient: vi.fn(() =>
-    Promise.resolve({
-      auth: {
-        getUser: mockGetUser,
-      },
-      from: mockFrom,
-    })
-  ),
+  createServerSupabaseClient: vi.fn(() => Promise.resolve(client)),
 }))
 
 describe('guards', () => {

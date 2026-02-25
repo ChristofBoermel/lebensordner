@@ -6,6 +6,7 @@ import {
   STRIPE_PRICE_BASIC_MONTHLY,
 } from "../fixtures/stripe";
 import { setMockProfile, resetMockProfile } from "../mocks/supabase";
+import { createSupabaseMock } from "../mocks/supabase-client";
 
 let mockSeniorMode = false;
 
@@ -58,25 +59,19 @@ vi.mock("@/lib/vault/VaultContext", () => ({
   }),
 }));
 
+const { client: einstellungenClient, getUser: einstellungenGetUser, single: einstellungenSingle } = createSupabaseMock()
+
+einstellungenGetUser.mockResolvedValue({
+  data: { user: { id: "test-user-id", email: "test@example.com" } },
+  error: null,
+})
+einstellungenSingle.mockImplementation(async () => {
+  const { mockProfileData } = await import("../mocks/supabase-state")
+  return { data: mockProfileData, error: null }
+})
+
 vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: "test-user-id", email: "test@example.com" } },
-        error: null,
-      }),
-    },
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(async () => {
-            const { mockProfileData } = await import("../mocks/supabase-state");
-            return { data: mockProfileData, error: null };
-          }),
-        })),
-      })),
-    })),
-  }),
+  createClient: () => einstellungenClient,
 }));
 
 describe("Einstellungen Tier Display", () => {
@@ -198,5 +193,29 @@ describe("Einstellungen Tier Display", () => {
     await waitFor(() => {
       expect(screen.getByText("Premium")).toBeInTheDocument();
     });
+  });
+
+  it("renders security activity after storage info", async () => {
+    setMockProfile({
+      subscription_status: "active",
+      stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY,
+      storage_used: 1048576,
+    } as any);
+
+    render(<EinstellungenPage />);
+
+    await screen.findByText("Speicherplatz");
+
+    const headings = screen.getAllByRole("heading");
+    const storageIndex = headings.findIndex(
+      (heading) => heading.textContent?.includes("Speicherplatz"),
+    );
+    const securityIndex = headings.findIndex(
+      (heading) => heading.textContent?.includes("Sicherheit & Aktivität"),
+    );
+
+    expect(storageIndex).toBeGreaterThan(-1);
+    expect(securityIndex).toBeGreaterThan(-1);
+    expect(securityIndex).toBeGreaterThan(storageIndex);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PRIVACY_POLICY_VERSION } from '@/lib/consent/constants'
+import { createSupabaseMock } from '../mocks/supabase-client'
 
 const mockGrantHealthDataConsent = vi.fn()
 const mockWithdrawHealthDataConsent = vi.fn()
@@ -22,24 +23,7 @@ let mockProfileData: { health_data_consent_granted: boolean; health_data_consent
 
 let mockProfileError: Error | null = null
 
-const createMockSupabaseClient = () => ({
-  auth: {
-    getUser: vi.fn().mockResolvedValue({
-      data: { user: mockAuthUser },
-      error: null,
-    }),
-  },
-  from: vi.fn(() => ({
-    select: vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        single: vi.fn().mockResolvedValue({
-          data: mockProfileData,
-          error: mockProfileError,
-        }),
-      }),
-    }),
-  })),
-})
+const { client: supabaseMockClient, getUser: supabaseGetUser, single: supabaseSingle } = createSupabaseMock()
 
 vi.mock('@/lib/consent/manager', () => ({
   grantHealthDataConsent: (...args: any[]) => mockGrantHealthDataConsent(...args),
@@ -59,7 +43,7 @@ vi.mock('@/lib/security/rate-limit', () => ({
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
-  createServerSupabaseClient: vi.fn(() => Promise.resolve(createMockSupabaseClient())),
+  createServerSupabaseClient: vi.fn(() => Promise.resolve(supabaseMockClient)),
 }))
 
 describe('Consent API Endpoints', () => {
@@ -71,6 +55,16 @@ describe('Consent API Endpoints', () => {
       health_data_consent_timestamp: '2025-01-01T00:00:00.000Z',
     }
     mockProfileError = null
+    // Configure getUser to read live mockAuthUser at call time
+    supabaseGetUser.mockImplementation(async () => ({
+      data: { user: mockAuthUser },
+      error: null,
+    }))
+    // Configure single to read live mockProfileData/mockProfileError at call time
+    supabaseSingle.mockImplementation(async () => ({
+      data: mockProfileData,
+      error: mockProfileError,
+    }))
     mockHasHealthDataConsent.mockResolvedValue(true)
     mockRequireAuth.mockImplementation(async () => {
       if (!mockAuthUser) {

@@ -63,3 +63,8 @@ export function getEncryptionKey(): string {
 export function resetKeyValidationCache(): void {
   keyValidated = false
 }
+
+export function encryptJson(value: unknown[] | null | undefined, key: string): string | null {
+  if (!value || (Array.isArray(value) && value.length === 0)) return null
+  return JSON.stringify(encrypt(JSON.stringify(value), key))
+}

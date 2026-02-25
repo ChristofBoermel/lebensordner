@@ -103,7 +103,17 @@ export async function PUT(request: Request) {
     const key = getEncryptionKey()
 
     const body = await request.json()
-    const { phone, address, date_of_birth, two_factor_secret } = body
+    const {
+      phone,
+      address,
+      date_of_birth,
+      two_factor_secret,
+      first_name,
+      middle_name,
+      last_name,
+      academic_title,
+      full_name,
+    } = body
 
     const updateData: Record<string, any> = {}
 
@@ -145,6 +155,26 @@ export async function PUT(request: Request) {
     } else if (two_factor_secret !== undefined) {
       updateData.two_factor_secret = null
       updateData.two_factor_secret_encrypted = false
+    }
+
+    if (first_name !== undefined) {
+      updateData.first_name = first_name || null
+    }
+
+    if (middle_name !== undefined) {
+      updateData.middle_name = middle_name || null
+    }
+
+    if (last_name !== undefined) {
+      updateData.last_name = last_name || null
+    }
+
+    if (academic_title !== undefined) {
+      updateData.academic_title = academic_title || null
+    }
+
+    if (full_name !== undefined) {
+      updateData.full_name = full_name || null
     }
 
     const { error } = await supabase

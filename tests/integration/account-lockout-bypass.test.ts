@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
+import { createSupabaseMock } from '../mocks/supabase-client'
 
 // --- In-memory lockout state for stateful mock ---
 const lockedAccounts = new Map<string, boolean>()
@@ -44,13 +45,15 @@ vi.mock('@/lib/email/security-notifications', () => ({
 }))
 
 // Mock Supabase server client with spy on signInWithPassword
-const mockSignInWithPassword = vi.fn()
+const { client: supabaseClient, signInWithPassword: mockSignInWithPassword } = createSupabaseMock()
 vi.mock('@/lib/supabase/server', () => ({
-  createServerSupabaseClient: vi.fn(async () => ({
-    auth: {
-      signInWithPassword: mockSignInWithPassword,
-    },
-  })),
+  createServerSupabaseClient: vi.fn(async () => supabaseClient),
+}))
+
+// The login route creates its own Supabase client via createServerClient from @supabase/ssr.
+// Mock it to return the same supabaseClient so signInWithPassword is intercepted.
+vi.mock('@supabase/ssr', () => ({
+  createServerClient: vi.fn(() => supabaseClient),
 }))
 
 // Import route handler and lockout functions AFTER mocks are registered

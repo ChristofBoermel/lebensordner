@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NameFields, composeFullName } from '@/components/ui/name-fields'
 import { Separator } from '@/components/ui/separator'
 import {
   Dialog,
@@ -312,7 +313,16 @@ export default function EinstellungenPage() {
       const { error } = await supabase
         .from('profiles')
         .update({
-          full_name: profile.full_name,
+          first_name: profile.first_name || null,
+          middle_name: profile.middle_name || null,
+          last_name: profile.last_name || null,
+          academic_title: profile.academic_title || null,
+          full_name: composeFullName({
+            academic_title: profile.academic_title || null,
+            first_name: profile.first_name || '',
+            middle_name: profile.middle_name || null,
+            last_name: profile.last_name || '',
+          }),
           onboarding_completed: true,
           email_reminders_enabled: profile.email_reminders_enabled ?? true,
           email_reminder_days_before: profile.email_reminder_days_before ?? 30,
@@ -751,10 +761,16 @@ export default function EinstellungenPage() {
                   </div>
                 </div>
                 <Separator />
-                <div className="space-y-2">
-                  <Label htmlFor="full_name">Vollständiger Name</Label>
-                  <Input id="full_name" value={profile.full_name || ''} onChange={(e) => setProfile({ ...profile, full_name: e.target.value })} placeholder="Max Mustermann" />
-                </div>
+                <NameFields
+                  value={{
+                    academic_title: profile.academic_title || null,
+                    first_name: profile.first_name || '',
+                    middle_name: profile.middle_name || null,
+                    last_name: profile.last_name || '',
+                  }}
+                  onChange={(v) => setProfile({ ...profile, ...v })}
+                  required
+                />
                 <div className="space-y-2">
                   <Label htmlFor="email">E-Mail-Adresse</Label>
                   <Input id="email" type="email" value={profile.email || ''} disabled className="bg-warmgray-50" />
@@ -1082,19 +1098,16 @@ export default function EinstellungenPage() {
 
           <Separator />
 
-          <div className="space-y-2">
-            <Label htmlFor="full_name">Vollständiger Name</Label>
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-500" />
-              <Input
-                id="full_name"
-                value={profile.full_name || ''}
-                onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
-                placeholder="Max Mustermann"
-                className="pl-12"
-              />
-            </div>
-          </div>
+          <NameFields
+            value={{
+              academic_title: profile.academic_title || null,
+              first_name: profile.first_name || '',
+              middle_name: profile.middle_name || null,
+              last_name: profile.last_name || '',
+            }}
+            onChange={(v) => setProfile({ ...profile, ...v })}
+            required
+          />
 
           <div className="space-y-2">
             <Label htmlFor="email">E-Mail-Adresse</Label>
@@ -1286,9 +1299,6 @@ export default function EinstellungenPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Security & Activity */}
-      <SecurityActivityLog />
 
       <Card>
         <CardHeader>
@@ -1680,6 +1690,9 @@ export default function EinstellungenPage() {
           })()}
         </CardContent>
       </Card>
+
+      {/* Security & Activity */}
+      <SecurityActivityLog />
 
       {/* Password Change Dialog */}
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>

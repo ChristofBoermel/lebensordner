@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Shield, Download, Loader2, AlertTriangle } from 'lucide-react'
 import type { SecurityAuditLog } from '@/types/database'
 
@@ -23,15 +22,6 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   gdpr_export_requested: 'GDPR-Export angefordert',
 }
 
-type FilterTab = 'all' | 'logins' | 'failed' | 'data_access'
-
-const FILTER_MAP: Record<FilterTab, string | null> = {
-  all: null,
-  logins: 'login_success',
-  failed: 'login_failure',
-  data_access: 'trusted_person_document_viewed',
-}
-
 function formatEventType(eventType: string): string {
   return EVENT_TYPE_LABELS[eventType] || eventType
 }
@@ -45,51 +35,20 @@ export function SecurityActivityLog() {
   const [events, setEvents] = useState<SecurityAuditLog[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
 
-  const fetchEvents = useCallback(async (filter: FilterTab) => {
+  const fetchEvents = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const params = new URLSearchParams({ limit: '50' })
-      const eventType = FILTER_MAP[filter]
-      if (eventType) {
-        params.set('event_type', eventType)
-      }
-
+      const params = new URLSearchParams({ limit: '3' })
       const res = await fetch(`/api/security/audit-log?${params.toString()}`)
       if (!res.ok) {
         throw new Error('Fehler beim Laden')
       }
 
       const data = await res.json()
-
-      // For data_access filter, we need to fetch multiple event types
-      if (filter === 'data_access') {
-        const params2 = new URLSearchParams({ limit: '50', event_type: 'download_link_created' })
-        const params3 = new URLSearchParams({ limit: '50', event_type: 'download_link_viewed' })
-
-        const [res2, res3] = await Promise.all([
-          fetch(`/api/security/audit-log?${params2.toString()}`),
-          fetch(`/api/security/audit-log?${params3.toString()}`),
-        ])
-
-        const data2 = res2.ok ? await res2.json() : { events: [] }
-        const data3 = res3.ok ? await res3.json() : { events: [] }
-
-        const combined = [
-          ...(data.events || []),
-          ...(data2.events || []),
-          ...(data3.events || []),
-        ].sort((a: SecurityAuditLog, b: SecurityAuditLog) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        )
-
-        setEvents(combined)
-      } else {
-        setEvents(data.events || [])
-      }
+      setEvents(data.events || [])
     } catch {
       setError('Aktivitäten konnten nicht geladen werden.')
     } finally {
@@ -98,12 +57,8 @@ export function SecurityActivityLog() {
   }, [])
 
   useEffect(() => {
-    fetchEvents(activeFilter)
-  }, [activeFilter, fetchEvents])
-
-  const handleFilterChange = (value: string) => {
-    setActiveFilter(value as FilterTab)
-  }
+    fetchEvents()
+  }, [fetchEvents])
 
   const handleCsvExport = () => {
     if (events.length === 0) return
@@ -157,15 +112,6 @@ export function SecurityActivityLog() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Tabs value={activeFilter} onValueChange={handleFilterChange}>
-          <TabsList className="w-full">
-            <TabsTrigger value="all" className="flex-1">Alle</TabsTrigger>
-            <TabsTrigger value="logins" className="flex-1">Anmeldungen</TabsTrigger>
-            <TabsTrigger value="failed" className="flex-1">Fehlversuche</TabsTrigger>
-            <TabsTrigger value="data_access" className="flex-1">Datenzugriff</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-sage-600" />

@@ -30,6 +30,11 @@ export const encryptFile = async (
   iv?: Uint8Array,
   aad?: Uint8Array,
 ): Promise<{ ciphertext: ArrayBuffer; iv: string }> => {
+  // Always pass a Uint8Array to SubtleCrypto — bare ArrayBuffer is rejected in some environments.
+  // ArrayBuffer.isView() is realm-safe; new Uint8Array(ab) handles cross-realm ArrayBuffers.
+  const dataView = (ArrayBuffer.isView(buffer)
+    ? (buffer as unknown as Uint8Array)
+    : new Uint8Array(buffer as unknown as ArrayBuffer)) as Uint8Array<ArrayBuffer>
   const actualIv = iv ?? globalThis.crypto.getRandomValues(new Uint8Array(12));
 
   const params: AesGcmParams = {
@@ -44,7 +49,7 @@ export const encryptFile = async (
   const ciphertext = await globalThis.crypto.subtle.encrypt(
     params,
     dek,
-    buffer,
+    dataView,
   );
 
   return {
@@ -59,6 +64,11 @@ export const decryptFile = async (
   iv: string,
   aad?: Uint8Array,
 ): Promise<ArrayBuffer> => {
+  // Always pass a Uint8Array to SubtleCrypto — bare ArrayBuffer is rejected in some environments.
+  // ArrayBuffer.isView() is realm-safe; new Uint8Array(ab) handles cross-realm ArrayBuffers.
+  const ciphertextView = (ArrayBuffer.isView(ciphertext)
+    ? (ciphertext as unknown as Uint8Array)
+    : new Uint8Array(ciphertext as unknown as ArrayBuffer)) as Uint8Array<ArrayBuffer>
   const ivBytes = fromBase64(iv);
   const params: AesGcmParams = {
     name: "AES-GCM",
@@ -67,7 +77,7 @@ export const decryptFile = async (
   if (aad) {
     params.additionalData = aad as Uint8Array<ArrayBuffer>;
   }
-  return globalThis.crypto.subtle.decrypt(params, dek, ciphertext);
+  return globalThis.crypto.subtle.decrypt(params, dek, ciphertextView);
 };
 
 export const encryptField = async (

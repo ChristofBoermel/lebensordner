@@ -7,6 +7,7 @@ import {
   STRIPE_PRICE_PREMIUM_MONTHLY,
 } from '../fixtures/stripe'
 import { setMockProfile, resetMockProfile } from '../mocks/supabase'
+import { createSupabaseMock } from '../mocks/supabase-client'
 
 type MockReminder = {
   id: string
@@ -73,17 +74,13 @@ const createMockBuilder = (tableName: string) => {
   return builder
 }
 
-const mockGetUser = async () => ({
+const { client: mockSupabaseClient } = createSupabaseMock()
+
+mockSupabaseClient.auth.getUser = async () => ({
   data: { user: { id: 'test-user-id', email: 'test@example.com' } },
   error: null,
 })
-
-const mockSupabaseClient = {
-  auth: {
-    getUser: mockGetUser,
-  },
-  from: (tableName: string) => createMockBuilder(tableName),
-}
+mockSupabaseClient.from = vi.fn((tableName: string) => createMockBuilder(tableName)) as any
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => mockSupabaseClient,

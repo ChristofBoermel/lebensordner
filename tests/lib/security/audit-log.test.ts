@@ -7,17 +7,15 @@ import {
   EVENT_LOGIN_FAILURE,
   EVENT_UNAUTHORIZED_ACCESS,
 } from '@/lib/security/audit-log'
+import { createSupabaseMock } from '../../mocks/supabase-client'
 
 // Mock Supabase client
-const mockInsert = vi.fn(() => ({ error: null }))
-const mockFrom = vi.fn(() => ({
-  insert: mockInsert,
-}))
+const { client, builder } = createSupabaseMock()
+const mockFrom = client.from
+const mockInsert = builder.insert as ReturnType<typeof vi.fn>
 
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => ({
-    from: mockFrom,
-  })),
+  createClient: vi.fn(() => client),
 }))
 
 describe('audit-log', () => {

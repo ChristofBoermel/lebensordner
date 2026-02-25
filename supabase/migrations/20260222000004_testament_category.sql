@@ -1,0 +1,3 @@
+-- No check constraint exists on documents.category (plain text column).
+-- The 'testament' category is enforced at the TypeScript/application layer only.
+-- This migration file exists for audit trail purposes.

@@ -76,6 +76,9 @@ import {
   PlusCircle,
   Tag,
   Info,
+  FileSignature,
+  ScrollText,
+  Share2,
 } from "lucide-react";
 import {
   DOCUMENT_CATEGORIES,
@@ -100,6 +103,7 @@ import { decryptField, unwrapKey } from "@/lib/security/document-e2ee";
 import { useVault } from "@/lib/vault/VaultContext";
 import { VaultSetupModal } from "@/components/vault/VaultSetupModal";
 import { VaultUnlockModal } from "@/components/vault/VaultUnlockModal";
+import { ShareDocumentDialog } from "@/components/sharing/ShareDocumentDialog";
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   user: User,
@@ -108,6 +112,8 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   home: Home,
   "heart-pulse": HeartPulse,
   "file-text": FileText,
+  "file-signature": FileSignature,
+  scroll: ScrollText,
   landmark: Landmark,
   folder: Folder,
   users: Users,
@@ -126,7 +132,9 @@ const categoryColorMap: Record<string, string> = {
   familie: "bg-pink-100 text-pink-600",
   arbeit: "bg-cyan-100 text-cyan-600",
   religion: "bg-violet-100 text-violet-600",
-  sonstiges: "bg-warmgray-100 text-warmgray-600",
+  sonstige: "bg-warmgray-100 text-warmgray-600",
+  bevollmaechtigungen: "bg-teal-100 text-teal-600",
+  testament: "bg-amber-100 text-amber-700",
 };
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
@@ -235,11 +243,16 @@ export default function DocumentsPage() {
   const [isVaultSetupModalOpen, setIsVaultSetupModalOpen] = useState(false);
   const [isVaultUnlockModalOpen, setIsVaultUnlockModalOpen] = useState(false);
 
+  // Share dialog state
+  const [shareDocument, setShareDocument] = useState<Document | null>(null);
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+
   // Family members for reminder watcher
   interface FamilyMember {
     id: string;
     name: string;
     email: string;
+    linked_user_id: string | null;
   }
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
 
@@ -347,6 +360,7 @@ export default function DocumentsPage() {
           id: tp.id,
           name: tp.name,
           email: tp.email,
+          linked_user_id: tp.linked_user_id,
         })),
       );
     }
@@ -419,6 +433,15 @@ export default function DocumentsPage() {
     };
     decryptTitles();
   }, [vaultContext.isUnlocked, vaultContext.masterKey, documents]);
+
+  useEffect(() => {
+    if (searchQuery.trim().length > 0) {
+      setActiveTab("overview");
+      setSelectedCategory(null);
+      setSelectedCustomCategory(null);
+      setCurrentFolder(null);
+    }
+  }, [searchQuery]);
 
   const validateAndSetFile = (file: File) => {
     if (file.size > MAX_FILE_SIZE) {
@@ -1494,6 +1517,13 @@ export default function DocumentsPage() {
                 <MoveRight className="w-4 h-4 mr-2" />
                 Verschieben
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => { setShareDocument(doc); setIsShareDialogOpen(true); }}
+                className="py-3"
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Teilen
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => handleDelete(doc)}
@@ -1952,9 +1982,27 @@ export default function DocumentsPage() {
               {/* Recent Documents */}
               <div>
                 <h2 className="text-lg font-semibold text-warmgray-900 mb-4">
-                  Zuletzt hinzugefügt
+                  {searchQuery ? "Suchergebnisse" : "Zuletzt hinzugefügt"}
                 </h2>
-                {validatedDocuments.length > 0 ? (
+                {searchQuery ? (
+                  filteredDocuments.length > 0 ? (
+                    <div className="space-y-3">
+                      {filteredDocuments.map(renderDocumentItem)}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 rounded-full bg-warmgray-100 flex items-center justify-center mx-auto mb-4">
+                        <FileText className="w-8 h-8 text-warmgray-400" />
+                      </div>
+                      <h3 className="text-lg font-medium text-warmgray-900 mb-2">
+                        Keine Dokumente gefunden
+                      </h3>
+                      <p className="text-warmgray-500 mb-4">
+                        Versuchen Sie eine andere Suche
+                      </p>
+                    </div>
+                  )
+                ) : validatedDocuments.length > 0 ? (
                   <div className="space-y-3">
                     {validatedDocuments.slice(0, 3).map(renderDocumentItem)}
                   </div>
@@ -2107,7 +2155,7 @@ export default function DocumentsPage() {
         ))}
       </Tabs>
       {/* Category Cards (when no category is selected) */}
-      {!selectedCategory && !searchQuery && (
+      {!selectedCategory && !searchQuery && !selectedCustomCategory && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
             const Icon = iconMap[category.icon] || FileText;
@@ -2164,6 +2212,110 @@ export default function DocumentsPage() {
           })}
         </div>
       )}
+      {!selectedCategory && !searchQuery && !selectedCustomCategory && (
+        <div className="mt-8 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-warmgray-900">
+              Eigene Kategorien
+            </h3>
+            {userTier.limits.maxCustomCategories !== 0 &&
+              (userTier.limits.maxCustomCategories === -1 ||
+                customCategories.length <
+                  userTier.limits.maxCustomCategories) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => openCategoryDialog()}
+                  className="h-8 text-sage-600 hover:text-sage-700 hover:bg-sage-50"
+                >
+                  <PlusCircle className="w-4 h-4 mr-1" />
+                  Neue Kategorie
+                </Button>
+              )}
+          </div>
+          {customCategories.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {customCategories.map((cat) => {
+                const count = getDocumentCountForCustomCategory(cat.id);
+                return (
+                  <Card
+                    key={cat.id}
+                    className="cursor-pointer hover:border-sage-300 hover:shadow-md transition-all"
+                    onClick={() => {
+                      setActiveTab(`custom:${cat.id}`);
+                      setSelectedCustomCategory(cat.id);
+                      setSelectedCategory(null);
+                    }}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center">
+                          <Tag className="w-6 h-6 text-sage-600" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openCategoryDialog(cat);
+                            }}
+                            title="Bearbeiten"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleDeleteCategory(cat.id);
+                            }}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Löschen"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <CardTitle className="text-lg">{cat.name}</CardTitle>
+                      {cat.description && (
+                        <CardDescription>{cat.description}</CardDescription>
+                      )}
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-warmgray-600">
+                        <span className="font-semibold text-sage-600">
+                          {count}
+                        </span>{" "}
+                        Dokument{count !== 1 ? "e" : ""}
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : userTier.limits.maxCustomCategories !== 0 &&
+            (userTier.limits.maxCustomCategories === -1 ||
+              customCategories.length <
+                userTier.limits.maxCustomCategories) ? (
+            <Card
+              className="border-2 border-dashed border-warmgray-200 hover:border-sage-300 cursor-pointer transition-colors"
+              onClick={() => openCategoryDialog()}
+            >
+              <CardContent className="flex flex-col items-center justify-center text-center py-10">
+                <PlusCircle className="w-8 h-8 text-sage-500 mb-3" />
+                <p className="text-sm font-medium text-warmgray-700">
+                  Neue Kategorie erstellen
+                </p>
+                <p className="text-xs text-warmgray-500 mt-1">
+                  Fügen Sie eine eigene Kategorie hinzu
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
+      )}
       {/* Upload Dialog */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
         {isUploadOpen ? (
@@ -2215,6 +2367,17 @@ export default function DocumentsPage() {
         isOpen={isVaultUnlockModalOpen}
         onClose={() => setIsVaultUnlockModalOpen(false)}
       />
+
+      {shareDocument !== null && (
+        <ShareDocumentDialog
+          document={shareDocument}
+          trustedPersons={familyMembers}
+          isOpen={isShareDialogOpen}
+          onClose={() => { setIsShareDialogOpen(false); setShareDocument(null); }}
+          onSuccess={() => { setIsShareDialogOpen(false); setShareDocument(null); }}
+          onRequestVaultUnlock={() => setIsVaultUnlockModalOpen(true)}
+        />
+      )}
 
       <DocumentPreview
         isOpen={!!previewDocument}

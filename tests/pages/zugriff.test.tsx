@@ -25,58 +25,65 @@ import {
   mockViewerDocuments,
   mockViewerCategories,
 } from '../fixtures/family-members'
+import { createSupabaseMock } from '../mocks/supabase-client'
 
-// Create a singleton mock Supabase client to prevent infinite re-renders
-// (The component's useEffect depends on supabase, so it must be stable)
-const createMockBuilder = () => {
-  const builder: Record<string, unknown> = {}
+// Create singleton mock Supabase client using factory
+const { client: mockSupabaseClient } = createSupabaseMock()
 
-  // Make chainable methods return the same builder
-  builder.select = vi.fn(() => builder)
-  builder.eq = vi.fn(() => builder)
-  builder.order = vi.fn(() => builder)
-  builder.update = vi.fn(() => builder)
-  builder.delete = vi.fn(() => builder)
-  builder.ilike = vi.fn(() => builder)
-  builder.neq = vi.fn(() => builder)
-
-  // Terminal methods that return promises
-  builder.single = vi.fn(async () => {
+// Build a fresh per-call builder using plain functions so vi.restoreAllMocks()
+// cannot clear the chain. Single reads supabase-state dynamically.
+const createZugriffBuilder = (tableName: string) => {
+  const b: Record<string, unknown> = {}
+  // Plain functions — immune to vi.restoreAllMocks()
+  const chain = () => b
+  b.select = chain
+  b.eq = chain
+  b.neq = chain
+  b.gte = chain
+  b.lte = chain
+  b.lt = chain
+  b.gt = chain
+  b.in = chain
+  b.not = chain
+  b.is = chain
+  b.ilike = chain
+  b.order = chain
+  b.limit = chain
+  b.single = async () => {
     const { mockProfileData } = await import('../mocks/supabase-state')
-    return { data: mockProfileData, error: null }
-  })
-  builder.insert = vi.fn().mockResolvedValue({ data: null, error: null })
-  builder.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null })
-
-  // Make the builder itself thenable (for queries without .single())
-  builder.then = (
+    return { data: tableName === 'profiles' ? mockProfileData : null, error: null }
+  }
+  b.then = (
     onFulfilled?: ((value: { data: unknown[]; error: null }) => unknown) | null,
     onRejected?: ((reason: unknown) => unknown) | null
-  ) => {
-    // Return empty array for list queries (trusted_persons)
-    return Promise.resolve({ data: [], error: null }).then(onFulfilled, onRejected)
-  }
-
-  return builder
+  ) => Promise.resolve({ data: [] as unknown[], error: null }).then(onFulfilled, onRejected)
+  return b
 }
 
-// Create mock auth that always returns user data (not using vi.fn() to avoid clearing)
-const mockGetUser = async () => ({
+// Override from() with a plain function — immune to vi.restoreAllMocks()
+;(mockSupabaseClient as Record<string, unknown>).from = (tableName: string) => createZugriffBuilder(tableName)
+
+// Configure getUser to always return stable test user (not vi.fn to avoid clearing)
+mockSupabaseClient.auth.getUser = async () => ({
   data: { user: { id: 'test-user-id', email: 'test@example.com' } },
   error: null,
 })
 
-// Create singleton mock client with stable references
-const mockSupabaseClient = {
-  auth: {
-    getUser: mockGetUser,
-  },
-  from: () => createMockBuilder(),
-}
-
 // Mock the Supabase client - returns singleton to prevent re-renders
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => mockSupabaseClient,
+}))
+
+vi.mock('@/lib/vault/VaultContext', () => ({
+  useVault: () => ({
+    isSetUp: false,
+    isUnlocked: false,
+    masterKey: null,
+    setup: vi.fn(),
+    unlock: vi.fn(),
+    unlockWithRecovery: vi.fn(),
+    lock: vi.fn(),
+  }),
 }))
 
 // Test component that simulates the Zugriff page's tier-fetching logic
@@ -1067,7 +1074,7 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
   })
 
   afterEach(() => {
-    vi.restoreAllMocks()
+    vi.clearAllMocks()
   })
 
   const setupFetchMocks = (options: {

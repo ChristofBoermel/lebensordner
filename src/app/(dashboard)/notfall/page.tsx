@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TagInput } from "@/components/ui/tag-input";
 import { Label } from "@/components/ui/label";
+import { NameFields, composeFullName } from "@/components/ui/name-fields";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConsentModal } from "@/components/consent/consent-modal";
@@ -39,6 +40,7 @@ import {
   Info,
   Star,
   Heart,
+  Syringe,
   FileText,
   Flower2,
   Scale,
@@ -47,6 +49,7 @@ import {
   Download,
   Eye,
   Lock,
+  Camera,
 } from "lucide-react";
 import {
   SUBSCRIPTION_TIERS,
@@ -58,6 +61,8 @@ import { useRouter } from "next/navigation";
 import { useVault } from "@/lib/vault/VaultContext";
 import { VaultSetupModal } from "@/components/vault/VaultSetupModal";
 import { VaultUnlockModal } from "@/components/vault/VaultUnlockModal";
+import type { Medication } from "@/types/medication";
+import { BmpScanDialog } from "@/components/notfall/BmpScanDialog";
 
 interface EmergencyContact {
   id: string;
@@ -71,9 +76,7 @@ interface EmergencyContact {
 
 interface MedicalInfo {
   id?: string;
-  blood_type: string;
   allergies: string[];
-  medications: string[];
   conditions: string[];
   doctor_name: string;
   doctor_phone: string;
@@ -131,10 +134,16 @@ interface FuneralWishes {
   funeral_insurance_number: string;
 }
 
+interface Vaccination {
+  id: string;
+  name: string;
+  is_standard: boolean;
+  month: number | null;
+  year: number | null;
+}
+
 const defaultMedicalInfo: MedicalInfo = {
-  blood_type: "",
   allergies: [],
-  medications: [],
   conditions: [],
   doctor_name: "",
   doctor_phone: "",
@@ -196,6 +205,297 @@ const CEREMONY_TYPES = [
   { value: "keine_praeferenz", label: "Familie soll entscheiden" },
 ];
 
+const GERMAN_MONTHS = [
+  "Januar",
+  "Februar",
+  "März",
+  "April",
+  "Mai",
+  "Juni",
+  "Juli",
+  "August",
+  "September",
+  "Oktober",
+  "November",
+  "Dezember",
+];
+
+function MedikamentRow({
+  medication,
+  index,
+  onEdit,
+  onDelete,
+}: {
+  medication: Medication;
+  index: number;
+  onEdit: (med: Medication, index: number) => void;
+  onDelete: (index: number) => void;
+}) {
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+
+  const isPznOnly = !!medication.pzn && !medication.wirkstoff;
+
+  const doseParts: string[] = [];
+  if (medication.morgens && medication.morgens !== "0")
+    doseParts.push(`morgens ${medication.morgens}`);
+  if (medication.mittags && medication.mittags !== "0")
+    doseParts.push(`mittags ${medication.mittags}`);
+  if (medication.abends && medication.abends !== "0")
+    doseParts.push(`abends ${medication.abends}`);
+  if (medication.zur_nacht && medication.zur_nacht !== "0")
+    doseParts.push(`zur Nacht ${medication.zur_nacht}`);
+  if (medication.einheit && doseParts.length > 0) {
+    doseParts[doseParts.length - 1] += ` ${medication.einheit}`;
+  }
+  if (medication.grund) doseParts.push(`· Grund: ${medication.grund}`);
+  const doseString = doseParts.join(" · ");
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg bg-cream-50 border border-cream-200 gap-4">
+      <div className="flex-1 min-w-0">
+        {isPznOnly ? (
+          <>
+            <p className="font-medium text-warmgray-900">PZN: {medication.pzn}</p>
+            <p className="text-sm text-amber-600 flex items-center gap-1 mt-1">
+              <AlertTriangle className="w-3 h-3" />
+              Bitte Wirkstoff ergänzen
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="font-medium text-warmgray-900">
+              {medication.wirkstoff}
+              {(medication.staerke || medication.form) && (
+                <span className="text-warmgray-500 font-normal ml-2 text-sm">
+                  {[medication.staerke, medication.form].filter(Boolean).join(" · ")}
+                </span>
+              )}
+            </p>
+            {doseString && (
+              <p className="text-sm text-warmgray-600 mt-0.5">{doseString}</p>
+            )}
+          </>
+        )}
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0 print:hidden">
+        {isConfirmingDelete ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-warmgray-700">Medikament wirklich löschen?</span>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => onDelete(index)}
+            >
+              Ja, löschen
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsConfirmingDelete(false)}
+            >
+              Abbrechen
+            </Button>
+          </div>
+        ) : (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onEdit(medication, index)}
+            >
+              <Edit2 className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-red-600 hover:bg-red-50"
+              onClick={() => setIsConfirmingDelete(true)}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MedikamentDialog({
+  open,
+  onOpenChange,
+  medication,
+  onSave,
+  isSaving,
+  error,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  medication: Medication | null;
+  onSave: (med: Medication) => void;
+  isSaving: boolean;
+  error: string | null;
+}) {
+  const [form, setForm] = useState<Medication>({ wirkstoff: "" });
+
+  useEffect(() => {
+    if (open) {
+      setForm(medication ? { ...medication } : { wirkstoff: "" });
+    }
+  }, [medication, open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:hidden">
+        <DialogHeader>
+          <DialogTitle>
+            {medication ? "Medikament bearbeiten" : "Medikament hinzufügen"}
+          </DialogTitle>
+          <DialogDescription>Felder mit * sind Pflichtfelder</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="field-wirkstoff">Wirkstoff *</Label>
+            <Input
+              id="field-wirkstoff"
+              data-element-id="field-wirkstoff"
+              value={form.wirkstoff}
+              onChange={(e) => setForm({ ...form, wirkstoff: e.target.value })}
+              placeholder="z.B. Metformin"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="field-handelsname">Handelsname (optional)</Label>
+            <Input
+              id="field-handelsname"
+              data-element-id="field-handelsname"
+              value={form.handelsname ?? ""}
+              onChange={(e) => setForm({ ...form, handelsname: e.target.value })}
+              placeholder="z.B. Glucophage"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="field-staerke">Stärke</Label>
+              <Input
+                id="field-staerke"
+                data-element-id="field-staerke"
+                value={form.staerke ?? ""}
+                onChange={(e) => setForm({ ...form, staerke: e.target.value })}
+                placeholder="z.B. 500 mg"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="field-form">Form</Label>
+              <Input
+                id="field-form"
+                data-element-id="field-form"
+                value={form.form ?? ""}
+                onChange={(e) => setForm({ ...form, form: e.target.value })}
+                placeholder="z.B. Tablette"
+              />
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-warmgray-700 mb-2">Dosierung</p>
+            <div className="grid grid-cols-4 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="field-morgens" className="text-xs text-center block">morgens</Label>
+                <Input
+                  id="field-morgens"
+                  data-element-id="field-morgens"
+                  value={form.morgens ?? ""}
+                  onChange={(e) => setForm({ ...form, morgens: e.target.value })}
+                  className="text-center"
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="field-mittags" className="text-xs text-center block">mittags</Label>
+                <Input
+                  id="field-mittags"
+                  data-element-id="field-mittags"
+                  value={form.mittags ?? ""}
+                  onChange={(e) => setForm({ ...form, mittags: e.target.value })}
+                  className="text-center"
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="field-abends" className="text-xs text-center block">abends</Label>
+                <Input
+                  id="field-abends"
+                  data-element-id="field-abends"
+                  value={form.abends ?? ""}
+                  onChange={(e) => setForm({ ...form, abends: e.target.value })}
+                  className="text-center"
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="field-zur-nacht" className="text-xs text-center block">zur Nacht</Label>
+                <Input
+                  id="field-zur-nacht"
+                  data-element-id="field-zur-nacht"
+                  value={form.zur_nacht ?? ""}
+                  onChange={(e) => setForm({ ...form, zur_nacht: e.target.value })}
+                  className="text-center"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="field-einheit">Einheit</Label>
+              <Input
+                id="field-einheit"
+                data-element-id="field-einheit"
+                value={form.einheit ?? ""}
+                onChange={(e) => setForm({ ...form, einheit: e.target.value })}
+                placeholder="z.B. Tablette(n)"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="field-grund">Grund</Label>
+              <Input
+                id="field-grund"
+                data-element-id="field-grund"
+                value={form.grund ?? ""}
+                onChange={(e) => setForm({ ...form, grund: e.target.value })}
+                placeholder="z.B. Diabetes Typ 2"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="field-hinweise">Hinweise</Label>
+            <Input
+              id="field-hinweise"
+              data-element-id="field-hinweise"
+              value={form.hinweise ?? ""}
+              onChange={(e) => setForm({ ...form, hinweise: e.target.value })}
+              placeholder="z.B. mit Mahlzeit einnehmen"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Abbrechen
+          </Button>
+          <Button onClick={() => onSave(form)} disabled={isSaving}>
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Speichern
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function NotfallPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("notfall");
@@ -209,6 +509,19 @@ export default function NotfallPage() {
   );
   const [funeralWishes, setFuneralWishes] =
     useState<FuneralWishes>(defaultFuneralWishes);
+  const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [isVaccinationDialogOpen, setIsVaccinationDialogOpen] =
+    useState(false);
+  const [editingVaccination, setEditingVaccination] =
+    useState<Vaccination | null>(null);
+  const [vaccinationForm, setVaccinationForm] = useState({
+    name: "",
+    month: "",
+    year: "",
+  });
+  const [isDeletingVaccination, setIsDeletingVaccination] = useState<
+    string | null
+  >(null);
 
   const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<EmergencyContact | null>(
@@ -229,7 +542,12 @@ export default function NotfallPage() {
   } | null>(null);
 
   const [contactForm, setContactForm] = useState({
-    name: "",
+    nameFields: {
+      academic_title: null as string | null,
+      first_name: "",
+      middle_name: null as string | null,
+      last_name: "",
+    },
     phone: "",
     email: "",
     relationship: "",
@@ -243,6 +561,15 @@ export default function NotfallPage() {
   );
   const [funeralForm, setFuneralForm] =
     useState<FuneralWishes>(defaultFuneralWishes);
+
+  // Structured medications
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [medicationPlanUpdatedAt, setMedicationPlanUpdatedAt] = useState<string | null>(null);
+  const [isMedikamentDialogOpen, setIsMedikamentDialogOpen] = useState(false);
+  const [isBmpScanDialogOpen, setIsBmpScanDialogOpen] = useState(false);
+  const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
+  const [editingMedicationIndex, setEditingMedicationIndex] = useState<number | null>(null);
+  const [isSavingMedikament, setIsSavingMedikament] = useState(false);
 
   // User tier and document upload
   const [userTier, setUserTier] = useState<TierConfig>(SUBSCRIPTION_TIERS.free);
@@ -285,12 +612,28 @@ export default function NotfallPage() {
     setDirectivesForm(defaultAdvanceDirectives);
     setFuneralWishes(defaultFuneralWishes);
     setFuneralForm(defaultFuneralWishes);
+    setVaccinations([]);
+    setMedications([]);
+    setMedicationPlanUpdatedAt(null);
     setUploadedDocuments({
       patient_decree: null,
       power_of_attorney: null,
       care_directive: null,
       bank_power_of_attorney: null,
     });
+  }, []);
+
+  const fetchVaccinations = useCallback(async () => {
+    try {
+      const response = await fetch("/api/vaccinations");
+      if (!response.ok) {
+        throw new Error("Fehler beim Laden der Impfungen");
+      }
+      const data = await response.json();
+      setVaccinations(data.vaccinations || []);
+    } catch (err) {
+      console.error("Failed to fetch vaccinations:", err);
+    }
   }, []);
 
   const pushConsentToast = useCallback(
@@ -348,6 +691,8 @@ export default function NotfallPage() {
             if (data.medicalInfo) {
               setMedicalInfo({ ...defaultMedicalInfo, ...data.medicalInfo });
               setMedicalForm({ ...defaultMedicalInfo, ...data.medicalInfo });
+              setMedications(data.medicalInfo.medications ?? []);
+              setMedicationPlanUpdatedAt(data.medicalInfo.medication_plan_updated_at ?? null);
             }
             if (data.directives) {
               setAdvanceDirectives({
@@ -411,6 +756,8 @@ export default function NotfallPage() {
                 }
               }
             }
+
+            await fetchVaccinations();
           }
         } else {
           clearHealthDataState();
@@ -432,7 +779,13 @@ export default function NotfallPage() {
 
       setIsLoading(false);
     },
-    [clearHealthDataState, handleConsentRequired, hasHealthConsent, supabase],
+    [
+      clearHealthDataState,
+      fetchVaccinations,
+      handleConsentRequired,
+      hasHealthConsent,
+      supabase,
+    ],
   );
 
   useEffect(() => {
@@ -533,8 +886,37 @@ export default function NotfallPage() {
   const handleOpenContactDialog = (contact?: EmergencyContact) => {
     if (contact) {
       setEditingContact(contact);
+      const KNOWN_TITLES = ['Prof. Dr.', 'Dr. med.', 'Dr. jur.', 'Dipl.-Ing.', 'M.Sc.', 'B.Sc.', 'Prof.', 'Dr.', 'MBA'];
+      let academic_title: string | null = null;
+      let remainder = contact.name;
+      for (const title of KNOWN_TITLES) {
+        if (contact.name.startsWith(title + ' ')) {
+          academic_title = title;
+          remainder = contact.name.slice(title.length + 1);
+          break;
+        }
+      }
+      const tokens = remainder.trim().split(/\s+/).filter((t) => t.length > 0);
+      let first_name = '';
+      let last_name = '';
+      let middle_name: string | null = null;
+      if (tokens.length === 1) {
+        first_name = tokens[0];
+      } else if (tokens.length === 2) {
+        first_name = tokens[0];
+        last_name = tokens[1];
+      } else if (tokens.length >= 3) {
+        first_name = tokens[0];
+        last_name = tokens[tokens.length - 1];
+        middle_name = tokens.slice(1, tokens.length - 1).join(' ');
+      }
       setContactForm({
-        name: contact.name,
+        nameFields: {
+          academic_title,
+          first_name,
+          middle_name,
+          last_name,
+        },
         phone: contact.phone,
         email: contact.email || "",
         relationship: contact.relationship,
@@ -544,7 +926,12 @@ export default function NotfallPage() {
     } else {
       setEditingContact(null);
       setContactForm({
-        name: "",
+        nameFields: {
+          academic_title: null,
+          first_name: "",
+          middle_name: null,
+          last_name: "",
+        },
         phone: "",
         email: "",
         relationship: "",
@@ -557,7 +944,12 @@ export default function NotfallPage() {
   };
 
   const handleSaveContact = async () => {
-    if (!contactForm.name || !contactForm.phone || !contactForm.relationship) {
+    if (
+      !contactForm.nameFields.first_name ||
+      !contactForm.nameFields.last_name ||
+      !contactForm.phone ||
+      !contactForm.relationship
+    ) {
       setError("Bitte füllen Sie alle Pflichtfelder aus.");
       return;
     }
@@ -577,9 +969,10 @@ export default function NotfallPage() {
           .eq("user_id", user.id);
       }
 
+      const composedName = composeFullName(contactForm.nameFields);
       const contactToSave = {
         ...(editingContact ? { id: editingContact.id } : {}),
-        name: contactForm.name,
+        name: composedName,
         phone: contactForm.phone,
         email: contactForm.email || null,
         relationship: contactForm.relationship,
@@ -796,9 +1189,7 @@ export default function NotfallPage() {
     try {
       const medicalData = {
         ...(medicalInfo.id ? { id: medicalInfo.id } : {}),
-        blood_type: medicalForm.blood_type || null,
         allergies: medicalForm.allergies.filter(Boolean),
-        medications: medicalForm.medications.filter(Boolean),
         conditions: medicalForm.conditions.filter(Boolean),
         doctor_name: medicalForm.doctor_name || null,
         doctor_phone: medicalForm.doctor_phone || null,
@@ -914,10 +1305,174 @@ export default function NotfallPage() {
     }
   };
 
+  const handleOpenVaccinationDialog = (vaccination?: Vaccination) => {
+    if (vaccination) {
+      setEditingVaccination(vaccination);
+      setVaccinationForm({
+        name: vaccination.name,
+        month: vaccination.month ? String(vaccination.month) : "",
+        year: vaccination.year ? String(vaccination.year) : "",
+      });
+    } else {
+      setEditingVaccination(null);
+      setVaccinationForm({ name: "", month: "", year: "" });
+    }
+    setError(null);
+    setIsVaccinationDialogOpen(true);
+  };
+
+  const handleSaveVaccination = async () => {
+    if (!vaccinationForm.name || !vaccinationForm.year) {
+      setError("Bitte füllen Sie alle Pflichtfelder aus.");
+      return;
+    }
+
+    if (vaccinationForm.month !== "" && (parseInt(vaccinationForm.month) < 1 || parseInt(vaccinationForm.month) > 12)) {
+      pushConsentToast("error", "Monat muss zwischen 1 und 12 liegen");
+      return;
+    }
+
+    if (vaccinationForm.year !== "" && (parseInt(vaccinationForm.year) < 1900 || parseInt(vaccinationForm.year) > 2100)) {
+      pushConsentToast("error", "Bitte geben Sie ein gültiges Jahr ein (1900–2100)");
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        name: vaccinationForm.name.trim(),
+        month: vaccinationForm.month ? Number(vaccinationForm.month) : null,
+        year: Number(vaccinationForm.year),
+      };
+      const url = editingVaccination
+        ? `/api/vaccinations/${editingVaccination.id}`
+        : "/api/vaccinations";
+      const method = editingVaccination ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Fehler beim Speichern");
+      }
+
+      await fetchVaccinations();
+      setIsVaccinationDialogOpen(false);
+      setEditingVaccination(null);
+    } catch (err) {
+      setError("Fehler beim Speichern. Bitte versuchen Sie es erneut.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteVaccination = async (id: string) => {
+    if (!confirm("Möchten Sie diese Impfung wirklich löschen?")) return;
+    setIsDeletingVaccination(id);
+    try {
+      const response = await fetch(`/api/vaccinations/${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error("Fehler beim Löschen");
+      }
+      await fetchVaccinations();
+    } catch (err) {
+      console.error("Delete vaccination error:", err);
+      alert("Fehler beim Löschen. Bitte versuchen Sie es erneut.");
+    } finally {
+      setIsDeletingVaccination(null);
+    }
+  };
+
+  const handleOpenMedikamentDialog = (medication?: Medication, index?: number) => {
+    if (medication !== undefined && index !== undefined) {
+      setEditingMedication(medication);
+      setEditingMedicationIndex(index);
+    } else {
+      setEditingMedication(null);
+      setEditingMedicationIndex(null);
+    }
+    setError(null);
+    setIsMedikamentDialogOpen(true);
+  };
+
+  const handleSaveMedikament = async (med: Medication) => {
+    if (!med.wirkstoff && !med.pzn) {
+      setError("Bitte geben Sie mindestens einen Wirkstoff oder eine PZN an.");
+      return;
+    }
+    setIsSavingMedikament(true);
+    try {
+      const newList =
+        editingMedicationIndex !== null
+          ? medications.map((m, i) => (i === editingMedicationIndex ? med : m))
+          : [...medications, med];
+
+      const response = await fetch("/api/notfall", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          medicalInfo: { id: medicalInfo?.id, medications: newList },
+        }),
+      });
+      if (await handleConsentRequired(response)) return;
+      if (!response.ok) throw new Error("Fehler beim Speichern");
+
+      setMedications(newList);
+      setMedicationPlanUpdatedAt(new Date().toISOString());
+      setIsMedikamentDialogOpen(false);
+      setEditingMedication(null);
+      setEditingMedicationIndex(null);
+    } catch (err) {
+      setError("Fehler beim Speichern. Bitte versuchen Sie es erneut.");
+    } finally {
+      setIsSavingMedikament(false);
+    }
+  };
+
+  const handleDeleteMedikament = async (index: number) => {
+    const newList = medications.filter((_, i) => i !== index);
+    try {
+      const response = await fetch("/api/notfall", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          medicalInfo: { id: medicalInfo?.id, medications: newList },
+        }),
+      });
+      if (await handleConsentRequired(response)) return;
+      if (!response.ok) throw new Error("Fehler beim Löschen");
+
+      setMedications(newList);
+      setMedicationPlanUpdatedAt(new Date().toISOString());
+    } catch (err) {
+      console.error("Delete medication error:", err);
+    }
+  };
+
+  const handleScanComplete = async (meds: Medication[]) => {
+    const response = await fetch("/api/notfall", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        medicalInfo: { id: medicalInfo?.id, medications: meds },
+      }),
+    });
+    if (await handleConsentRequired(response)) return;
+    if (!response.ok) throw new Error("Fehler beim Speichern");
+    setMedications(meds);
+    setMedicationPlanUpdatedAt(new Date().toISOString());
+  };
+
   const status = (() => {
     let complete = 0;
     if (emergencyContacts.length > 0) complete++;
-    if (medicalInfo.blood_type) complete++;
     if (medicalInfo.organ_donor !== null) complete++;
     if (
       advanceDirectives.has_patient_decree ||
@@ -925,7 +1480,7 @@ export default function NotfallPage() {
     )
       complete++;
     if (funeralWishes.burial_type) complete++;
-    return { complete, total: 5, percentage: Math.round((complete / 5) * 100) };
+    return { complete, total: 4, percentage: Math.round((complete / 4) * 100) };
   })();
 
   if (isLoading || hasHealthConsent === null) {
@@ -1209,12 +1764,6 @@ export default function NotfallPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <div>
-                        <p className="text-sm text-warmgray-500">Blutgruppe</p>
-                        <p className="font-medium text-warmgray-900">
-                          {medicalInfo.blood_type || "–"}
-                        </p>
-                      </div>
-                      <div>
                         <p className="text-sm text-warmgray-500 flex items-center gap-1">
                           <AlertTriangle className="w-4 h-4" />
                           Allergien
@@ -1222,17 +1771,6 @@ export default function NotfallPage() {
                         <p className="font-medium text-warmgray-900">
                           {medicalInfo.allergies.length > 0
                             ? medicalInfo.allergies.join(", ")
-                            : "–"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-warmgray-500 flex items-center gap-1">
-                          <Pill className="w-4 h-4" />
-                          Medikamente
-                        </p>
-                        <p className="font-medium text-warmgray-900">
-                          {medicalInfo.medications.length > 0
-                            ? medicalInfo.medications.join(", ")
                             : "–"}
                         </p>
                       </div>
@@ -1272,6 +1810,62 @@ export default function NotfallPage() {
 
               <Card>
                 <CardHeader>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Pill className="w-5 h-5 text-sage-600" />
+                        Medikamente
+                      </CardTitle>
+                      {medicationPlanUpdatedAt && (
+                        <CardDescription>
+                          Zuletzt aktualisiert:{" "}
+                          {new Date(medicationPlanUpdatedAt).toLocaleDateString("de-DE")}
+                        </CardDescription>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 print:hidden">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-element-id="scan-bmp-btn"
+                        onClick={() => setIsBmpScanDialogOpen(true)}
+                      >
+                        <Camera className="w-4 h-4 mr-2" />
+                        Medikationsplan scannen
+                      </Button>
+                      <Button size="sm" onClick={() => handleOpenMedikamentDialog()}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Hinzufügen
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {medications.length > 0 ? (
+                    <div className="space-y-3">
+                      {medications.map((med, index) => (
+                        <MedikamentRow
+                          key={index}
+                          medication={med}
+                          index={index}
+                          onEdit={handleOpenMedikamentDialog}
+                          onDelete={handleDeleteMedikament}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-10">
+                      <Pill className="w-16 h-16 text-warmgray-300 mx-auto mb-4" />
+                      <p className="text-warmgray-600 text-lg">
+                        Noch keine Medikamente eingetragen
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Heart className="w-5 h-5 text-sage-600" />
                     Organspende
@@ -1304,6 +1898,121 @@ export default function NotfallPage() {
                         </p>
                       </div>
                     )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Syringe className="w-5 h-5 text-sage-600" />
+                    Impfungen
+                  </CardTitle>
+                  <CardDescription>Ihre Impfhistorie</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="text-left text-warmgray-500">
+                        <tr className="border-b border-warmgray-200">
+                          <th className="py-2 font-medium">Impfung</th>
+                          <th className="py-2 font-medium">Monat</th>
+                          <th className="py-2 font-medium">Jahr</th>
+                          <th className="py-2 font-medium text-right">
+                            Aktionen
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vaccinations.length > 0 ? (
+                          vaccinations.map((vaccination) => (
+                            <tr
+                              key={vaccination.id}
+                              className="border-b border-warmgray-100"
+                            >
+                              <td className="py-3 pr-4">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium text-warmgray-900">
+                                    {vaccination.name}
+                                  </span>
+                                  {vaccination.is_standard && (
+                                    <span className="px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-sage-100 text-sage-700 rounded-full">
+                                      Standard
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 pr-4 text-warmgray-700">
+                                {vaccination.month
+                                  ? GERMAN_MONTHS[vaccination.month - 1]
+                                  : "—"}
+                              </td>
+                              <td className="py-3 pr-4">
+                                {vaccination.year ? (
+                                  <span className="px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-warmgray-100 text-warmgray-600 rounded-full">
+                                    {vaccination.year}
+                                  </span>
+                                ) : (
+                                  <span className="text-warmgray-500">
+                                    Nicht eingetragen
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      handleOpenVaccinationDialog(vaccination)
+                                    }
+                                    className="h-9 w-9"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      handleDeleteVaccination(vaccination.id)
+                                    }
+                                    disabled={
+                                      isDeletingVaccination === vaccination.id
+                                    }
+                                    className="text-red-600 hover:bg-red-50 h-9 w-9"
+                                  >
+                                    {isDeletingVaccination ===
+                                    vaccination.id ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td
+                              colSpan={4}
+                              className="py-6 text-center text-warmgray-500"
+                            >
+                              Noch keine Impfungen eingetragen
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => handleOpenVaccinationDialog()}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Impfung hinzufügen
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -1786,16 +2495,13 @@ export default function NotfallPage() {
                     {error}
                   </div>
                 )}
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name *</Label>
-                  <Input
-                    id="name"
-                    value={contactForm.name}
-                    onChange={(e) =>
-                      setContactForm({ ...contactForm, name: e.target.value })
-                    }
-                  />
-                </div>
+                <NameFields
+                  value={contactForm.nameFields}
+                  onChange={(v) =>
+                    setContactForm({ ...contactForm, nameFields: v })
+                  }
+                  required
+                />
                 <div className="space-y-2">
                   <Label htmlFor="phone">Telefonnummer *</Label>
                   <Input
@@ -1880,19 +2586,6 @@ export default function NotfallPage() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label>Blutgruppe</Label>
-                  <Input
-                    value={medicalForm.blood_type}
-                    onChange={(e) =>
-                      setMedicalForm({
-                        ...medicalForm,
-                        blood_type: e.target.value,
-                      })
-                    }
-                    placeholder="z.B. A+, 0-"
-                  />
-                </div>
-                <div className="space-y-2">
                   <Label>Allergien</Label>
                   <TagInput
                     value={medicalForm.allergies}
@@ -1900,16 +2593,6 @@ export default function NotfallPage() {
                       setMedicalForm({ ...medicalForm, allergies })
                     }
                     placeholder="Drücken Sie Enter nach jeder Allergie"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Medikamente</Label>
-                  <TagInput
-                    value={medicalForm.medications}
-                    onChange={(medications) =>
-                      setMedicalForm({ ...medicalForm, medications })
-                    }
-                    placeholder="Drücken Sie Enter nach jedem Medikament"
                   />
                 </div>
                 <div className="space-y-2">
@@ -2027,6 +2710,107 @@ export default function NotfallPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          <Dialog
+            open={isVaccinationDialogOpen}
+            onOpenChange={setIsVaccinationDialogOpen}
+          >
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:hidden">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingVaccination
+                    ? "Impfung bearbeiten"
+                    : "Impfung hinzufügen"}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                {error && (
+                  <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                    {error}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label>Name *</Label>
+                  <Input
+                    value={vaccinationForm.name}
+                    onChange={(e) =>
+                      setVaccinationForm({
+                        ...vaccinationForm,
+                        name: e.target.value,
+                      })
+                    }
+                    disabled={editingVaccination?.is_standard}
+                    placeholder="z.B. Tetanus"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Monat</Label>
+                  <select
+                    value={vaccinationForm.month}
+                    onChange={(e) =>
+                      setVaccinationForm({
+                        ...vaccinationForm,
+                        month: e.target.value,
+                      })
+                    }
+                    className="w-full rounded-md border-2 border-warmgray-400 bg-white px-4 py-2 text-base"
+                  >
+                    <option value="">—</option>
+                    {GERMAN_MONTHS.map((month, index) => (
+                      <option key={month} value={String(index + 1)}>
+                        {month}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Jahr *</Label>
+                  <Input
+                    type="number"
+                    placeholder="z.B. 2023"
+                    value={vaccinationForm.year}
+                    onChange={(e) =>
+                      setVaccinationForm({
+                        ...vaccinationForm,
+                        year: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsVaccinationDialogOpen(false)}
+                >
+                  Abbrechen
+                </Button>
+                <Button onClick={handleSaveVaccination} disabled={isSaving}>
+                  {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  Speichern
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <MedikamentDialog
+            open={isMedikamentDialogOpen}
+            onOpenChange={setIsMedikamentDialogOpen}
+            medication={editingMedication}
+            onSave={handleSaveMedikament}
+            isSaving={isSavingMedikament}
+            error={error}
+          />
+
+          <BmpScanDialog
+            open={isBmpScanDialogOpen}
+            onOpenChange={setIsBmpScanDialogOpen}
+            onMedicationsScanned={handleScanComplete}
+            existingMedications={medications}
+            medicalInfoId={medicalInfo?.id}
+          />
 
           <Dialog
             open={isDirectivesDialogOpen}

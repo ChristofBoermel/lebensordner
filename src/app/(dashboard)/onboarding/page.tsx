@@ -7,13 +7,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NameFields, composeFullName } from '@/components/ui/name-fields'
 import {
   User, Phone, MapPin, FileText,
   ArrowRight, ArrowLeft, Check, Loader2, Sparkles, Shield,
   Upload, HeartPulse, Wallet, Home, Landmark,
   Users, Briefcase, Church, FolderOpen, Smartphone, X,
   Heart, Calendar, ChevronDown, Zap, Printer, Mail, Download,
-  ExternalLink
+  ExternalLink, FileSignature, ScrollText
 } from 'lucide-react'
 import { DOCUMENT_CATEGORIES, type DocumentCategory } from '@/types/database'
 import { HelpTooltip } from '@/components/onboarding/help-tooltip'
@@ -49,13 +50,12 @@ const STORAGE_KEY = 'onboarding_progress'
 // Profile field configurations for progressive disclosure
 const PROFILE_FIELDS = [
   {
-    key: 'full_name' as const,
-    label: 'Vollständiger Name',
-    type: 'text' as const,
-    placeholder: 'z.B. Max Mustermann',
-    helpTitle: 'Vollständiger Name',
-    helpContent: 'Ihr vollständiger Name hilft im Notfall bei der eindeutigen Identifikation. Bitte geben Sie Vor- und Nachname wie im Personalausweis an.',
-    inputId: 'full_name',
+    key: 'name_fields' as const,
+    label: 'Name',
+    type: 'name_fields' as const,
+    helpTitle: 'Ihr Name',
+    helpContent: 'Ihr vollständiger Name hilft im Notfall bei der eindeutigen Identifikation.',
+    inputId: 'name_fields',
   },
   {
     key: 'phone' as const,
@@ -141,7 +141,10 @@ const ALL_CATEGORY_KEYS = Object.keys(DOCUMENT_CATEGORIES) as DocumentCategory[]
 interface OnboardingProgress {
   currentStep: Step
   profileForm: {
-    full_name: string
+    academic_title: string | null
+    first_name: string
+    middle_name: string | null
+    last_name: string
     phone: string
     date_of_birth: string
     address: string
@@ -163,7 +166,10 @@ function getDefaultProgress(): OnboardingProgress {
   return {
     currentStep: 'welcome',
     profileForm: {
-      full_name: '',
+      academic_title: null,
+      first_name: '',
+      middle_name: null,
+      last_name: '',
       phone: '',
       date_of_birth: '',
       address: '',
@@ -291,7 +297,10 @@ export default function OnboardingPage() {
 
   // Form states
   const [profileForm, setProfileForm] = useState({
-    full_name: '',
+    academic_title: null as string | null,
+    first_name: '',
+    middle_name: null as string | null,
+    last_name: '',
     phone: '',
     date_of_birth: '',
     address: '',
@@ -458,7 +467,7 @@ export default function OnboardingPage() {
 
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('onboarding_completed, full_name, phone, date_of_birth, address')
+          .select('onboarding_completed, first_name, middle_name, last_name, academic_title, full_name, phone, date_of_birth, address')
           .eq('id', user.id)
           .single()
 
@@ -503,12 +512,21 @@ export default function OnboardingPage() {
         // Pre-fill profile form if data exists in database
         if (profile) {
           setProfileForm(prev => ({
-            full_name: profile.full_name || prev.full_name || '',
+            academic_title: profile.academic_title ?? prev.academic_title ?? null,
+            first_name: profile.first_name || prev.first_name || '',
+            middle_name: profile.middle_name ?? prev.middle_name ?? null,
+            last_name: profile.last_name || prev.last_name || '',
             phone: profile.phone || prev.phone || '',
             date_of_birth: profile.date_of_birth || prev.date_of_birth || '',
             address: profile.address || prev.address || '',
           }))
-          if (profile.full_name) setUserFullName(profile.full_name)
+          const displayName = composeFullName({
+            academic_title: profile.academic_title ?? null,
+            first_name: profile.first_name || '',
+            middle_name: profile.middle_name ?? null,
+            last_name: profile.last_name || '',
+          })
+          if (displayName) setUserFullName(displayName)
         }
 
         // Store user email for completion screen
@@ -689,7 +707,11 @@ export default function OnboardingPage() {
       if (!user) throw new Error('Nicht angemeldet')
 
       await supabase.from('profiles').update({
-        full_name: profileForm.full_name || null,
+        first_name: profileForm.first_name || null,
+        middle_name: profileForm.middle_name || null,
+        last_name: profileForm.last_name || null,
+        academic_title: profileForm.academic_title || null,
+        full_name: composeFullName(profileForm) || null,
         phone: profileForm.phone || null,
         date_of_birth: profileForm.date_of_birth || null,
         address: profileForm.address || null,
@@ -953,7 +975,10 @@ export default function OnboardingPage() {
       addSection('Ihre Eingaben')
       const fields = quickStartMode ? [PROFILE_FIELDS[0]] : PROFILE_FIELDS
       fields.forEach((field) => {
-        addKeyValue(field.label, profileForm[field.key] || 'Noch nicht ausgef\u00fcllt')
+        const value = field.type === 'name_fields'
+          ? composeFullName(profileForm)
+          : (profileForm[field.key as keyof typeof profileForm] as string)
+        addKeyValue(field.label, value || 'Noch nicht ausgef\u00fcllt')
         addBody(`Hilfe: ${field.helpContent}`, 11)
       })
       if (quickStartMode) {
@@ -1216,23 +1241,69 @@ export default function OnboardingPage() {
               </ExpandableHelp>
             </div>
 
-            <ProgressiveField
-              fieldLabel={currentField.label}
-              fieldValue={profileForm[currentField.key]}
-              onChange={(value) => setProfileForm({ ...profileForm, [currentField.key]: value })}
-              fieldIndex={profileFieldIndex}
-              totalFields={activeProfileFields.length}
-              onNext={handleProfileFieldNext}
-              onPrevious={handleProfileFieldPrevious}
-              helpContent={currentField.helpContent}
-              helpTitle={currentField.helpTitle}
-              placeholder={currentField.placeholder}
-              inputType={currentField.type}
-              icon={currentIcon}
-              isLastField={profileFieldIndex === activeProfileFields.length - 1}
-              isSaved={fieldSaved}
-              inputId={currentField.inputId}
-            />
+            {currentField.type === 'name_fields' ? (
+              <div className="space-y-6">
+                <NameFields
+                  value={{
+                    academic_title: profileForm.academic_title,
+                    first_name: profileForm.first_name,
+                    middle_name: profileForm.middle_name,
+                    last_name: profileForm.last_name,
+                  }}
+                  onChange={(value) =>
+                    setProfileForm({
+                      ...profileForm,
+                      academic_title: value.academic_title,
+                      first_name: value.first_name,
+                      middle_name: value.middle_name,
+                      last_name: value.last_name,
+                    })
+                  }
+                  required
+                />
+                <div className="flex justify-between pt-4">
+                  {profileFieldIndex > 0 ? (
+                    <Button
+                      variant="ghost"
+                      onClick={handleProfileFieldPrevious}
+                      size="onboarding"
+                      className="text-warmgray-700"
+                    >
+                      <ArrowLeft className="mr-2 w-5 h-5" />
+                      Zurück
+                    </Button>
+                  ) : (
+                    <div />
+                  )}
+                  <Button
+                    onClick={handleProfileFieldNext}
+                    size="onboarding"
+                    className="min-w-[180px]"
+                  >
+                    {profileFieldIndex === activeProfileFields.length - 1 ? 'Abschließen' : 'Nächstes Feld'}
+                    <ArrowRight className="ml-2 w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <ProgressiveField
+                fieldLabel={currentField.label}
+                fieldValue={profileForm[currentField.key as keyof typeof profileForm] as string}
+                onChange={(value) => setProfileForm({ ...profileForm, [currentField.key]: value })}
+                fieldIndex={profileFieldIndex}
+                totalFields={activeProfileFields.length}
+                onNext={handleProfileFieldNext}
+                onPrevious={handleProfileFieldPrevious}
+                helpContent={currentField.helpContent}
+                helpTitle={currentField.helpTitle}
+                placeholder={currentField.placeholder}
+                inputType={currentField.type}
+                icon={currentIcon}
+                isLastField={profileFieldIndex === activeProfileFields.length - 1}
+                isSaved={fieldSaved}
+                inputId={currentField.inputId}
+              />
+            )}
 
             <div className="flex justify-between max-w-md mx-auto pt-2">
               <Button
@@ -1271,6 +1342,8 @@ export default function OnboardingPage() {
           home: Home,
           'heart-pulse': HeartPulse,
           'file-text': FileText,
+          'file-signature': FileSignature,
+          scroll: ScrollText,
           landmark: Landmark,
           users: Users,
           briefcase: Briefcase,
@@ -1302,13 +1375,15 @@ export default function OnboardingPage() {
                   return (
                     <div
                       key={catKey}
-                      className="p-5 rounded-lg bg-white border-2 border-warmgray-300 text-center min-h-[140px] flex flex-col items-center"
+                      className="p-3 sm:p-5 rounded-lg bg-white border-2 border-warmgray-300 min-h-[140px] flex flex-col items-center overflow-hidden"
                     >
                       <div className="bg-sage-50 rounded-full p-3 mb-2">
                         <IconComponent className="w-8 h-8 text-sage-700" />
                       </div>
-                      <p className="font-medium text-warmgray-900 text-lg">{cat.name}</p>
-                      <ul className="text-base text-warmgray-700 mt-1 space-y-0.5">
+                      <p className="w-full text-sm font-medium text-warmgray-900 line-clamp-2 text-left">
+                        {cat.name}
+                      </p>
+                      <ul className="w-full text-xs text-warmgray-700 mt-1 space-y-0.5 text-left">
                         {cat.examples.slice(0, 2).map((example, i) => (
                           <li key={i}>• {example}</li>
                         ))}
@@ -1616,7 +1691,7 @@ export default function OnboardingPage() {
                     <Download className="w-5 h-5 text-sage-700" />
                   </div>
                   <DownloadChecklistButton
-                    userName={userFullName || profileForm.full_name}
+                    userName={userFullName || composeFullName(profileForm)}
                     userEmail={userEmail}
                     variant="outline"
                     size="sm"

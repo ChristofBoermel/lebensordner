@@ -19,6 +19,7 @@ export type DocumentCategory =
   | 'arbeit'          // Arbeit
   | 'religion'        // Religion
   | 'bevollmaechtigungen' // Bevollmächtigungen
+  | 'testament'       // Testament
   | 'sonstige'        // Sonstige
 
 export const DOCUMENT_CATEGORIES: Record<DocumentCategory, {
@@ -88,10 +89,16 @@ export const DOCUMENT_CATEGORIES: Record<DocumentCategory, {
     icon: 'church',
   },
   bevollmaechtigungen: {
-    name: 'Bevollmächtigungen',
+    name: 'Vollmachten',
     description: 'Vollmachten und rechtliche Vertretungen',
     examples: ['Vorsorgevollmacht', 'Bankvollmacht', 'Generalvollmacht', 'Betreuungsvollmacht', 'Patientenverfügung'],
     icon: 'file-signature',
+  },
+  testament: {
+    name: 'Testament',
+    description: 'Testamente und Erbschaftsdokumente',
+    examples: ['Letzter Wille', 'Erbvertrag', 'Testamentsvollstrecker', 'Erbschein'],
+    icon: 'scroll',
   },
   sonstige: {
     name: 'Sonstige',
@@ -128,6 +135,7 @@ export const CATEGORY_METADATA_FIELDS: Partial<Record<DocumentCategory, Metadata
     { key: 'gueltig_bis', label: 'Gültig bis', type: 'date' },
     { key: 'art_der_vollmacht', label: 'Art der Vollmacht', type: 'select', required: true, options: ['Vorsorgevollmacht', 'Bankvollmacht', 'Generalvollmacht', 'Betreuungsvollmacht'] },
   ],
+  testament: [],
 }
 
 // Custom category interface for user-created categories
@@ -178,6 +186,10 @@ export interface Database {
           two_factor_secret_encrypted: boolean
           health_data_consent_granted: boolean
           health_data_consent_timestamp: string | null
+          first_name: string | null
+          middle_name: string | null
+          last_name: string | null
+          academic_title: string | null
         }
         Insert: {
           id: string
@@ -213,6 +225,10 @@ export interface Database {
           two_factor_secret_encrypted?: boolean
           health_data_consent_granted?: boolean
           health_data_consent_timestamp?: string | null
+          first_name?: string | null
+          middle_name?: string | null
+          last_name?: string | null
+          academic_title?: string | null
         }
         Update: {
           id?: string
@@ -248,6 +264,10 @@ export interface Database {
           two_factor_secret_encrypted?: boolean
           health_data_consent_granted?: boolean
           health_data_consent_timestamp?: string | null
+          first_name?: string | null
+          middle_name?: string | null
+          last_name?: string | null
+          academic_title?: string | null
         }
       }
       documents: {
@@ -695,7 +715,6 @@ export interface Database {
           conditions: string | null
           medications: string | null
           allergies: string | null
-          blood_type: string | null
           doctor_name: string | null
           doctor_phone: string | null
           insurance_number: string | null
@@ -706,7 +725,7 @@ export interface Database {
           conditions_encrypted: boolean
           medications_encrypted: boolean
           allergies_encrypted: boolean
-          blood_type_encrypted: boolean
+          medication_plan_updated_at: string | null
         }
         Insert: {
           id?: string
@@ -716,7 +735,6 @@ export interface Database {
           conditions?: string | null
           medications?: string | null
           allergies?: string | null
-          blood_type?: string | null
           doctor_name?: string | null
           doctor_phone?: string | null
           insurance_number?: string | null
@@ -727,7 +745,7 @@ export interface Database {
           conditions_encrypted?: boolean
           medications_encrypted?: boolean
           allergies_encrypted?: boolean
-          blood_type_encrypted?: boolean
+          medication_plan_updated_at?: string | null
         }
         Update: {
           id?: string
@@ -737,7 +755,6 @@ export interface Database {
           conditions?: string | null
           medications?: string | null
           allergies?: string | null
-          blood_type?: string | null
           doctor_name?: string | null
           doctor_phone?: string | null
           insurance_number?: string | null
@@ -748,7 +765,7 @@ export interface Database {
           conditions_encrypted?: boolean
           medications_encrypted?: boolean
           allergies_encrypted?: boolean
-          blood_type_encrypted?: boolean
+          medication_plan_updated_at?: string | null
         }
       }
       emergency_contacts: {
@@ -1015,6 +1032,9 @@ export interface Database {
           trusted_person_id: string
           wrapped_dek_for_tp: string
           created_at: string
+          expires_at: string | null
+          permission: string
+          revoked_at: string | null
         }
         Insert: {
           id?: string
@@ -1023,6 +1043,9 @@ export interface Database {
           trusted_person_id: string
           wrapped_dek_for_tp: string
           created_at?: string
+          expires_at?: string | null
+          permission?: string
+          revoked_at?: string | null
         }
         Update: {
           id?: string
@@ -1031,6 +1054,41 @@ export interface Database {
           trusted_person_id?: string
           wrapped_dek_for_tp?: string
           created_at?: string
+          expires_at?: string | null
+          permission?: string
+          revoked_at?: string | null
+        }
+      }
+      vaccinations: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          is_standard: boolean
+          month: number | null
+          year: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          is_standard?: boolean
+          month?: number | null
+          year?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          is_standard?: boolean
+          month?: number | null
+          year?: number | null
+          created_at?: string
+          updated_at?: string
         }
       }
       download_link_documents: {
@@ -1233,6 +1291,7 @@ export type FuneralWishes = Database['public']['Tables']['funeral_wishes']['Row'
 export type UserVaultKey = Database['public']['Tables']['user_vault_keys']['Row']
 export type DocumentRelationshipKey = Database['public']['Tables']['document_relationship_keys']['Row']
 export type DocumentShareToken = Database['public']['Tables']['document_share_tokens']['Row']
+export type Vaccination = Database['public']['Tables']['vaccinations']['Row']
 export type DownloadLinkDocument = Database['public']['Tables']['download_link_documents']['Row']
 export type DownloadLinkWrappedDek = Database['public']['Tables']['download_link_wrapped_deks']['Row']
 

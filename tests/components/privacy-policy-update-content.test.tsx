@@ -5,24 +5,19 @@ import { PrivacyPolicyUpdateContent } from '@/components/consent/privacy-policy-
 describe('PrivacyPolicyUpdateContent', () => {
   it('should render without errors', () => {
     render(<PrivacyPolicyUpdateContent />)
-    expect(screen.getByText(/Stand:/i)).toBeInTheDocument()
+    expect(screen.getByText(/Wichtige Änderungen/i)).toBeInTheDocument()
   })
 
   it('should render all sections', () => {
     render(<PrivacyPolicyUpdateContent />)
 
-    expect(screen.getByText('1. Verantwortlicher')).toBeInTheDocument()
-    expect(screen.getByText('2. Erhebung und Speicherung personenbezogener Daten')).toBeInTheDocument()
-    expect(screen.getByText('3. Zweck der Datenverarbeitung')).toBeInTheDocument()
-    expect(screen.getByText('4. Datensicherheit')).toBeInTheDocument()
-    expect(screen.getByText('5. Ihre Rechte')).toBeInTheDocument()
-    expect(screen.getByText('6. Aufbewahrung von Sicherheitsprotokollen')).toBeInTheDocument()
-    expect(screen.getByText('7. Cookies')).toBeInTheDocument()
-    expect(screen.getByText('8. Kontakt')).toBeInTheDocument()
+    expect(screen.getByText('Wichtige Änderungen')).toBeInTheDocument()
+    expect(screen.getByText('Vollständige Datenschutzerklärung anzeigen')).toBeInTheDocument()
+    expect(screen.getByText('Kontakt')).toBeInTheDocument()
   })
 
   it('should display contact information', () => {
     render(<PrivacyPolicyUpdateContent />)
-    expect(screen.getByText(/datenschutz@lebensordner.org/i)).toBeInTheDocument()
+    expect(screen.getByText(/matbo@matsbusiness.co.site/i)).toBeInTheDocument()
   })
 })

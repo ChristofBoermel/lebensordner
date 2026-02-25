@@ -5,6 +5,9 @@ import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { useVault } from '@/lib/vault/VaultContext'
 import { VaultUnlockModal } from '@/components/vault/VaultUnlockModal'
+import { BulkShareDialog } from '@/components/sharing/BulkShareDialog'
+import { ActiveSharesList } from '@/components/sharing/ActiveSharesList'
+import { ReceivedSharesList } from '@/components/sharing/ReceivedSharesList'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,7 +46,8 @@ import {
   Calendar,
   ArrowRight,
   FileText,
-  Key
+  Key,
+  Share2,
 } from 'lucide-react'
 import type { TrustedPerson, DocumentMetadata } from '@/types/database'
 import { SUBSCRIPTION_TIERS, canPerformAction, allowsFamilyDownloads, type TierConfig } from '@/lib/subscription-tiers'
@@ -126,6 +130,11 @@ export default function ZugriffPage() {
   const [isLoadingViewer, setIsLoadingViewer] = useState(false)
   const [downloadingFor, setDownloadingFor] = useState<string | null>(null)
 
+  const [isBulkShareOpen, setIsBulkShareOpen] = useState(false)
+  const [sharesVersion, setSharesVersion] = useState(0)
+  const [sharingDocuments, setSharingDocuments] = useState<Array<{id: string; title: string; wrapped_dek: string | null}>>([])
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
   const supabase = createClient()
 
   // Fetch Stripe price IDs from API
@@ -169,16 +178,16 @@ export default function ZugriffPage() {
     const normalizedPriceId = priceId?.toLowerCase() ?? null
     const normalizedPriceIds = {
       basic: {
-        monthly: priceIds?.basic.monthly.toLowerCase() ?? '',
-        yearly: priceIds?.basic.yearly.toLowerCase() ?? '',
+        monthly: priceIds?.basic?.monthly?.toLowerCase() ?? '',
+        yearly: priceIds?.basic?.yearly?.toLowerCase() ?? '',
       },
       premium: {
-        monthly: priceIds?.premium.monthly.toLowerCase() ?? '',
-        yearly: priceIds?.premium.yearly.toLowerCase() ?? '',
+        monthly: priceIds?.premium?.monthly?.toLowerCase() ?? '',
+        yearly: priceIds?.premium?.yearly?.toLowerCase() ?? '',
       },
       family: {
-        monthly: priceIds?.family.monthly.toLowerCase() ?? '',
-        yearly: priceIds?.family.yearly.toLowerCase() ?? '',
+        monthly: priceIds?.family?.monthly?.toLowerCase() ?? '',
+        yearly: priceIds?.family?.yearly?.toLowerCase() ?? '',
       },
     }
 
@@ -314,6 +323,22 @@ export default function ZugriffPage() {
       linkPendingInvitations().then(() => fetchFamilyMembers())
     }
   }, [activeMainTab, familyMembers.length, isFamilyLoading, linkPendingInvitations, fetchFamilyMembers])
+
+  // Fetch current user ID and documents for bulk share dialog
+  useEffect(() => {
+    if (activeMainTab !== 'familie') return
+    async function fetchUserAndDocs() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      setCurrentUserId(user.id)
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('id, title, wrapped_dek')
+        .eq('user_id', user.id)
+      if (docs) setSharingDocuments(docs)
+    }
+    fetchUserAndDocs()
+  }, [activeMainTab, supabase])
 
   // Prefetch family members API for faster tab switch
   useEffect(() => {
@@ -1236,6 +1261,14 @@ export default function ZugriffPage() {
             </div>
           ) : (
             <div className="space-y-6 sm:space-y-8">
+              {/* Bulk share button */}
+              <div className="flex items-center justify-between">
+                <Button onClick={() => setIsBulkShareOpen(true)} className="bg-sage-600 hover:bg-sage-700">
+                  <Share2 className="w-4 h-4 mr-2" />
+                  Dokumente teilen
+                </Button>
+              </div>
+
               {/* Header */}
               <div>
                 <h2 className="text-xl sm:text-2xl font-semibold text-warmgray-900">
@@ -1507,6 +1540,20 @@ export default function ZugriffPage() {
                   )}
                 </div>
               )}
+
+              {/* Aktive Freigaben */}
+              {currentUserId && (
+                <div className="space-y-4">
+                  <h3 className="text-lg sm:text-xl font-semibold text-warmgray-900">Aktive Freigaben</h3>
+                  <ActiveSharesList key={sharesVersion} ownerId={currentUserId} />
+                </div>
+              )}
+
+              {/* Geteilte Dokumente */}
+              <div className="space-y-4">
+                <h3 className="text-lg sm:text-xl font-semibold text-warmgray-900">Geteilte Dokumente</h3>
+                <ReceivedSharesList onRequestVaultUnlock={() => setIsVaultModalOpen(true)} />
+              </div>
 
               {/* Document Viewer Modal */}
               <Dialog open={!!viewingMember} onOpenChange={(open) => !open && closeViewer()}>
@@ -1832,6 +1879,15 @@ export default function ZugriffPage() {
       )}
 
       <VaultUnlockModal isOpen={isVaultModalOpen} onClose={() => setIsVaultModalOpen(false)} />
+
+      <BulkShareDialog
+        documents={sharingDocuments}
+        trustedPersons={trustedPersons.filter(tp => tp.linked_user_id !== null)}
+        isOpen={isBulkShareOpen}
+        onClose={() => setIsBulkShareOpen(false)}
+        onSuccess={() => { setIsBulkShareOpen(false); setSharesVersion(v => v + 1) }}
+        onRequestVaultUnlock={() => setIsVaultModalOpen(true)}
+      />
     </div>
     </TooltipProvider>
   )

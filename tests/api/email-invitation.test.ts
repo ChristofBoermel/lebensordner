@@ -5,6 +5,7 @@ import {
   createMockEmailRetryQueueItem,
   TEST_EMAIL_ADDRESS,
 } from '../fixtures/resend'
+import { createSupabaseMock } from '../mocks/supabase-client'
 
 // Mock Resend module
 const mockResendSend = vi.fn()
@@ -24,8 +25,10 @@ const mockUpdateEmailStatus = vi.fn().mockResolvedValue(undefined)
 const mockSupabaseUpdate = vi.fn()
 const mockSupabaseInsert = vi.fn()
 
-const createMockSupabaseClient = (overrides: { trustedPerson?: any } = {}) => {
-  const mockTrustedPerson = overrides.trustedPerson || createMockTrustedPerson()
+const { client: baseSupabaseClient, getUser: supabaseGetUser } = createSupabaseMock()
+
+const createTableDispatch = (trustedPerson?: any) => {
+  const mockTrustedPerson = trustedPerson || createMockTrustedPerson()
   const mockProfile = {
     id: 'test-user-id',
     full_name: 'Test Owner',
@@ -34,88 +37,87 @@ const createMockSupabaseClient = (overrides: { trustedPerson?: any } = {}) => {
     stripe_price_id: 'price_premium_monthly_test',
   }
 
-  return {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: 'test-user-id', email: 'owner@example.com' } },
-        error: null,
-      }),
-    },
-    from: vi.fn((table: string) => {
-      if (table === 'trusted_persons') {
-        return {
-          select: vi.fn((_: string, options?: { count?: string; head?: boolean }) => {
-            if (options?.count === 'exact') {
-              return {
-                eq: vi.fn().mockResolvedValue({ count: 0, error: null }),
-              }
-            }
-            return {
-              eq: vi.fn().mockReturnValue({
-                eq: vi.fn().mockReturnValue({
-                  single: vi.fn().mockResolvedValue({
-                    data: mockTrustedPerson,
-                    error: null,
-                  }),
-                }),
-                ilike: vi.fn().mockReturnValue({
-                  neq: vi.fn().mockReturnValue({
-                    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-                  }),
-                }),
-              }),
-            }
-          }),
-          update: mockSupabaseUpdate.mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ error: null }),
-          }),
-          insert: mockSupabaseInsert.mockResolvedValue({ error: null }),
-        }
-      }
-      if (table === 'profiles') {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: mockProfile,
-                error: null,
-              }),
-            }),
-          }),
-        }
-      }
-      if (table === 'email_retry_queue') {
-        return {
-          insert: mockSupabaseInsert.mockResolvedValue({ error: null }),
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              lte: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-            }),
-          }),
-          update: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ error: null }),
-          }),
-        }
-      }
+  return vi.fn((table: string) => {
+    if (table === 'trusted_persons') {
       return {
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: null, error: null }),
-          }),
+        select: vi.fn((_: string, options?: { count?: string; head?: boolean }) => {
+          if (options?.count === 'exact') {
+            return {
+              eq: vi.fn().mockResolvedValue({ count: 0, error: null }),
+            }
+          }
+          return {
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: mockTrustedPerson,
+                  error: null,
+                }),
+              }),
+              ilike: vi.fn().mockReturnValue({
+                neq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+                }),
+              }),
+            }),
+          }
         }),
         update: mockSupabaseUpdate.mockReturnValue({
           eq: vi.fn().mockResolvedValue({ error: null }),
         }),
         insert: mockSupabaseInsert.mockResolvedValue({ error: null }),
       }
-    }),
-  }
+    }
+    if (table === 'profiles') {
+      return {
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: mockProfile,
+              error: null,
+            }),
+          }),
+        }),
+      }
+    }
+    if (table === 'email_retry_queue') {
+      return {
+        insert: mockSupabaseInsert.mockResolvedValue({ error: null }),
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            lte: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+            }),
+          }),
+        }),
+        update: vi.fn().mockReturnValue({
+          eq: vi.fn().mockResolvedValue({ error: null }),
+        }),
+      }
+    }
+    return {
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        }),
+      }),
+      update: mockSupabaseUpdate.mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      }),
+      insert: mockSupabaseInsert.mockResolvedValue({ error: null }),
+    }
+  })
 }
 
+// Configure base client
+supabaseGetUser.mockResolvedValue({
+  data: { user: { id: 'test-user-id', email: 'owner@example.com' } },
+  error: null,
+})
+baseSupabaseClient.from = createTableDispatch()
+
 vi.mock('@/lib/supabase/server', () => ({
-  createServerSupabaseClient: vi.fn(() => Promise.resolve(createMockSupabaseClient())),
+  createServerSupabaseClient: vi.fn(() => Promise.resolve(baseSupabaseClient)),
 }))
 
 // Mock Supabase client for direct createClient usage (in resend-service)
@@ -156,6 +158,12 @@ describe('Email Invitation API', () => {
     vi.useFakeTimers()
     process.env.RESEND_API_KEY = 'test-resend-key'
     process.env.NEXT_PUBLIC_APP_URL = 'https://test.lebensordner.org'
+    // Re-configure mocks cleared by vi.restoreAllMocks() in afterEach
+    supabaseGetUser.mockResolvedValue({
+      data: { user: { id: 'test-user-id', email: 'owner@example.com' } },
+      error: null,
+    })
+    baseSupabaseClient.from = createTableDispatch()
   })
 
   afterEach(() => {
@@ -490,6 +498,12 @@ describe('Email Queue - addToRetryQueue and updateEmailStatus Integration', () =
     process.env.NEXT_PUBLIC_APP_URL = 'https://test.lebensordner.org'
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
+    // Re-configure mocks cleared by vi.clearAllMocks()
+    supabaseGetUser.mockResolvedValue({
+      data: { user: { id: 'test-user-id', email: 'owner@example.com' } },
+      error: null,
+    })
+    baseSupabaseClient.from = createTableDispatch()
   })
 
   afterEach(() => {
@@ -569,10 +583,9 @@ describe('Email Queue - addToRetryQueue and updateEmailStatus Integration', () =
     })
 
     // Reset mock to use new trusted person
+    baseSupabaseClient.from = createTableDispatch(trustedPersonWithRetries)
     vi.doMock('@/lib/supabase/server', () => ({
-      createServerSupabaseClient: vi.fn(() =>
-        Promise.resolve(createMockSupabaseClient({ trustedPerson: trustedPersonWithRetries }))
-      ),
+      createServerSupabaseClient: vi.fn(() => Promise.resolve(baseSupabaseClient)),
     }))
 
     mockResendSend.mockRejectedValue(new Error('Temporary failure'))
