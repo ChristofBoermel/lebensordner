@@ -210,6 +210,8 @@ services:
         NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY}
         NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST}
         NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+        ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+        CRON_SECRET: ${CRON_SECRET}
     container_name: lebensordner-app
     restart: unless-stopped
     environment:
