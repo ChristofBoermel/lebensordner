@@ -20,7 +20,7 @@ services:
       - /mnt/pg-data:/var/lib/postgresql/data
       - ./supabase/roles.sql:/docker-entrypoint-initdb.d/00-roles.sql
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres"]
+      test: ["CMD", "pg_isready", "-U", "supabase_admin"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -79,7 +79,7 @@ services:
       GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
       GOTRUE_SMTP_USER: ${SMTP_USER:-}
       GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
-      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-noreply@lebensordner.de}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-noreply@lebensordner.org}
       GOTRUE_SMTP_MAX_FREQUENCY: 1ns
       GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
