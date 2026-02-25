@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Card,
@@ -390,7 +390,7 @@ function MedikamentDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="field-form">Form</Label>
+              <Label htmlFor="field-form" translate="no">Form</Label>
               <Input
                 id="field-form"
                 data-element-id="field-form"
@@ -457,7 +457,7 @@ function MedikamentDialog({
                 data-element-id="field-einheit"
                 value={form.einheit ?? ""}
                 onChange={(e) => setForm({ ...form, einheit: e.target.value })}
-                placeholder="z.B. Tablette(n)"
+                placeholder="z.B. Stück"
               />
             </div>
             <div className="space-y-2">
@@ -595,7 +595,9 @@ export default function NotfallPage() {
   >({});
   const [showMetadataForm, setShowMetadataForm] = useState<string | null>(null);
 
-  const supabase = createClient();
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
+  const hasHealthConsentRef = useRef<boolean | null>(null);
   const router = useRouter();
   const vaultContext = useVault();
   const [isVaultSetupModalOpen, setIsVaultSetupModalOpen] = useState(false);
@@ -654,6 +656,7 @@ export default function NotfallPage() {
       }
       if (!data?.requiresConsent) return false;
       setHasHealthConsent(false);
+      hasHealthConsentRef.current = false;
       setShowConsentModal(true);
       clearHealthDataState();
       pushConsentToast("info", "Einwilligung erforderlich");
@@ -675,7 +678,7 @@ export default function NotfallPage() {
 
       // Fetch decrypted Notfall data from server API
       try {
-        const canFetchHealthData = consentOverride ?? hasHealthConsent === true;
+        const canFetchHealthData = consentOverride ?? hasHealthConsentRef.current === true;
         if (canFetchHealthData) {
           const response = await fetch("/api/notfall");
           if (await handleConsentRequired(response)) {
@@ -783,8 +786,6 @@ export default function NotfallPage() {
       clearHealthDataState,
       fetchVaccinations,
       handleConsentRequired,
-      hasHealthConsent,
-      supabase,
     ],
   );
 
@@ -823,6 +824,7 @@ export default function NotfallPage() {
       const granted = await checkHealthConsent();
       if (!isMounted) return;
       setHasHealthConsent(granted);
+      hasHealthConsentRef.current = granted;
       if (!granted) {
         setShowConsentModal(true);
         clearHealthDataState();
@@ -840,6 +842,7 @@ export default function NotfallPage() {
     const handleFocus = async () => {
       const granted = await checkHealthConsent();
       setHasHealthConsent(granted);
+      hasHealthConsentRef.current = granted;
       if (!granted) {
         setShowConsentModal(true);
         clearHealthDataState();
@@ -860,6 +863,7 @@ export default function NotfallPage() {
       if (!response.ok) throw new Error("Failed to grant consent");
 
       setHasHealthConsent(true);
+      hasHealthConsentRef.current = true;
       setShowConsentModal(false);
       pushConsentToast(
         "success",

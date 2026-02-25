@@ -46,7 +46,7 @@ async function syncConsentFromCookie(userId: string) {
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/onboarding'
+  const next = searchParams.get('next')
   const returnTo = normalizeReturnTo(next)
 
   if (code) {
@@ -110,7 +110,7 @@ export async function GET(request: Request) {
         await syncConsentFromCookie(data.user.id)
 
         // Always go to onboarding for new users
-        return NextResponse.redirect(`${origin}/onboarding`)
+        return NextResponse.redirect(`${origin}${returnTo ?? '/onboarding'}`)
       }
 
       // For existing users, also check for pending links
@@ -145,10 +145,10 @@ export async function GET(request: Request) {
           }
           return NextResponse.redirect(policyUpdateUrl)
         }
-        return NextResponse.redirect(`${origin}/dashboard`)
+        return NextResponse.redirect(`${origin}${returnTo ?? '/dashboard'}`)
       }
-      
-      return NextResponse.redirect(`${origin}/onboarding`)
+
+      return NextResponse.redirect(`${origin}${returnTo ?? '/onboarding'}`)
     }
   }
 

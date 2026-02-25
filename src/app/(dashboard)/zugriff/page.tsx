@@ -1562,6 +1562,9 @@ export default function ZugriffPage() {
                     <DialogTitle className="text-base sm:text-lg">
                       Dokumente ansehen
                     </DialogTitle>
+                    <DialogDescription className="sr-only">
+                      Dokumente der Vertrauensperson ansehen
+                    </DialogDescription>
                   </DialogHeader>
 
                   {isLoadingViewer ? (

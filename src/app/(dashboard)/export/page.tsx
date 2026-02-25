@@ -992,14 +992,16 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.medications?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
                   <span className={medicalInfo?.medications?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
-                    {medicalInfo?.medications?.length ? `Medikamente: ${medicalInfo.medications.map(m => m.wirkstoff || (m.pzn ? `PZN: ${m.pzn}` : '?')).join(', ')}` : 'Medikamente: Keine'}
+                    {medicalInfo?.medications?.length
+                      ? `Medikamente: ${medicalInfo.medications.slice(0, 3).map(m => m.wirkstoff || (m.pzn ? `PZN: ${m.pzn}` : '?')).join(', ')}${medicalInfo.medications.length > 3 ? ` +${medicalInfo.medications.length - 3} weitere` : ''}`
+                      : 'Medikamente: Keine'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className={`w-4 h-4 ${medicalInfo?.vaccinations?.length ? 'text-green-600' : 'text-warmgray-300'}`} />
                   <span className={medicalInfo?.vaccinations?.length ? 'text-warmgray-700' : 'text-warmgray-400'}>
                     {medicalInfo?.vaccinations?.length
-                      ? `Impfungen: ${medicalInfo.vaccinations.map(v => `${v.name} ${v.year}`).join(', ')}`
+                      ? `Impfungen: ${medicalInfo.vaccinations.slice(0, 3).map(v => `${v.name} ${v.year}`).join(', ')}${medicalInfo.vaccinations.length > 3 ? ` +${medicalInfo.vaccinations.length - 3} weitere` : ''}`
                       : 'Impfungen: Keine'}
                   </span>
                 </div>

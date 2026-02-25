@@ -84,7 +84,7 @@ function PreviewEditDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="preview-field-form">Form</Label>
+              <Label htmlFor="preview-field-form" translate="no">Form</Label>
               <Input
                 id="preview-field-form"
                 value={form.form ?? ''}
@@ -145,7 +145,7 @@ function PreviewEditDialog({
                 id="preview-field-einheit"
                 value={form.einheit ?? ''}
                 onChange={(e) => setForm({ ...form, einheit: e.target.value })}
-                placeholder="z.B. Tablette(n)"
+                placeholder="z.B. Stück"
               />
             </div>
             <div className="space-y-2">
@@ -514,11 +514,15 @@ export function BmpScanDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {scanState === 'preview' || scanState === 'saving'
-            ? renderPreview()
-            : scanState === 'error'
-            ? renderError()
-            : renderTabContent()}
+          <div hidden={scanState === 'preview' || scanState === 'saving' || scanState === 'error'}>
+            {renderTabContent()}
+          </div>
+          <div hidden={scanState !== 'preview' && scanState !== 'saving'}>
+            {renderPreview()}
+          </div>
+          <div hidden={scanState !== 'error'}>
+            {renderError()}
+          </div>
         </DialogContent>
       </Dialog>
 

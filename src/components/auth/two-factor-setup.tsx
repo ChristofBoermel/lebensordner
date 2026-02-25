@@ -320,6 +320,9 @@ export function TwoFactorSetup({ isOpen, onClose, isEnabled, onStatusChange }: T
                 <CheckCircle2 className="w-5 h-5" />
                 2FA aktiviert!
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Zwei-Faktor-Authentifizierung wurde erfolgreich aktiviert.
+              </DialogDescription>
             </DialogHeader>
 
             <div className="py-6 text-center">

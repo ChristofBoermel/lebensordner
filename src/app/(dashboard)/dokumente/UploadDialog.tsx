@@ -106,7 +106,7 @@ export default function UploadDialog({
   );
 
   return (
-    <DialogContent className="w-full h-[100dvh] sm:h-auto sm:max-w-lg p-0 overflow-hidden flex flex-col">
+    <DialogContent className="w-full h-[100dvh] sm:max-h-[90vh] sm:max-w-lg p-0 overflow-hidden flex flex-col">
       <DialogHeader className="p-6 pb-2 pr-14">
         <DialogTitle>Neues Dokument</DialogTitle>
         <DialogDescription>
@@ -114,7 +114,7 @@ export default function UploadDialog({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="relative flex-1 min-h-0">
+      <div className="relative flex-1 min-h-0 overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => (

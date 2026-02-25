@@ -931,4 +931,164 @@ describe('Dokumente UI Fixes — T-03', () => {
     const gradient = dialog.querySelector('[class*="bg-gradient-to-t"]')
     expect(gradient).toBeInTheDocument()
   })
+
+  it('Upload-Dialog hat sm:max-h-[90vh] Klasse für bounded height auf Desktop', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+
+    await renderPage()
+    await openUploadDialog()
+
+    expect(screen.getByRole('dialog')).toHaveClass('sm:max-h-[90vh]')
+  })
+
+  it('Schließen-Button liegt nicht innerhalb des scrollbaren Bereichs', async () => {
+    setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
+
+    await renderPage()
+    await openUploadDialog()
+
+    const dialog = screen.getByRole('dialog')
+    const scrollDiv = dialog.querySelector('[class*="overflow-y-auto"]')
+    const closeButton = screen.getByText('Schließen', { selector: '.sr-only' })?.closest('button')
+
+    expect(scrollDiv).toBeInTheDocument()
+    expect(closeButton).toBeInTheDocument()
+    expect(scrollDiv?.contains(closeButton)).toBe(false)
+  })
+})
+
+// ── T-14: Dokumente Bulk-Action Bar ────────────────────────────────────────
+
+let bulkShareDialogProps: Record<string, unknown> | null = null
+
+vi.mock('@/components/sharing/BulkShareDialog', () => ({
+  BulkShareDialog: (props: {
+    isOpen: boolean
+    documents: Array<{ id: string; title: string; wrapped_dek: string | null }>
+    trustedPersons: Array<{ id: string; name: string; linked_user_id: string | null }>
+    onClose: () => void
+    onSuccess: () => void
+    onRequestVaultUnlock: () => void
+  }) => {
+    bulkShareDialogProps = props as unknown as Record<string, unknown>
+    return (
+      <div
+        data-testid="bulk-share-dialog"
+        data-open={props.isOpen ? 'true' : 'false'}
+      />
+    )
+  },
+}))
+
+const mockDocBulk = {
+  id: 'doc-bulk-1',
+  title: 'Reisepass',
+  file_name: 'reisepass.pdf',
+  file_path: 'test/reisepass.pdf',
+  file_type: 'application/pdf',
+  file_size: 1234,
+  category: 'identitaet',
+  subcategory_id: null,
+  custom_category_id: null,
+  expiry_date: null,
+  notes: null,
+  created_at: '2025-01-01T10:00:00.000Z',
+}
+
+describe('Dokumente Bulk-Action Bar — T-14', () => {
+  beforeEach(() => {
+    resetMockProfile()
+    mockTables.documents = [mockDocBulk]
+    mockTables.trusted_persons = mockTrustedPersons
+    mockTables.subcategories = []
+    mockTables.custom_categories = []
+    lastInsertPayload = null
+    lastUploadFormData = null
+    lastUploadDocument = null
+    mockUploadDocument = null
+    trustedPersonsQueryCount = 0
+    bulkShareDialogProps = null
+    setMockFetch()
+    Object.defineProperty(window, 'innerWidth', { value: 1024, writable: true })
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const selectFirstDocument = async () => {
+    await renderPage()
+    // Navigate into a category so the document list is visible
+    const identitaetCards = screen.getAllByText('Identität')
+    await userEvent.click(identitaetCards[0])
+    await waitFor(() => {
+      expect(screen.getByText('Reisepass')).toBeInTheDocument()
+    })
+    // Click the checkbox button (first button inside the document-item)
+    const docItem = screen.getByText('Reisepass').closest('.document-item')!
+    const checkbox = docItem.querySelector('button')!
+    await userEvent.click(checkbox)
+    await waitFor(() => {
+      expect(screen.getByTestId('bulk-share-dialog')).toBeInTheDocument()
+    })
+  }
+
+  it('Bulk-Action-Bar ist zentriert (left-1/2, -translate-x-1/2, kein inset-x-4)', async () => {
+    await selectFirstDocument()
+
+    const bar = screen
+      .getByTestId('bulk-share-dialog')
+      .closest('body')!
+      .querySelector('.fixed.left-1\\/2.-translate-x-1\\/2') as HTMLElement | null
+
+    // The bar container should be found in the document
+    const allFixed = document.querySelectorAll('.fixed')
+    const actionBar = Array.from(allFixed).find(
+      (el) => el.className.includes('left-1/2') && el.className.includes('-translate-x-1/2')
+    ) as HTMLElement | undefined
+
+    expect(actionBar).toBeTruthy()
+    expect(actionBar!.className).toContain('left-1/2')
+    expect(actionBar!.className).toContain('-translate-x-1/2')
+    expect(actionBar!.className).not.toContain('inset-x-4')
+  })
+
+  it('"Teilen"-Button ist in der Bulk-Action-Bar sichtbar', async () => {
+    await selectFirstDocument()
+
+    expect(screen.getByRole('button', { name: /Teilen/i })).toBeInTheDocument()
+  })
+
+  it('"Teilen" öffnet BulkShareDialog', async () => {
+    await selectFirstDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Teilen/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('bulk-share-dialog')).toHaveAttribute('data-open', 'true')
+    })
+  })
+
+  it('BulkShareDialog erhält die ausgewählten Dokumente', async () => {
+    await selectFirstDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Teilen/i }))
+
+    await waitFor(() => {
+      expect(bulkShareDialogProps).not.toBeNull()
+    })
+
+    const docs = bulkShareDialogProps!.documents as Array<{ id: string }>
+    expect(docs.some((d) => d.id === 'doc-bulk-1')).toBe(true)
+  })
+
+  it('Verschieben und Auswahl-aufheben Buttons bleiben neben Teilen sichtbar', async () => {
+    await selectFirstDocument()
+
+    expect(screen.getByRole('button', { name: /Verschieben/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Auswahl aufheben/i })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Teilen/i })).toBeInTheDocument()
+  })
 })

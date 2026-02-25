@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -297,6 +298,9 @@ export function ReceivedSharesList({ onRequestVaultUnlock }: ReceivedSharesListP
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{blobFileName || 'Dokument-Vorschau'}</DialogTitle>
+            <DialogDescription className="sr-only">
+              Vorschau des Dokuments {blobFileName}
+            </DialogDescription>
           </DialogHeader>
           {renderPreview()}
         </DialogContent>

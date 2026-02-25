@@ -104,6 +104,7 @@ import { useVault } from "@/lib/vault/VaultContext";
 import { VaultSetupModal } from "@/components/vault/VaultSetupModal";
 import { VaultUnlockModal } from "@/components/vault/VaultUnlockModal";
 import { ShareDocumentDialog } from "@/components/sharing/ShareDocumentDialog";
+import { BulkShareDialog } from "@/components/sharing/BulkShareDialog";
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   user: User,
@@ -216,6 +217,10 @@ export default function DocumentsPage() {
     new Set(),
   );
   const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
+  const [isBulkShareDialogOpen, setIsBulkShareDialogOpen] = useState(false);
+  const [bulkShareDocuments, setBulkShareDocuments] = useState<
+    Array<{ id: string; title: string; wrapped_dek: string | null }>
+  >([]);
   const [moveTargetFolder, setMoveTargetFolder] = useState<string | null>(null);
   const [isMoving, setIsMoving] = useState(false);
   const [isCreatingFolderInMove, setIsCreatingFolderInMove] = useState(false);
@@ -2519,7 +2524,7 @@ export default function DocumentsPage() {
       </Dialog>
       {/* Bulk Action Bar - Fixed at bottom when documents selected */}
       {selectedDocuments.size > 0 && (
-        <div className="fixed bottom-4 inset-x-4 sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 sm:w-auto bg-warmgray-900 text-white rounded-lg shadow-xl px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between sm:justify-start gap-2 sm:gap-6 z-50 overflow-hidden">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-auto min-w-max max-w-[calc(100vw-2rem)] bg-warmgray-900 text-white rounded-lg shadow-xl px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between sm:justify-start gap-2 sm:gap-6 z-50 overflow-hidden">
           <div className="flex items-center gap-2 flex-shrink-0">
             <Check className="w-5 h-5 text-sage-400" />
             <span className="font-medium whitespace-nowrap text-sm sm:text-base">
@@ -2542,6 +2547,26 @@ export default function DocumentsPage() {
               size="sm"
               variant="ghost"
               className="text-white hover:bg-warmgray-800 h-9 px-2 sm:px-3 flex-shrink-0"
+              onClick={() => {
+                const docs = documents
+                  .filter((doc) => selectedDocuments.has(doc.id))
+                  .map((doc) => ({
+                    id: doc.id,
+                    title: doc.title,
+                    wrapped_dek: doc.wrapped_dek ?? null,
+                  }));
+                setBulkShareDocuments(docs);
+                if (familyMembers.length === 0) fetchFamilyMembers();
+                setIsBulkShareDialogOpen(true);
+              }}
+            >
+              <Share2 className="sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Teilen</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-white hover:bg-warmgray-800 h-9 px-2 sm:px-3 flex-shrink-0"
               onClick={clearSelection}
             >
               <X className="sm:mr-2 h-4 w-4" />
@@ -2551,6 +2576,14 @@ export default function DocumentsPage() {
           </div>
         </div>
       )}
+      <BulkShareDialog
+        documents={bulkShareDocuments}
+        trustedPersons={familyMembers}
+        isOpen={isBulkShareDialogOpen}
+        onClose={() => setIsBulkShareDialogOpen(false)}
+        onSuccess={() => setIsBulkShareDialogOpen(false)}
+        onRequestVaultUnlock={() => setIsVaultUnlockModalOpen(true)}
+      />
       {/* Category Dialog */}
       <Dialog
         open={isCategoryDialogOpen}

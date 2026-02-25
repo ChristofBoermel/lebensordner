@@ -210,12 +210,44 @@ describe("Einstellungen Tier Display", () => {
     const storageIndex = headings.findIndex(
       (heading) => heading.textContent?.includes("Speicherplatz"),
     );
+    const datenschutzIndex = headings.findIndex(
+      (heading) => heading.textContent?.includes("Datenschutz"),
+    );
     const securityIndex = headings.findIndex(
       (heading) => heading.textContent?.includes("Sicherheit & Aktivität"),
     );
 
     expect(storageIndex).toBeGreaterThan(-1);
+    expect(datenschutzIndex).toBeGreaterThan(-1);
     expect(securityIndex).toBeGreaterThan(-1);
+    expect(storageIndex).toBeLessThan(datenschutzIndex);
+    expect(datenschutzIndex).toBeLessThan(securityIndex);
     expect(securityIndex).toBeGreaterThan(storageIndex);
+  });
+
+  it("renders Datenschutz card between Speicherplatz and Sicherheit & Aktivität", async () => {
+    setMockProfile({
+      subscription_status: "active",
+      stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY,
+      storage_used: 1048576,
+    } as any);
+
+    render(<EinstellungenPage />);
+
+    await screen.findByText("Speicherplatz");
+
+    const headings = screen.getAllByRole("heading");
+    const storageIndex = headings.findIndex(
+      (heading) => heading.textContent?.includes("Speicherplatz"),
+    );
+    const datenschutzIndex = headings.findIndex(
+      (heading) => heading.textContent?.includes("Datenschutz"),
+    );
+    const securityIndex = headings.findIndex(
+      (heading) => heading.textContent?.includes("Sicherheit & Aktivität"),
+    );
+
+    expect(datenschutzIndex).toBeGreaterThan(storageIndex);
+    expect(datenschutzIndex).toBeLessThan(securityIndex);
   });
 });

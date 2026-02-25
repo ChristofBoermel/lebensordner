@@ -80,7 +80,9 @@ export function ConsentModal({
       >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {description ? <DialogDescription>{description}</DialogDescription> : null}
+          {description
+            ? <DialogDescription>{description}</DialogDescription>
+            : <DialogDescription className="sr-only">{title}</DialogDescription>}
         </DialogHeader>
 
         {content ? (

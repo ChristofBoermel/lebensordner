@@ -161,6 +161,102 @@ describe('Export emergency QR payload', () => {
     expect(payload).not.toContain('Blutgruppe')
   })
 
+  describe('summary grid truncation', () => {
+    it('caps medications list to 3 entries with +N weitere', async () => {
+      global.fetch = vi.fn((input: RequestInfo) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/notfall')) {
+          return Promise.resolve(
+            createResponse({
+              emergencyContacts: [],
+              medicalInfo: {
+                allergies: [],
+                medications: [
+                  { wirkstoff: 'Metformin' },
+                  { wirkstoff: 'Aspirin' },
+                  { wirkstoff: 'Lisinopril' },
+                  { wirkstoff: 'Ramipril' },
+                  { wirkstoff: 'Amlodipin' },
+                  { wirkstoff: 'Simvastatin' },
+                  { wirkstoff: 'Pantoprazol' },
+                ],
+                medication_plan_updated_at: null,
+                conditions: [],
+                doctor_name: null,
+                doctor_phone: null,
+                insurance_number: null,
+                organ_donor: null,
+                vaccinations: [],
+              },
+              directives: null,
+            })
+          )
+        }
+        if (url.includes('/api/profile')) {
+          return Promise.resolve(createResponse({ profile: {} }))
+        }
+        return Promise.resolve(createResponse({}))
+      }) as unknown as typeof fetch
+
+      render(<ExportPage />)
+
+      await waitFor(() => {
+        const el = screen.getByText(/Medikamente:/)
+        expect(el.textContent).toContain('+4 weitere')
+        expect(el.textContent).not.toContain('Ramipril')
+      })
+    })
+
+    it('caps vaccinations list to 3 entries with +N weitere', async () => {
+      global.fetch = vi.fn((input: RequestInfo) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/notfall')) {
+          return Promise.resolve(
+            createResponse({
+              emergencyContacts: [],
+              medicalInfo: {
+                allergies: [],
+                medications: [],
+                medication_plan_updated_at: null,
+                conditions: [],
+                doctor_name: null,
+                doctor_phone: null,
+                insurance_number: null,
+                organ_donor: null,
+              },
+              directives: null,
+            })
+          )
+        }
+        if (url.includes('/api/vaccinations')) {
+          return Promise.resolve(
+            createResponse({
+              vaccinations: [
+                { name: 'Tetanus', month: null, year: 2020 },
+                { name: 'Influenza', month: null, year: 2023 },
+                { name: 'Covid-19', month: null, year: 2022 },
+                { name: 'Hepatitis B', month: null, year: 2019 },
+                { name: 'Masern', month: null, year: 2018 },
+              ],
+            })
+          )
+        }
+        if (url.includes('/api/profile')) {
+          return Promise.resolve(createResponse({ profile: {} }))
+        }
+        return Promise.resolve(createResponse({}))
+      }) as unknown as typeof fetch
+
+      render(<ExportPage />)
+
+      await waitFor(() => {
+        const el = screen.getByText(/Impfungen:/)
+        expect(el.textContent).toContain('+2 weitere')
+        expect(el.textContent).not.toContain('Hepatitis B')
+      })
+    })
+  })
+
   it('does not include Blutgruppe in generated PDF', async () => {
     mockDocText.mockClear()
 
