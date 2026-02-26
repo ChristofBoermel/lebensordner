@@ -13,16 +13,16 @@ export async function GET() {
     ])
 
     const queues = [
-      { name: 'reminders', ...reminderCounts },
-      { name: 'emails', ...emailCounts },
-      { name: 'cleanup', ...cleanupCounts },
-    ].map(({ name, waiting, active, completed, failed, delayed }) => ({
+      { name: 'reminders', counts: reminderCounts },
+      { name: 'emails', counts: emailCounts },
+      { name: 'cleanup', counts: cleanupCounts },
+    ].map(({ name, counts }) => ({
       name,
-      waiting: waiting ?? 0,
-      active: active ?? 0,
-      completed: completed ?? 0,
-      failed: failed ?? 0,
-      delayed: delayed ?? 0,
+      waiting: counts['waiting'] ?? 0,
+      active: counts['active'] ?? 0,
+      completed: counts['completed'] ?? 0,
+      failed: counts['failed'] ?? 0,
+      delayed: counts['delayed'] ?? 0,
     }))
 
     return NextResponse.json({ queues })
