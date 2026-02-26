@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 36,
+  "version": 1,
+  "uid": "email-worker",
+  "title": "Email & Worker Metrics",
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Email Jobs Completed / Hour",
+      "datasource": "Loki",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container_name=\"lebensordner-worker\"} |= \"Email job\" |= \"completed\" [1h]))",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Email Jobs Failed",
+      "datasource": "Loki",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container_name=\"lebensordner-worker\"} |= \"Email job\" |= \"failed\" [1h]))",
+          "legendFormat": ""
+        }
+      ]
+    }
+  ]
+}

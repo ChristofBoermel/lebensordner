@@ -46,6 +46,7 @@ Required at runtime by `deploy/docker-compose.yml`:
 - `NEXT_PUBLIC_APP_URL`
 - `DOMAIN`
 - `GRAFANA_ADMIN_PASSWORD`
+- `METRICS_SECRET` — runtime only; not a build arg, not needed in GitHub Actions
 
 ## Rotation Policy (Minimum)
 

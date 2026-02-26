@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import {
   Users, FileText, HardDrive, CreditCard, TrendingUp, Shield,
   Search, AlertTriangle, CheckCircle2, Clock, Crown,
-  UserCheck, RefreshCw
+  UserCheck, RefreshCw, Activity, Zap, Timer
 } from 'lucide-react'
 
 interface PlatformStats {
@@ -33,6 +33,15 @@ interface UserData {
   storage_used: number
 }
 
+interface QueueStats {
+  name: string
+  waiting: number
+  active: number
+  completed: number
+  failed: number
+  delayed: number
+}
+
 interface AdminDashboardProps {
   initialStats: PlatformStats
   initialUsers: UserData[]
@@ -43,8 +52,31 @@ export function AdminDashboard({ initialStats, initialUsers }: AdminDashboardPro
   const [users, setUsers] = useState<UserData[]>(initialUsers)
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [queueStats, setQueueStats] = useState<QueueStats[] | null>(null)
+  const [queueLoading, setQueueLoading] = useState(true)
+  const [queueError, setQueueError] = useState<string | null>(null)
 
   const router = useRouter()
+
+  useEffect(() => {
+    fetch('/api/admin/queues')
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data.error || 'Fehler beim Laden der Queue-Daten')
+        }
+        return res.json()
+      })
+      .then((data) => {
+        setQueueStats(data.queues)
+      })
+      .catch((err: any) => {
+        setQueueError(err.message || 'Fehler beim Laden der Queue-Daten')
+      })
+      .finally(() => {
+        setQueueLoading(false)
+      })
+  }, [])
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     try {
@@ -240,6 +272,53 @@ export function AdminDashboard({ initialStats, initialUsers }: AdminDashboardPro
           </CardContent>
         </Card>
       </div>
+
+      {/* Queue Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="w-5 h-5 text-sage-600" />
+            Queue Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {queueLoading && (
+            <p className="text-sm text-warmgray-500">Lade Queue-Status...</p>
+          )}
+          {queueError && (
+            <p className="text-sm text-red-600">{queueError}</p>
+          )}
+          {queueStats && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {queueStats.map((q) => (
+                <div key={q.name} className="border border-warmgray-200 rounded-lg p-4 space-y-2">
+                  <p className="font-semibold text-warmgray-900 capitalize">{q.name}</p>
+                  <div className="flex items-center gap-3 text-sm text-warmgray-600">
+                    <Clock className="w-4 h-4 flex-shrink-0" />
+                    <span>Wartend: {q.waiting}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-warmgray-600">
+                    <Zap className="w-4 h-4 flex-shrink-0" />
+                    <span>Aktiv: {q.active}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-warmgray-600">
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                    <span>Abgeschlossen: {q.completed}</span>
+                  </div>
+                  <div className={`flex items-center gap-3 text-sm ${q.failed > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>Fehlgeschlagen: {q.failed}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-warmgray-600">
+                    <Timer className="w-4 h-4 flex-shrink-0" />
+                    <span>Verzögert: {q.delayed}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Users Table */}
       <Card>

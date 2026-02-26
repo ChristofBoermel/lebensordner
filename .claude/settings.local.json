@@ -33,7 +33,12 @@
       "Bash(mkdir -p /c/Users/chris/.traycer/yolo_artifacts && printf '{}' > /c/Users/chris/.traycer/yolo_artifacts/83a77d25-01b0-4e4b-98ff-802f8583aba0.json)",
       "Bash(cmd:*)",
       "Bash(dir C:\\\\Users\\\\chris\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--Projects-Lebensordner\\\\tasks:*)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(ls:*)",
+      "Bash(npm view:*)",
+      "Bash(npm search:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
