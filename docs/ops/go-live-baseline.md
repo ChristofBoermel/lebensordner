@@ -34,9 +34,9 @@
 
   - Previous known-good nextjs SHA: 1e61e99
   - Previous known-good worker SHA: 1e61e99
-  - Rollback drill status: Not executed yet
+  - Rollback drill status: Passed on 2026-02-26 (rolled back to 1e61e99, then restored to latest)
 
   ## Backup and Restore
 
-  - Last successful backup: Not validated yet
-  - Last successful restore test: Not validated yet
+  - Last successful backup: 2026-02-26 (pg_*.sql.gz in /mnt/storage-data/backups)
+  - Last successful restore test: 2026-02-26 (restore_verify_20260226_031339)
