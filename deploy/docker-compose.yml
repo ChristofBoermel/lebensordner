@@ -316,6 +316,8 @@ services:
     image: prom/prometheus:v2.53.0
     container_name: lebensordner-prometheus
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
