@@ -179,6 +179,18 @@ ALTER TABLE public.reminders ADD COLUMN IF NOT EXISTS sms_sent boolean DEFAULT f
 ALTER TABLE public.reminders ADD COLUMN IF NOT EXISTS reminder_watcher_id uuid REFERENCES public.trusted_persons(id) ON DELETE SET NULL;
 ALTER TABLE public.reminders ADD COLUMN IF NOT EXISTS reminder_watcher_notified_at timestamptz;
 
+CREATE TABLE IF NOT EXISTS public.onboarding_feedback (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  step_name text NOT NULL CHECK (step_name IN ('welcome', 'profile', 'documents', 'emergency', 'complete')),
+  clarity_rating integer NOT NULL CHECK (clarity_rating >= 1 AND clarity_rating <= 5),
+  was_helpful boolean,
+  comments text,
+  time_spent_seconds integer,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.medical_info (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -297,6 +309,9 @@ CREATE INDEX IF NOT EXISTS unique_trusted_person_email_per_user ON public.truste
 CREATE INDEX IF NOT EXISTS idx_reminders_user_id ON public.reminders(user_id);
 CREATE INDEX IF NOT EXISTS idx_reminders_due_date ON public.reminders(due_date);
 CREATE INDEX IF NOT EXISTS idx_reminders_watcher ON public.reminders(reminder_watcher_id) WHERE reminder_watcher_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_onboarding_feedback_user_id ON public.onboarding_feedback(user_id);
+CREATE INDEX IF NOT EXISTS idx_onboarding_feedback_step_name ON public.onboarding_feedback(step_name);
+CREATE INDEX IF NOT EXISTS idx_onboarding_feedback_created_at ON public.onboarding_feedback(created_at);
 CREATE INDEX IF NOT EXISTS idx_subcategories_user_id ON public.subcategories(user_id);
 CREATE INDEX IF NOT EXISTS idx_subcategories_parent ON public.subcategories(user_id, parent_category);
 CREATE INDEX IF NOT EXISTS idx_custom_categories_user_id ON public.custom_categories(user_id);
@@ -350,6 +365,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.profiles TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.documents TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.trusted_persons TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.reminders TO authenticated;
+GRANT SELECT, INSERT ON TABLE public.onboarding_feedback TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.subcategories TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.custom_categories TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.medical_info TO authenticated;
@@ -361,6 +377,7 @@ GRANT ALL PRIVILEGES ON TABLE public.profiles TO service_role;
 GRANT ALL PRIVILEGES ON TABLE public.documents TO service_role;
 GRANT ALL PRIVILEGES ON TABLE public.trusted_persons TO service_role;
 GRANT ALL PRIVILEGES ON TABLE public.reminders TO service_role;
+GRANT ALL PRIVILEGES ON TABLE public.onboarding_feedback TO service_role;
 GRANT ALL PRIVILEGES ON TABLE public.subcategories TO service_role;
 GRANT ALL PRIVILEGES ON TABLE public.custom_categories TO service_role;
 GRANT ALL PRIVILEGES ON TABLE public.medical_info TO service_role;
@@ -372,6 +389,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trusted_persons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reminders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.onboarding_feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subcategories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.custom_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.medical_info ENABLE ROW LEVEL SECURITY;
@@ -424,6 +442,13 @@ CREATE POLICY "Users can view their own reminders" ON public.reminders FOR SELEC
 CREATE POLICY "Users can insert their own reminders" ON public.reminders FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update their own reminders" ON public.reminders FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own reminders" ON public.reminders FOR DELETE TO authenticated USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own feedback" ON public.onboarding_feedback;
+DROP POLICY IF EXISTS "Users can view own feedback" ON public.onboarding_feedback;
+DROP POLICY IF EXISTS "Service role can view all feedback" ON public.onboarding_feedback;
+CREATE POLICY "Users can insert own feedback" ON public.onboarding_feedback FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+CREATE POLICY "Users can view own feedback" ON public.onboarding_feedback FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "Service role can view all feedback" ON public.onboarding_feedback FOR SELECT TO service_role USING (true);
 
 DROP POLICY IF EXISTS "Users can view own subcategories" ON public.subcategories;
 DROP POLICY IF EXISTS "Users can create own subcategories" ON public.subcategories;

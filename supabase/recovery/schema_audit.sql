@@ -83,9 +83,15 @@ WITH expected_functions(function_name) AS (
 )
 SELECT 'missing_function' AS issue_type, e.function_name AS object_name
 FROM expected_functions e
-LEFT JOIN pg_proc p ON p.proname = e.function_name
-LEFT JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'public'
-WHERE p.oid IS NULL OR n.oid IS NULL
+LEFT JOIN LATERAL (
+  SELECT 1
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE p.proname = e.function_name
+    AND n.nspname = 'public'
+  LIMIT 1
+) f ON true
+WHERE f IS NULL
 ORDER BY e.function_name;
 
 WITH expected_policies(policy_name, table_name) AS (

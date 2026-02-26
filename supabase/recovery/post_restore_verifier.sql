@@ -20,12 +20,16 @@ WITH expected_fks(table_name, column_name, ref_table, ref_column, on_delete) AS 
 ),
 actual_fks AS (
   SELECT
-    c.conrelid::regclass::text AS table_name,
+    rel_t.relname AS table_name,
     a.attname AS column_name,
-    c.confrelid::regclass::text AS ref_table,
+    rel_r.relname AS ref_table,
     af.attname AS ref_column,
     c.confdeltype AS on_delete
   FROM pg_constraint c
+  JOIN pg_class rel_t ON rel_t.oid = c.conrelid
+  JOIN pg_namespace n_t ON n_t.oid = rel_t.relnamespace AND n_t.nspname = 'public'
+  JOIN pg_class rel_r ON rel_r.oid = c.confrelid
+  JOIN pg_namespace n_r ON n_r.oid = rel_r.relnamespace
   JOIN pg_attribute a
     ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
   JOIN pg_attribute af
@@ -37,12 +41,9 @@ actual_fks AS (
 SELECT 'missing_fk' AS issue_type, e.table_name || '.' || e.column_name AS object_name
 FROM expected_fks e
 LEFT JOIN actual_fks a
-  ON a.table_name = 'public.' || e.table_name
+  ON a.table_name = e.table_name
  AND a.column_name = e.column_name
- AND (
-   a.ref_table = 'public.' || e.ref_table
-   OR a.ref_table = 'auth.' || e.ref_table
- )
+ AND a.ref_table = e.ref_table
  AND a.ref_column = e.ref_column
  AND a.on_delete = e.on_delete
 WHERE a.table_name IS NULL
@@ -108,13 +109,16 @@ SELECT
   'missing_or_misconfigured_function' AS issue_type,
   e.function_name AS object_name
 FROM expected_functions e
-LEFT JOIN pg_proc p
-  ON p.proname = e.function_name
-LEFT JOIN pg_namespace n
-  ON n.oid = p.pronamespace
-WHERE p.oid IS NULL
-   OR n.nspname <> 'public'
-   OR p.prosecdef <> e.should_be_security_definer
+LEFT JOIN LATERAL (
+  SELECT p.prosecdef
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE p.proname = e.function_name
+    AND n.nspname = 'public'
+  LIMIT 1
+) f ON true
+WHERE f.prosecdef IS NULL
+   OR f.prosecdef <> e.should_be_security_definer
 ORDER BY e.function_name;
 
 -- 5) Core table RLS enabled
