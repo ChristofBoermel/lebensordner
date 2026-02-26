@@ -10,7 +10,6 @@ permissions:
   packages: write
 
 # Required repository secrets:
-# - GHCR_TOKEN: GitHub PAT with write:packages scope
 # - SSH_HOST: 46.224.182.244
 # - SSH_USER: deploy
 # - SSH_PRIVATE_KEY: Private key for the deploy user on the server
@@ -22,6 +21,8 @@ permissions:
 # - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: Same as in .env
 # - ENCRYPTION_KEY: Same as in .env
 # - CRON_SECRET: Same as in .env
+# Notes:
+# - GHCR login uses `github.token` + workflow `packages: write` permission.
 
 jobs:
   build-and-push:
