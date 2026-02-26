@@ -20,6 +20,24 @@ const normalizeReturnTo = (value: string | null) => {
   return null
 }
 
+const normalizeOrigin = (value: string | undefined) => {
+  if (!value) return null
+  const trimmed = value.trim().replace(/\/+$/, '')
+  if (!trimmed) return null
+  if (!/^https?:\/\//i.test(trimmed)) return null
+  return trimmed
+}
+
+const resolvePublicOrigin = (requestUrl: string) => {
+  const envOrigin =
+    normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL) ??
+    normalizeOrigin(process.env.SITE_URL)
+
+  if (envOrigin) return envOrigin
+
+  return normalizeOrigin(new URL(requestUrl).origin) ?? 'http://localhost:3000'
+}
+
 async function syncConsentFromCookie(userId: string) {
   try {
     const cookieStore = await cookies()
@@ -44,7 +62,8 @@ async function syncConsentFromCookie(userId: string) {
 }
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
+  const { searchParams } = new URL(request.url)
+  const origin = resolvePublicOrigin(request.url)
   const code = searchParams.get('code')
   const next = searchParams.get('next')
   const returnTo = normalizeReturnTo(next)
