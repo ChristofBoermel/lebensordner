@@ -325,6 +325,8 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=30d"
       - "--web.enable-lifecycle"
+    secrets:
+      - metrics-secret
     networks:
       - lebensordner-net
 
@@ -430,3 +432,7 @@ volumes:
 networks:
   lebensordner-net:
     driver: bridge
+
+secrets:
+  metrics-secret:
+    environment: METRICS_SECRET
