@@ -27,4 +27,4 @@ scrape_configs:
     authorization:
       type: Bearer
       # Replace with actual METRICS_SECRET value from deploy/.env
-      credentials: REPLACE_WITH_METRICS_SECRET
+      credentials: 972a990dc6c629a405f928645c2890a01c22a180aa2e71630e399c50db423de2
