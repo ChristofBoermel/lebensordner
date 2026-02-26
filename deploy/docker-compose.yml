@@ -353,6 +353,19 @@ services:
     networks:
       - lebensordner-net
 
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: lebensordner-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - lebensordner-net
+
   node-exporter:
     image: prom/node-exporter:v1.8.1
     container_name: lebensordner-node-exporter
