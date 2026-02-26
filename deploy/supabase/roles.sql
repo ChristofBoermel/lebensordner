@@ -1,0 +1,1 @@
+-- This file is no longer used. See 00-roles.sh instead.

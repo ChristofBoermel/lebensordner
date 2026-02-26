@@ -1,0 +1,42 @@
+{
+	email {$ACME_EMAIL:admin@lebensordner.org}
+}
+
+# Main application
+{$DOMAIN:lebensordner.org} {
+	reverse_proxy nextjs:3000
+
+	# Supabase API proxy — allows NEXT_PUBLIC_SUPABASE_URL to point to same domain
+	handle_path /supabase/* {
+		reverse_proxy kong:8000
+	}
+
+	encode gzip zstd
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 100mb
+			roll_keep 5
+		}
+	}
+}
+
+# Supabase Studio (admin only — restrict by IP or use Grafana credentials)
+studio.{$DOMAIN:lebensordner.org} {
+	basicauth {
+		{$STUDIO_USER} {$STUDIO_PASSWORD_HASH}
+	}
+	reverse_proxy studio:3000
+}
+
+# Grafana monitoring dashboard
+grafana.{$DOMAIN:lebensordner.org} {
+	reverse_proxy grafana:3000
+}

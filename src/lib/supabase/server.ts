@@ -2,11 +2,15 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { validateEncryptionKey } from '@/lib/security/encryption'
 
-// Fail-fast: validate ENCRYPTION_KEY on module load, before any request handling.
+// Validate ENCRYPTION_KEY on first request, not at module load (breaks Docker build).
 // The keyValidated cache in encryption.ts means subsequent calls are no-ops.
-validateEncryptionKey()
+let encryptionValidated = false
 
 export async function createServerSupabaseClient() {
+  if (!encryptionValidated) {
+    validateEncryptionKey()
+    encryptionValidated = true
+  }
   const cookieStore = await cookies()
 
   return createServerClient(
