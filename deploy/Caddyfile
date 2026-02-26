@@ -1,6 +1,7 @@
   {
         email {$ACME_EMAIL:admin@lebensordner.org}
         admin :2019
+        metrics
   }
 
   lebensordner.org, www.lebensordner.org {
