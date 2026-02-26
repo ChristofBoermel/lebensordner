@@ -1,0 +1,73 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+# Required repository secrets:
+# - GHCR_TOKEN: GitHub PAT with write:packages scope
+# - SSH_HOST: 46.224.182.244
+# - SSH_USER: deploy
+# - SSH_PRIVATE_KEY: Private key for the deploy user on the server
+# - NEXT_PUBLIC_SUPABASE_URL: Same as in .env
+# - NEXT_PUBLIC_SUPABASE_ANON_KEY: Same as ANON_KEY in .env
+# - NEXT_PUBLIC_TURNSTILE_SITE_KEY: Same as in .env
+# - NEXT_PUBLIC_POSTHOG_KEY: Same as in .env
+# - NEXT_PUBLIC_POSTHOG_HOST: Same as in .env
+# - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: Same as in .env
+# - ENCRYPTION_KEY: Same as in .env
+# - CRON_SECRET: Same as in .env
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ghcr.io/christofboermel/lebensordner/nextjs:latest
+            ghcr.io/christofboermel/lebensordner/nextjs:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+            NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+            NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+            ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
+            CRON_SECRET=${{ secrets.CRON_SECRET }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.worker
+          push: true
+          tags: |
+            ghcr.io/christofboermel/lebensordner/worker:latest
+            ghcr.io/christofboermel/lebensordner/worker:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/lebensordner/app/deploy
+            docker compose pull
+            docker compose up -d
