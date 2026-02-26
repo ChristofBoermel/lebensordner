@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  packages: write
+
 # Required repository secrets:
 # - GHCR_TOKEN: GitHub PAT with write:packages scope
 # - SSH_HOST: 46.224.182.244
@@ -29,7 +33,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN || github.token }}
 
       - uses: docker/build-push-action@v6
         with:
