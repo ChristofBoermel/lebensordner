@@ -91,6 +91,25 @@ const upsertProfile = async (
   if (error) throw error
 }
 
+const resetLoginSecurityState = async (email: string) => {
+  const now = new Date().toISOString()
+  const normalizedEmail = email.toLowerCase()
+
+  const { error: unlockError } = await supabase
+    .from('auth_lockouts')
+    .update({ unlocked_at: now })
+    .eq('email', normalizedEmail)
+    .is('unlocked_at', null)
+  if (unlockError) throw unlockError
+
+  const { error: resetFailuresError } = await supabase
+    .from('rate_limits')
+    .delete()
+    .eq('identifier', `login_email:${normalizedEmail}`)
+    .eq('endpoint', '/api/auth/login')
+  if (resetFailuresError) throw resetFailuresError
+}
+
 const resetConsentLedger = async (userId: string, consentType: string) => {
   const { error } = await supabase
     .from('consent_ledger')
@@ -158,7 +177,36 @@ const ensureStorageState = async (browser: Browser, email: string, password: str
   await page.getByLabel('E-Mail-Adresse').fill(email)
   await page.getByLabel('Passwort').fill(password)
   await page.getByRole('button', { name: 'Anmelden' }).click()
-  await page.waitForURL(/\/(dashboard|policy-update)/)
+
+  const loginResult = await Promise.race([
+    page.waitForURL(/\/(dashboard|policy-update)/, { timeout: 15000 }).then(() => 'ok' as const),
+    page
+      .waitForResponse(
+        (response) =>
+          response.url().includes('/api/auth/login') &&
+          response.request().method() === 'POST' &&
+          response.status() >= 400,
+        { timeout: 15000 }
+      )
+      .then(async (response) => {
+        const status = response.status()
+        let details = ''
+        try {
+          const payload = await response.json()
+          const message = typeof payload?.error === 'string' ? payload.error : ''
+          if (message) {
+            details = ` (${message})`
+          }
+        } catch {
+          // Ignore invalid JSON response bodies
+        }
+        throw new Error(`Login failed for ${email}: HTTP ${status}${details}`)
+      }),
+  ])
+
+  if (loginResult !== 'ok') {
+    throw new Error(`Unexpected login result for ${email}`)
+  }
 
   if (page.url().includes('/policy-update')) {
     await page.getByTestId('policy-update-checkbox').check()
@@ -189,6 +237,10 @@ let outdatedPolicyUserId = ''
 
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(120000)
+  await resetLoginSecurityState(unconsented.email)
+  await resetLoginSecurityState(consented.email)
+  await resetLoginSecurityState(outdatedPolicy.email)
+
   const unconsentedUser = await ensureAuthUser(unconsented.email, unconsented.password)
   unconsentedUserId = unconsentedUser.id
   await upsertProfile(unconsentedUserId, unconsented.email, {

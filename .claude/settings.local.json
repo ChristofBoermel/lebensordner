@@ -49,7 +49,10 @@
       "Bash(powershell.exe:*)",
       "Bash(cat:*)",
       "Bash(awk NR>=1740 && NR<=1742 || NR>=2050 && NR<=2055:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(gh cache:*)",
+      "Bash(gh secret:*)",
+      "Bash(curl:*)"
     ]
   }
 }
