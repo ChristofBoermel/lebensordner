@@ -211,10 +211,32 @@ const createMagicLink = async (email: string) => {
   return data.properties.action_link
 }
 
+const getSupabaseStorageKey = () => `sb-${new URL(baseURL).hostname.split('.')[0]}-auth-token`
+
+const base64UrlEncode = (value: string) =>
+  Buffer.from(value, 'utf-8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+
+const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
+  const payloadPart = token.split('.')[1]
+  if (!payloadPart) return null
+  try {
+    const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
+    const decoded = Buffer.from(padded, 'base64').toString('utf-8')
+    return JSON.parse(decoded) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
 const ensureStorageState = async (
   browser: Browser,
   email: string,
-  password: string,
+  _password: string,
   filePath: string,
   userLabel: string
 ) => {
@@ -260,24 +282,34 @@ const ensureStorageState = async (
     throw new Error(`[${userLabel}] Magic-link did not yield auth tokens, final URL: ${currentUrl}`)
   }
 
-  const exchangeResponse = await context.request.post(`${baseURL}/api/auth/e2e-session`, {
-    headers: {
-      'Content-Type': 'application/json',
-      'x-e2e-secret': requireEnv('CRON_SECRET'),
-    },
-    data: {
-      accessToken: decodeURIComponent(accessTokenMatch[1]),
-      refreshToken: decodeURIComponent(refreshTokenMatch[1]),
-      email,
-      password,
-    },
+  const accessToken = decodeURIComponent(accessTokenMatch[1])
+  const refreshToken = decodeURIComponent(refreshTokenMatch[1])
+  const jwtPayload = decodeJwtPayload(accessToken)
+  const expiresAt =
+    typeof jwtPayload?.exp === 'number'
+      ? jwtPayload.exp
+      : Math.floor(Date.now() / 1000) + 3600
+  const expiresIn = Math.max(1, expiresAt - Math.floor(Date.now() / 1000))
+
+  const serializedSession = JSON.stringify({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_at: expiresAt,
+    expires_in: expiresIn,
+    token_type: 'bearer',
   })
-  if (!exchangeResponse.ok()) {
-    const exchangeBody = await exchangeResponse.text()
-    throw new Error(
-      `[${userLabel}] Token session exchange failed (${exchangeResponse.status()}): ${exchangeBody}`
-    )
-  }
+  const cookieValue = `base64-${base64UrlEncode(serializedSession)}`
+
+  await context.addCookies([
+    {
+      name: getSupabaseStorageKey(),
+      value: cookieValue,
+      url: baseURL,
+      sameSite: 'Lax',
+      httpOnly: false,
+      secure: false,
+    },
+  ])
 
   await page.goto('/dashboard')
   await page.waitForURL(/\/(dashboard|policy-update)/, { timeout: 20000 })
