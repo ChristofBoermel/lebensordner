@@ -192,6 +192,25 @@ const getConsentRecords = async (userId: string, consentType: string) => {
   return data ?? []
 }
 
+const createMagicLink = async (email: string) => {
+  const admin = supabase.auth.admin
+  if (!admin?.generateLink) {
+    throw new Error('Supabase admin API unavailable: auth.admin.generateLink required')
+  }
+
+  const { data, error } = await admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: {
+      redirectTo: `${baseURL}/dashboard`,
+    },
+  })
+  if (error || !data?.properties?.action_link) {
+    throw error ?? new Error(`Failed to create magic link for ${email}`)
+  }
+  return data.properties.action_link
+}
+
 const ensureStorageState = async (
   browser: Browser,
   email: string,
@@ -225,21 +244,38 @@ const ensureStorageState = async (
     },
   ])
   const page = await context.newPage()
-  const loginResponse = await context.request.post(`${baseURL}/api/auth/login`, {
-    data: { email, password },
-    headers: { 'Content-Type': 'application/json' },
-  })
-  if (!loginResponse.ok()) {
-    const responseBody = await loginResponse.text()
-    throw new Error(
-      `[${userLabel}] Login bootstrap failed with status ${loginResponse.status()}: ${responseBody}`
-    )
+  const magicLink = await createMagicLink(email)
+  await page.goto(magicLink)
+
+  const currentUrl = page.url()
+  if (currentUrl.includes('/dashboard') || currentUrl.includes('/policy-update')) {
+    await context.storageState({ path: filePath })
+    await context.close()
+    return
   }
 
-  const loginPayload = await loginResponse.json().catch(() => null)
-  if (!loginPayload?.success) {
+  const accessTokenMatch = currentUrl.match(/[#&]access_token=([^&]+)/)
+  const refreshTokenMatch = currentUrl.match(/[#&]refresh_token=([^&]+)/)
+  if (!accessTokenMatch?.[1] || !refreshTokenMatch?.[1]) {
+    throw new Error(`[${userLabel}] Magic-link did not yield auth tokens, final URL: ${currentUrl}`)
+  }
+
+  const exchangeResponse = await context.request.post(`${baseURL}/api/auth/e2e-session`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'x-e2e-secret': requireEnv('CRON_SECRET'),
+    },
+    data: {
+      accessToken: decodeURIComponent(accessTokenMatch[1]),
+      refreshToken: decodeURIComponent(refreshTokenMatch[1]),
+      email,
+      password,
+    },
+  })
+  if (!exchangeResponse.ok()) {
+    const exchangeBody = await exchangeResponse.text()
     throw new Error(
-      `[${userLabel}] Login bootstrap response was not successful: ${JSON.stringify(loginPayload)}`
+      `[${userLabel}] Token session exchange failed (${exchangeResponse.status()}): ${exchangeBody}`
     )
   }
 
