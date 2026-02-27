@@ -18,10 +18,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'missing_tokens' }, { status: 400 })
   }
 
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !supabaseKey) {
+    return NextResponse.json({ error: 'supabase_config_missing' }, { status: 500 })
+  }
+
   const cookieStore = await cookies()
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    supabaseKey,
     {
       cookies: {
         get(name: string) {
