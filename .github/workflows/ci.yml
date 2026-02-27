@@ -124,11 +124,11 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: DEPLOY_RESULT,GITHUB_SHA
           script: |
-            UNHEALTHY=$(docker ps --filter health=unhealthy --format '{{.Names}}' | wc -l)
+            UNHEALTHY=$(docker ps --filter health=unhealthy --format '{{.Names}}' | grep '^lebensordner-' | wc -l)
             if [ "$UNHEALTHY" -gt "0" ]; then
               FINAL=failure
-              echo "Unhealthy containers:"
-              docker ps --filter health=unhealthy --format '{{.Names}}'
+              echo "Unhealthy app containers:"
+              docker ps --filter health=unhealthy --format '{{.Names}}' | grep '^lebensordner-'
             else
               FINAL=$DEPLOY_RESULT
             fi
