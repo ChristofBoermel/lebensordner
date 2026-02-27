@@ -64,12 +64,17 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          REDIS_URL: redis://localhost:6379
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
           NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
           NEXT_PUBLIC_POSTHOG_HOST: ${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          STRIPE_SECRET_KEY: sk_test_placeholder_not_used_in_e2e
+          RESEND_API_KEY: re_placeholder_not_used_in_e2e
+          REDIS_URL: redis://localhost:6379
           E2E_UNCONSENTED_EMAIL: ${{ secrets.E2E_UNCONSENTED_EMAIL }}
           E2E_UNCONSENTED_PASSWORD: ${{ secrets.E2E_UNCONSENTED_PASSWORD }}
           E2E_CONSENTED_EMAIL: ${{ secrets.E2E_CONSENTED_EMAIL }}
