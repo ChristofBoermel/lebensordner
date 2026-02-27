@@ -56,7 +56,18 @@ const ensureAuthUser = async (email: string, password: string) => {
     email_confirm: true,
   })
   if (!createError && createdData.user) {
-    return createdData.user
+    const { data: hardenedCreatedUser, error: hardenError } = await admin.updateUserById(
+      createdData.user.id,
+      {
+        password,
+        email_confirm: true,
+        ban_duration: 'none',
+      }
+    )
+    if (hardenError || !hardenedCreatedUser.user) {
+      throw hardenError ?? new Error(`Failed to harden created auth user for ${normalizedEmail}`)
+    }
+    return hardenedCreatedUser.user
   }
 
   const alreadyExists = createError?.message?.toLowerCase().includes('already been registered')
