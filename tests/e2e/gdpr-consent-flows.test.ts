@@ -45,35 +45,65 @@ ensureStorageStateFiles()
 
 const ensureAuthUser = async (email: string, password: string) => {
   const admin = supabase.auth.admin
-  if (!admin?.listUsers || !admin?.createUser || !admin?.deleteUser) {
-    throw new Error('Supabase admin API unavailable: auth.admin.listUsers/createUser/deleteUser required')
+  if (!admin?.listUsers || !admin?.createUser || !admin?.updateUserById) {
+    throw new Error('Supabase admin API unavailable: auth.admin.listUsers/createUser/updateUserById required')
   }
 
-  let page = 1
-  const perPage = 1000
   const normalizedEmail = email.toLowerCase()
-  while (page <= 5) {
-    const { data, error } = await admin.listUsers({ page, perPage })
-    if (error) throw error
-    const existing = data?.users?.find((user) => user.email?.toLowerCase() === normalizedEmail)
-    if (existing) {
-      const { error: deleteError } = await admin.deleteUser(existing.id)
-      if (deleteError) throw deleteError
-      break
-    }
-    if (!data?.users || data.users.length < perPage) break
-    page += 1
-  }
-
-  const { data, error } = await admin.createUser({
+  const { data: createdData, error: createError } = await admin.createUser({
     email,
     password,
     email_confirm: true,
   })
-  if (error || !data.user) {
-    throw error ?? new Error('Failed to create test user')
+  if (!createError && createdData.user) {
+    return createdData.user
   }
-  return data.user
+
+  const alreadyExists = createError?.message?.toLowerCase().includes('already been registered')
+  if (!alreadyExists) {
+    throw createError ?? new Error('Failed to create test user')
+  }
+
+  // Resolve existing auth user id from profile first, then fallback to auth admin listing.
+  let existingUserId: string | null = null
+  const { data: profileRecord, error: profileLookupError } = await supabase
+    .from('profiles')
+    .select('id')
+    .ilike('email', normalizedEmail)
+    .limit(1)
+    .maybeSingle()
+  if (profileLookupError) throw profileLookupError
+  existingUserId = profileRecord?.id ?? null
+
+  if (!existingUserId) {
+    let page = 1
+    const perPage = 1000
+    while (page <= 10) {
+      const { data, error } = await admin.listUsers({ page, perPage })
+      if (error) throw error
+      const existing = data?.users?.find((user) => user.email?.toLowerCase() === normalizedEmail)
+      if (existing) {
+        existingUserId = existing.id
+        break
+      }
+      if (!data?.users || data.users.length < perPage) break
+      page += 1
+    }
+  }
+
+  if (!existingUserId) {
+    throw new Error(`Unable to resolve existing auth user for ${normalizedEmail}`)
+  }
+
+  const { data: updatedData, error: updateError } = await admin.updateUserById(existingUserId, {
+    password,
+    email_confirm: true,
+    ban_duration: 'none',
+  })
+  if (updateError || !updatedData.user) {
+    throw updateError ?? new Error(`Failed to update auth user for ${normalizedEmail}`)
+  }
+  return updatedData.user
 }
 
 const upsertProfile = async (
