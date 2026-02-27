@@ -9,6 +9,7 @@ import {
 } from "@/lib/security/rate-limit";
 import type { DocumentCategory } from "@/types/database";
 import { CATEGORY_METADATA_FIELDS } from "@/types/database";
+import { inspect } from "util";
 
 // New endpoint for secure server-side uploads
 export async function POST(req: NextRequest) {
@@ -329,34 +330,36 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      const insertPayload = {
+        user_id: user.id,
+        category,
+        subcategory_id: subcategoryId || null,
+        custom_category_id: customCategoryId || null,
+        title: title.trim(),
+        notes: notes && notes.trim().length > 0 ? notes : null,
+        file_name: fileName,
+        file_path: fullPath,
+        file_size: file.size,
+        file_type: fileType,
+        expiry_date: expiryDate || null,
+        custom_reminder_days: customReminderDays,
+        reminder_watcher_id: reminderWatcherId,
+        metadata,
+        is_encrypted: isEncrypted,
+        encryption_version: encryptionVersion ?? null,
+        wrapped_dek: wrappedDek ?? null,
+        file_iv: fileIv ?? null,
+        title_encrypted: titleEncrypted ?? null,
+        notes_encrypted: notesEncrypted ?? null,
+        file_name_encrypted: fileNameEncrypted ?? null,
+      };
+
       const { data: documentData, error: documentError } = await supabase
         .schema("public")
         .from("documents")
-        .insert({
-          user_id: user.id,
-          category,
-          subcategory_id: subcategoryId || null,
-          custom_category_id: customCategoryId || null,
-          title: title.trim(),
-          notes: notes && notes.trim().length > 0 ? notes : null,
-          file_name: fileName,
-          file_path: fullPath,
-          file_size: file.size,
-          file_type: fileType,
-          expiry_date: expiryDate || null,
-          custom_reminder_days: customReminderDays,
-          reminder_watcher_id: reminderWatcherId,
-          metadata,
-          is_encrypted: isEncrypted,
-          encryption_version: encryptionVersion ?? null,
-          wrapped_dek: wrappedDek ?? null,
-          file_iv: fileIv ?? null,
-          title_encrypted: titleEncrypted ?? null,
-          notes_encrypted: notesEncrypted ?? null,
-          file_name_encrypted: fileNameEncrypted ?? null,
-        })
+        .insert(insertPayload)
         .select()
-        .single();
+        .maybeSingle();
 
       if (documentError) {
         console.error("Document Insert Error:", {
@@ -364,6 +367,7 @@ export async function POST(req: NextRequest) {
           details: documentError.details,
           hint: documentError.hint,
           code: documentError.code,
+          raw: inspect(documentError, { depth: 6 }),
         });
         return NextResponse.json(
           { error: "Fehler beim Speichern des Dokuments" },
@@ -371,7 +375,30 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      insertedDocument = documentData;
+      if (documentData) {
+        insertedDocument = documentData;
+      } else {
+        // Fallback: row may be inserted but not returned by PostgREST representation path.
+        const { data: fallbackDocument, error: fallbackError } = await supabase
+          .schema("public")
+          .from("documents")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("file_path", fullPath)
+          .maybeSingle();
+
+        if (fallbackError) {
+          console.error("Document Fallback Select Error:", {
+            message: fallbackError.message,
+            details: fallbackError.details,
+            hint: fallbackError.hint,
+            code: fallbackError.code,
+            raw: inspect(fallbackError, { depth: 6 }),
+          });
+        }
+
+        insertedDocument = fallbackDocument;
+      }
     }
 
     await incrementRateLimit(rateLimitConfig);
