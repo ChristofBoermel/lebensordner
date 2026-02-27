@@ -264,9 +264,17 @@ const makeRunScopedEmail = (email: string, tag: string) => {
   return `${localPart}+${tag}-${runId}@${domain}`
 }
 
+const makeRunScopedPassword = (tag: string) => {
+  const runId = process.env.GITHUB_RUN_ID ?? `${Date.now()}`
+  return `L0-${tag}-${runId}-Aa!9`
+}
+
 let unconsentedEmail = makeRunScopedEmail(unconsented.email, 'unconsented')
 let consentedEmail = makeRunScopedEmail(consented.email, 'consented')
 let outdatedPolicyEmail = makeRunScopedEmail(outdatedPolicy.email, 'policy')
+let unconsentedPassword = makeRunScopedPassword('unconsented')
+let consentedPassword = makeRunScopedPassword('consented')
+let outdatedPolicyPassword = makeRunScopedPassword('policy')
 
 test.describe.configure({ mode: 'serial', timeout: 120000 })
 
@@ -280,7 +288,7 @@ test.beforeAll(async ({ browser }) => {
   await resetLoginSecurityState(consentedEmail)
   await resetLoginSecurityState(outdatedPolicyEmail)
 
-  const unconsentedUser = await ensureAuthUser(unconsentedEmail, unconsented.password)
+  const unconsentedUser = await ensureAuthUser(unconsentedEmail, unconsentedPassword)
   unconsentedUserId = unconsentedUser.id
   await upsertProfile(unconsentedUserId, unconsentedEmail, {
     onboarding_completed: true,
@@ -291,7 +299,7 @@ test.beforeAll(async ({ browser }) => {
   await resetConsentLedger(unconsentedUserId, 'privacy_policy')
   await insertConsent(unconsentedUserId, 'privacy_policy', true, PRIVACY_POLICY_VERSION)
 
-  const consentedUser = await ensureAuthUser(consentedEmail, consented.password)
+  const consentedUser = await ensureAuthUser(consentedEmail, consentedPassword)
   consentedUserId = consentedUser.id
   await upsertProfile(consentedUserId, consentedEmail, {
     onboarding_completed: true,
@@ -303,15 +311,15 @@ test.beforeAll(async ({ browser }) => {
   await resetConsentLedger(consentedUserId, 'privacy_policy')
   await insertConsent(consentedUserId, 'privacy_policy', true, PRIVACY_POLICY_VERSION)
 
-  const policyUser = await ensureAuthUser(outdatedPolicyEmail, outdatedPolicy.password)
+  const policyUser = await ensureAuthUser(outdatedPolicyEmail, outdatedPolicyPassword)
   outdatedPolicyUserId = policyUser.id
   await upsertProfile(outdatedPolicyUserId, outdatedPolicyEmail, {
     onboarding_completed: true,
   })
 
-  await ensureStorageState(browser, unconsentedEmail, unconsented.password, storageStates.unconsented, 'unconsented')
-  await ensureStorageState(browser, consentedEmail, consented.password, storageStates.consented, 'consented')
-  await ensureStorageState(browser, outdatedPolicyEmail, outdatedPolicy.password, storageStates.outdatedPolicy, 'outdatedPolicy')
+  await ensureStorageState(browser, unconsentedEmail, unconsentedPassword, storageStates.unconsented, 'unconsented')
+  await ensureStorageState(browser, consentedEmail, consentedPassword, storageStates.consented, 'consented')
+  await ensureStorageState(browser, outdatedPolicyEmail, outdatedPolicyPassword, storageStates.outdatedPolicy, 'outdatedPolicy')
 })
 
 test.describe('Health Consent Grant Flow', () => {
