@@ -74,10 +74,31 @@ vi.mock("@/lib/supabase/client", () => ({
   createClient: () => einstellungenClient,
 }));
 
+const createJsonResponse = (data: any, status = 200) =>
+  new Response(JSON.stringify(data), { status })
+
 describe("Einstellungen Tier Display", () => {
   beforeEach(() => {
     resetMockProfile();
     mockSeniorMode = false;
+    global.fetch = vi.fn((input: RequestInfo) => {
+      const url = typeof input === 'string' ? input : (input as Request).url
+      if (url.includes('/api/profile')) {
+        return Promise.resolve(createJsonResponse({ profile: {} }))
+      }
+      if (url.includes('/api/consent')) {
+        return Promise.resolve(createJsonResponse({ granted: false, history: [] }))
+      }
+      return Promise.resolve(createJsonResponse({}))
+    }) as unknown as typeof fetch
+    einstellungenGetUser.mockResolvedValue({
+      data: { user: { id: 'test-user-id', email: 'test@example.com' } },
+      error: null,
+    })
+    einstellungenSingle.mockImplementation(async () => {
+      const { mockProfileData } = await import('../mocks/supabase-state')
+      return { data: mockProfileData, error: null }
+    })
   });
 
   it("shows current tier name", async () => {

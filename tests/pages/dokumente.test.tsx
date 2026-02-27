@@ -649,7 +649,7 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
         ...actual,
         useState: (initial: unknown) => {
           callIndex += 1
-          if (callIndex === 42) {
+          if (callIndex === 44) {
             const [state, setState] = actual.useState('tp-1')
             const wrappedSetState = () => setState('tp-1')
             return [state, wrappedSetState]

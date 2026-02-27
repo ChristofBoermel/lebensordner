@@ -140,6 +140,16 @@ vi.mock('@supabase/supabase-js', () => ({
   })),
 }))
 
+// Mock rate-limit to avoid Redis connection in tests
+// Use constructor-time vi.fn(impl) so implementations survive vi.restoreAllMocks() in afterEach
+vi.mock('@/lib/security/rate-limit', () => ({
+  checkRateLimit: vi.fn(() => Promise.resolve({ allowed: true, remaining: 10, resetAt: new Date() })),
+  incrementRateLimit: vi.fn(() => Promise.resolve(undefined)),
+  RATE_LIMIT_INVITE: { maxRequests: 5, windowMs: 60 * 60 * 1000 },
+  RATE_LIMIT_API: { maxRequests: 100, windowMs: 60 * 60 * 1000 },
+  RATE_LIMIT_LOGIN: { maxRequests: 5, windowMs: 15 * 60 * 1000 },
+}))
+
 // Mock subscription tiers
 vi.mock('@/lib/subscription-tiers', () => ({
   getTierFromSubscription: vi.fn(() => ({

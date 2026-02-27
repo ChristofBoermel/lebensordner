@@ -118,7 +118,11 @@ describe('Admin User Management', () => {
       )
     })
 
-    const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string)
+    const roleCall = mockFetch.mock.calls.find(
+      ([url]: [string]) => url === '/api/admin/users/role'
+    )
+    expect(roleCall).toBeDefined()
+    const body = JSON.parse((roleCall![1] as RequestInit).body as string)
     expect(body.targetUserId).toBe('user-1')
     expect(body.newRole).toBe('admin')
   })

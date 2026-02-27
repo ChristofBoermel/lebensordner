@@ -54,6 +54,8 @@ const defaultProps = {
 describe('BmpScanDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    global.URL.createObjectURL = vi.fn(() => 'blob:mock')
+    global.URL.revokeObjectURL = vi.fn()
     mockParseBmpXml.mockReturnValue([])
     mockUseDropzone.mockReturnValue({
       getRootProps: () => ({ 'data-testid': 'dropzone' }),

@@ -84,11 +84,12 @@ describe('Notfall Page — Medication Form', () => {
     })
     await userEvent.click(screen.getByRole('tab', { name: /Gesundheit/i }))
 
-    // Click the "Hinzufügen" button to open the MedikamentDialog
+    // Click the "Hinzufügen" button for medications (index 1: Notfall contacts is index 0,
+    // since Radix UI Tabs keeps all tab contents in the DOM)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Hinzufügen/i })).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /Hinzufügen/i }).length).toBeGreaterThan(0)
     })
-    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
+    await userEvent.click(screen.getAllByRole('button', { name: /Hinzufügen/i })[0])
 
     await waitFor(() => {
       expect(screen.getByText('Form')).toBeInTheDocument()
@@ -106,9 +107,9 @@ describe('Notfall Page — Medication Form', () => {
     await userEvent.click(screen.getByRole('tab', { name: /Gesundheit/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Hinzufügen/i })).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /Hinzufügen/i }).length).toBeGreaterThan(0)
     })
-    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
+    await userEvent.click(screen.getAllByRole('button', { name: /Hinzufügen/i })[0])
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('z.B. Stück')).toBeInTheDocument()
@@ -128,9 +129,9 @@ describe('Notfall Page — Medication Form', () => {
     await userEvent.click(screen.getByRole('tab', { name: /Gesundheit/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Hinzufügen/i })).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /Hinzufügen/i }).length).toBeGreaterThan(0)
     })
-    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
+    await userEvent.click(screen.getAllByRole('button', { name: /Hinzufügen/i })[0])
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('z.B. Metformin')).toBeInTheDocument()

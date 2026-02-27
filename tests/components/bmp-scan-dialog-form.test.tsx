@@ -58,10 +58,11 @@ describe('BmpScanDialog — PreviewEditDialog form fields', () => {
       expect(screen.getByRole('button', { name: /Übernehmen/i })).toBeInTheDocument()
     })
 
-    // Click the icon-only edit button (the only button without a text name besides Abbrechen/Übernehmen)
+    // Click the icon-only edit button (empty textContent — only an SVG icon,
+    // unlike the Dialog close button which has a sr-only "Schließen" span)
     const allButtons = screen.getAllByRole('button')
     const editButton = allButtons.find(
-      (btn) => !btn.textContent?.match(/Übernehmen|Abbrechen/)
+      (btn) => !btn.textContent?.trim()
     )
     expect(editButton).toBeDefined()
     await userEvent.click(editButton!)
