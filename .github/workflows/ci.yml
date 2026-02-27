@@ -190,9 +190,11 @@ jobs:
             cd /opt/lebensordner/app
 
             if ! git diff --quiet || ! git diff --cached --quiet; then
-              echo "Server repo has tracked local changes; refusing deploy to avoid drift."
+              echo "Server repo has tracked local changes; stashing before deploy."
               git status --short
-              exit 1
+              git stash push -m "pre-deploy-${GITHUB_SHA:0:8}-$(date +%Y%m%d%H%M%S)"
+              echo "Created stash entry:"
+              git stash list --max-count=1
             fi
 
             git fetch --prune origin main
