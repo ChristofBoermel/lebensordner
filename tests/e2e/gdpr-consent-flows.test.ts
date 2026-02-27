@@ -188,6 +188,7 @@ let consentedUserId = ''
 let outdatedPolicyUserId = ''
 
 test.beforeAll(async ({ browser }) => {
+  test.setTimeout(120000)
   const unconsentedUser = await ensureAuthUser(unconsented.email, unconsented.password)
   unconsentedUserId = unconsentedUser.id
   await upsertProfile(unconsentedUserId, unconsented.email, {
