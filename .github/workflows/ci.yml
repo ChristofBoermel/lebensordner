@@ -1,0 +1,141 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - run: npm run test
+
+  e2e-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          E2E_UNCONSENTED_EMAIL: ${{ secrets.E2E_UNCONSENTED_EMAIL }}
+          E2E_UNCONSENTED_PASSWORD: ${{ secrets.E2E_UNCONSENTED_PASSWORD }}
+          E2E_CONSENTED_EMAIL: ${{ secrets.E2E_CONSENTED_EMAIL }}
+          E2E_CONSENTED_PASSWORD: ${{ secrets.E2E_CONSENTED_PASSWORD }}
+          E2E_OUTDATED_POLICY_EMAIL: ${{ secrets.E2E_OUTDATED_POLICY_EMAIL }}
+          E2E_OUTDATED_POLICY_PASSWORD: ${{ secrets.E2E_OUTDATED_POLICY_PASSWORD }}
+
+  build-and-push:
+    needs: unit-tests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ghcr.io/christofboermel/lebensordner/nextjs:latest
+            ghcr.io/christofboermel/lebensordner/nextjs:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+            NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+            NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+            ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
+            CRON_SECRET=${{ secrets.CRON_SECRET }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.worker
+          push: true
+          tags: |
+            ghcr.io/christofboermel/lebensordner/worker:latest
+            ghcr.io/christofboermel/lebensordner/worker:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/lebensordner/app/deploy
+            docker compose pull
+            docker compose up -d
+
+  smoke-check:
+    needs: deploy
+    if: always() && needs.deploy.result != 'skipped'
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Wait for containers to start
+        run: sleep 30
+
+      - name: HTTP health check
+        id: health
+        run: |
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://lebensordner.org/api/health)
+          echo "code=$HTTP" >> $GITHUB_OUTPUT
+          if [ "$HTTP" != "200" ]; then
+            echo "Health check failed: HTTP $HTTP"
+            echo "result=failure" >> $GITHUB_OUTPUT
+          else
+            echo "result=success" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check containers and log result
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_RESULT,GITHUB_SHA
+          script: |
+            UNHEALTHY=$(docker ps --filter health=unhealthy --format '{{.Names}}' | wc -l)
+            if [ "$UNHEALTHY" -gt "0" ]; then
+              FINAL=failure
+              echo "Unhealthy containers:"
+              docker ps --filter health=unhealthy --format '{{.Names}}'
+            else
+              FINAL=$DEPLOY_RESULT
+            fi
+            mkdir -p /var/log/lebensordner
+            TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            echo "$TS sha=${GITHUB_SHA:0:8} status=$FINAL" >> /var/log/lebensordner/deploy.log
+            [ "$FINAL" = "failure" ] && exit 1 || exit 0
+        env:
+          DEPLOY_RESULT: ${{ steps.health.outputs.result }}
+          GITHUB_SHA: ${{ github.sha }}

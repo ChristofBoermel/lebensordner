@@ -19,3 +19,12 @@ scrape_configs:
         regex: "/?(.*)"
       - source_labels: ["__meta_docker_container_log_stream"]
         target_label: stream
+
+  - job_name: cicd
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: cicd
+          host: lebensordner
+          __path__: /var/log/lebensordner/deploy.log
