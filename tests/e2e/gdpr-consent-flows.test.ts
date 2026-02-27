@@ -45,8 +45,8 @@ ensureStorageStateFiles()
 
 const ensureAuthUser = async (email: string, password: string) => {
   const admin = supabase.auth.admin
-  if (!admin?.listUsers || !admin?.createUser || !admin?.updateUserById) {
-    throw new Error('Supabase admin API unavailable: auth.admin.listUsers/createUser/updateUserById required')
+  if (!admin?.listUsers || !admin?.createUser || !admin?.deleteUser) {
+    throw new Error('Supabase admin API unavailable: auth.admin.listUsers/createUser/deleteUser required')
   }
 
   let page = 1
@@ -57,12 +57,9 @@ const ensureAuthUser = async (email: string, password: string) => {
     if (error) throw error
     const existing = data?.users?.find((user) => user.email?.toLowerCase() === normalizedEmail)
     if (existing) {
-      const { data: updated, error: updateError } = await admin.updateUserById(existing.id, {
-        password,
-        email_confirm: true,
-      })
-      if (updateError) throw updateError
-      return updated.user ?? existing
+      const { error: deleteError } = await admin.deleteUser(existing.id)
+      if (deleteError) throw deleteError
+      break
     }
     if (!data?.users || data.users.length < perPage) break
     page += 1
@@ -154,7 +151,13 @@ const getConsentRecords = async (userId: string, consentType: string) => {
   return data ?? []
 }
 
-const ensureStorageState = async (browser: Browser, email: string, password: string, filePath: string) => {
+const ensureStorageState = async (
+  browser: Browser,
+  email: string,
+  password: string,
+  filePath: string,
+  userLabel: string
+) => {
   if (fs.existsSync(filePath)) {
     try {
       const raw = fs.readFileSync(filePath, 'utf-8')
@@ -209,12 +212,12 @@ const ensureStorageState = async (browser: Browser, email: string, password: str
         } catch {
           // Ignore invalid JSON response bodies
         }
-        throw new Error(`Login failed for ${email}: HTTP ${status}${details}`)
+        throw new Error(`Login failed for ${userLabel}: HTTP ${status}${details}`)
       }),
   ])
 
   if (loginResult !== 'ok') {
-    throw new Error(`Unexpected login result for ${email}`)
+    throw new Error(`Unexpected login result for ${userLabel}`)
   }
 
   if (page.url().includes('/policy-update')) {
@@ -279,9 +282,9 @@ test.beforeAll(async ({ browser }) => {
     onboarding_completed: true,
   })
 
-  await ensureStorageState(browser, unconsented.email, unconsented.password, storageStates.unconsented)
-  await ensureStorageState(browser, consented.email, consented.password, storageStates.consented)
-  await ensureStorageState(browser, outdatedPolicy.email, outdatedPolicy.password, storageStates.outdatedPolicy)
+  await ensureStorageState(browser, unconsented.email, unconsented.password, storageStates.unconsented, 'unconsented')
+  await ensureStorageState(browser, consented.email, consented.password, storageStates.consented, 'consented')
+  await ensureStorageState(browser, outdatedPolicy.email, outdatedPolicy.password, storageStates.outdatedPolicy, 'outdatedPolicy')
 })
 
 test.describe('Health Consent Grant Flow', () => {
