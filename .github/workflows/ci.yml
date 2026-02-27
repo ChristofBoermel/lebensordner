@@ -39,10 +39,25 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-
       - run: npx playwright install --with-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+      - run: npx playwright install-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
       - run: npm run test:e2e
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+          NEXT_PUBLIC_POSTHOG_HOST: ${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           E2E_UNCONSENTED_EMAIL: ${{ secrets.E2E_UNCONSENTED_EMAIL }}
           E2E_UNCONSENTED_PASSWORD: ${{ secrets.E2E_UNCONSENTED_PASSWORD }}
@@ -51,7 +66,7 @@ jobs:
           E2E_OUTDATED_POLICY_EMAIL: ${{ secrets.E2E_OUTDATED_POLICY_EMAIL }}
           E2E_OUTDATED_POLICY_PASSWORD: ${{ secrets.E2E_OUTDATED_POLICY_PASSWORD }}
 
-  build-and-push:
+  build-nextjs:
     needs: unit-tests
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -83,6 +98,20 @@ jobs:
             NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
             ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
             CRON_SECRET=${{ secrets.CRON_SECRET }}
+
+  build-worker:
+    needs: unit-tests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -95,7 +124,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=worker
 
   deploy:
-    needs: build-and-push
+    needs: [build-nextjs, build-worker]
     runs-on: ubuntu-latest
     environment: Production
     steps:
