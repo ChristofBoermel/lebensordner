@@ -1480,7 +1480,7 @@ export default function DocumentsPage() {
                 {formatFileSize(doc.file_size)}
               </span>
               <span className="flex-shrink-0 hidden xs:inline">•</span>
-              <span className="flex-shrink-0 hidden xs:inline">
+              <span className="flex-shrink-0 hidden xs:inline" suppressHydrationWarning>
                 {formatDate(doc.created_at)}
               </span>
             </div>
@@ -2395,6 +2395,7 @@ export default function DocumentsPage() {
           previewDocument
             ? {
                 ...previewDocument,
+                title: decryptedTitles[previewDocument.id] ?? previewDocument.title,
                 notes:
                   previewNotes ??
                   (previewDocument.is_encrypted

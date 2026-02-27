@@ -38,7 +38,11 @@
       "Bash(npm view:*)",
       "Bash(npm search:*)",
       "WebFetch(domain:www.npmjs.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(xargs grep:*)",
+      "Bash(wmic logicaldisk:*)",
+      "Bash(where bun:*)",
+      "Bash(du:*)"
     ]
   }
 }
