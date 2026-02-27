@@ -294,6 +294,11 @@ services:
     image: caddy:2-alpine
     container_name: lebensordner-caddy
     restart: unless-stopped
+    environment:
+      STUDIO_USER: ${STUDIO_USER}
+      STUDIO_PASSWORD_HASH: ${STUDIO_PASSWORD_HASH}
+      GRAFANA_USER: ${GRAFANA_USER}
+      GRAFANA_PASSWORD_HASH: ${GRAFANA_PASSWORD_HASH}
     ports:
       - "80:80"
       - "443:443"
