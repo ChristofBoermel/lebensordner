@@ -1,249 +1,159 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Mock fetch for HTTP calls
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+type Job = { name: string }
+type WorkerInstance = {
+  queueName: string
+  processor: (job: Job) => Promise<void>
+  options: { connection: unknown; concurrency: number }
+  on: ReturnType<typeof vi.fn>
+}
 
-describe('Queue Integration Tests', () => {
+const hoisted = vi.hoisted(() => ({
+  workerInstances: [] as WorkerInstance[],
+  workerCtor: vi.fn(),
+  cleanupExpiredLimits: vi.fn(async () => 0),
+}))
+
+vi.mock('bullmq', () => ({
+  Worker: function MockWorker(
+    queueName: string,
+    processor: (job: Job) => Promise<void>,
+    options: { connection: unknown; concurrency: number }
+  ) {
+    const instance: WorkerInstance = {
+      queueName,
+      processor,
+      options,
+      on: vi.fn(),
+    }
+    hoisted.workerInstances.push(instance)
+    hoisted.workerCtor(queueName, processor, options)
+    return instance
+  },
+}))
+
+vi.mock('@/lib/queue/connection', () => ({
+  redisConnection: { host: 'localhost', port: 6379 },
+}))
+
+vi.mock('@/lib/security/rate-limit', () => ({
+  cleanupExpiredLimits: hoisted.cleanupExpiredLimits,
+}))
+
+async function loadWorkersModule() {
+  vi.resetModules()
+  hoisted.workerInstances.length = 0
+  hoisted.workerCtor.mockClear()
+  hoisted.cleanupExpiredLimits.mockClear()
+  process.env.CRON_SECRET = 'test-cron-secret'
+  process.env.NEXTJS_INTERNAL_URL = 'http://nextjs:3000'
+  return import('@/lib/queue/workers')
+}
+
+describe('Queue Workers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    process.env.CRON_SECRET = 'test-cron-secret'
-    process.env.NEXTJS_INTERNAL_URL = 'http://localhost:3000'
+    global.fetch = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }))
+    ) as unknown as typeof fetch
   })
 
-  afterEach(() => {
-    vi.restoreAllMocks()
+  it('starts reminder, email and cleanup workers with expected concurrency', async () => {
+    const { startWorkers } = await loadWorkersModule()
+    const workers = startWorkers()
+
+    expect(workers).toHaveLength(3)
+    expect(hoisted.workerCtor).toHaveBeenCalledTimes(3)
+    expect(hoisted.workerInstances.map((w) => w.queueName)).toEqual([
+      'reminders',
+      'emails',
+      'cleanup',
+    ])
+    expect(hoisted.workerInstances.map((w) => w.options.concurrency)).toEqual([1, 2, 1])
   })
 
-  describe('Cron Endpoint Integration', () => {
-    it('should call send-reminders endpoint with correct authorization', async () => {
-      mockFetch.mockResolvedValue(
-        new Response(JSON.stringify({ success: true, processed: 5 }), { status: 200 })
-      )
+  it('reminder worker calls send-reminders endpoint with bearer auth', async () => {
+    const { startWorkers } = await loadWorkersModule()
+    startWorkers()
 
-      const response = await fetch(
-        'http://localhost:3000/api/cron/send-reminders',
-        {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer test-cron-secret',
-          },
-        }
-      )
+    const reminderWorker = hoisted.workerInstances.find((w) => w.queueName === 'reminders')
+    expect(reminderWorker).toBeDefined()
+    await reminderWorker!.processor({ name: 'daily-reminders' })
 
-      expect(response.ok).toBe(true)
-      // MSW may convert string URL + options into a Request object, so extract URL flexibly
-      const calledArg = mockFetch.mock.calls[0][0]
-      const calledUrl = typeof calledArg === 'string' ? calledArg : (calledArg as Request).url
-      expect(calledUrl).toBe('http://localhost:3000/api/cron/send-reminders')
-    })
-
-    it('should call process-email-queue endpoint with correct authorization', async () => {
-      mockFetch.mockResolvedValue(
-        new Response(JSON.stringify({ success: true, processed: 3, failed: 1 }), { status: 200 })
-      )
-
-      const response = await fetch(
-        'http://localhost:3000/api/cron/process-email-queue',
-        {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer test-cron-secret',
-          },
-        }
-      )
-
-      expect(response.ok).toBe(true)
-      const result = await response.json()
-      expect(result.success).toBe(true)
-      expect(result.processed).toBe(3)
-    })
-
-    it('should call send-upgrade-emails endpoint with correct authorization', async () => {
-      mockFetch.mockResolvedValue(
-        new Response(JSON.stringify({ success: true, sent: 2 }), { status: 200 })
-      )
-
-      const response = await fetch(
-        'http://localhost:3000/api/cron/send-upgrade-emails',
-        {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer test-cron-secret',
-          },
-        }
-      )
-
-      expect(response.ok).toBe(true)
-      const result = await response.json()
-      expect(result.success).toBe(true)
-      expect(result.sent).toBe(2)
-    })
-  })
-
-  describe('Worker Error Handling', () => {
-    it('should handle 401 unauthorized responses', async () => {
-      mockFetch.mockResolvedValue(
-        new Response(null, { status: 401, statusText: 'Unauthorized' })
-      )
-
-      const response = await fetch(
-        'http://localhost:3000/api/cron/send-reminders',
-        {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer wrong-secret',
-          },
-        }
-      )
-
-      expect(response.status).toBe(401)
-      expect(response.ok).toBe(false)
-    })
-
-    it('should handle 500 server errors', async () => {
-      mockFetch.mockResolvedValue(
-        new Response(null, { status: 500, statusText: 'Internal Server Error' })
-      )
-
-      const response = await fetch(
-        'http://localhost:3000/api/cron/send-reminders',
-        {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer test-cron-secret',
-          },
-        }
-      )
-
-      expect(response.status).toBe(500)
-      expect(response.ok).toBe(false)
-    })
-
-    it('should handle network failures', async () => {
-      mockFetch.mockRejectedValue(new Error('Network connection failed'))
-
-      await expect(
-        fetch('http://localhost:3000/api/cron/send-reminders', {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer test-cron-secret',
-          },
-        })
-      ).rejects.toThrow('Network connection failed')
-    })
-  })
-
-  describe('Queue Job Patterns', () => {
-    it('should validate cron pattern formats', () => {
-      // Test that the cron patterns are valid
-      const patterns = {
-        dailyReminders: '0 8 * * *',
-        upgradeEmails: '0 10 * * *',
-        emailQueue: '*/15 * * * *',
-        cleanup: '0 3 * * *',
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://nextjs:3000/api/cron/send-reminders',
+      {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer test-cron-secret',
+        },
       }
+    )
+  })
 
-      // Simple validation - check that patterns have 5 parts
-      Object.values(patterns).forEach(pattern => {
-        const parts = pattern.split(' ')
-        expect(parts).toHaveLength(5)
-      })
-    })
+  it('email worker routes process-email-queue and send-upgrade-emails jobs', async () => {
+    const { startWorkers } = await loadWorkersModule()
+    startWorkers()
 
-    it('should have correct time intervals', () => {
-      const intervals = {
-        dailyReminders: '0 8 * * *',      // 8:00 AM daily
-        upgradeEmails: '0 10 * * *',     // 10:00 AM daily  
-        emailQueue: '*/15 * * * *',      // Every 15 minutes
-        cleanup: '0 3 * * *',            // 3:00 AM daily
+    const emailWorker = hoisted.workerInstances.find((w) => w.queueName === 'emails')
+    expect(emailWorker).toBeDefined()
+
+    await emailWorker!.processor({ name: 'process-email-queue' })
+    await emailWorker!.processor({ name: 'send-upgrade-emails' })
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      'http://nextjs:3000/api/cron/process-email-queue',
+      {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer test-cron-secret',
+        },
       }
-
-      expect(intervals.emailQueue).toContain('*/15') // Every 15 minutes
-      expect(intervals.dailyReminders).toBe('0 8 * * *') // 8 AM
-      expect(intervals.upgradeEmails).toBe('0 10 * * *') // 10 AM
-      expect(intervals.cleanup).toBe('0 3 * * *') // 3 AM
-    })
+    )
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      'http://nextjs:3000/api/cron/send-upgrade-emails',
+      {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer test-cron-secret',
+        },
+      }
+    )
   })
 
-  describe('Worker Configuration', () => {
-    it('should use correct internal URL', () => {
-      expect(process.env.NEXTJS_INTERNAL_URL).toBe('http://localhost:3000')
-    })
+  it('email worker ignores unknown email jobs', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { startWorkers } = await loadWorkersModule()
+    startWorkers()
 
-    it('should use correct cron secret', () => {
-      expect(process.env.CRON_SECRET).toBe('test-cron-secret')
-    })
+    const emailWorker = hoisted.workerInstances.find((w) => w.queueName === 'emails')
+    expect(emailWorker).toBeDefined()
+    await emailWorker!.processor({ name: 'unknown-job' })
 
-    it('should construct correct endpoint URLs', () => {
-      const baseUrl = process.env.NEXTJS_INTERNAL_URL
-      const endpoints = [
-        '/api/cron/send-reminders',
-        '/api/cron/process-email-queue', 
-        '/api/cron/send-upgrade-emails',
-      ]
-
-      endpoints.forEach(endpoint => {
-        const fullUrl = `${baseUrl}${endpoint}`
-        expect(fullUrl).toMatch(/^http:\/\/localhost:3000\/api\/cron\//)
-      })
-    })
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledWith('[Worker] Unknown email job: unknown-job')
   })
 
-  describe('Response Validation', () => {
-    it('should validate reminder response structure', async () => {
-      mockFetch.mockResolvedValue(
-        new Response(JSON.stringify({ success: true, processed: 5, timestamp: '2023-01-01T08:00:00Z' }), { status: 200 })
-      )
+  it('cleanup worker calls cleanupExpiredLimits for cleanup-expired jobs', async () => {
+    const { startWorkers } = await loadWorkersModule()
+    startWorkers()
 
-      const response = await fetch(
-        'http://localhost:3000/api/cron/send-reminders',
-        {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer test-cron-secret',
-          },
-        }
-      )
+    const cleanupWorker = hoisted.workerInstances.find((w) => w.queueName === 'cleanup')
+    expect(cleanupWorker).toBeDefined()
+    await cleanupWorker!.processor({ name: 'cleanup-expired' })
 
-      const result = await response.json()
-      expect(result).toHaveProperty('success')
-      expect(result).toHaveProperty('processed')
-      expect(result).toHaveProperty('timestamp')
-      expect(typeof result.success).toBe('boolean')
-      expect(typeof result.processed).toBe('number')
-    })
+    expect(hoisted.cleanupExpiredLimits).toHaveBeenCalledTimes(1)
+  })
 
-    it('should validate email queue response structure', async () => {
-      mockFetch.mockResolvedValue(
-        new Response(JSON.stringify({
-          success: true,
-          processed: 3,
-          failed: 1,
-          permanently_failed: 0,
-          timestamp: '2023-01-01T08:00:00Z'
-        }), { status: 200 })
-      )
+  it('startWorkers is idempotent', async () => {
+    const { startWorkers } = await loadWorkersModule()
+    const first = startWorkers()
+    const second = startWorkers()
 
-      const response = await fetch(
-        'http://localhost:3000/api/cron/process-email-queue',
-        {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer test-cron-secret',
-          },
-        }
-      )
-
-      const result = await response.json()
-      expect(result).toHaveProperty('success')
-      expect(result).toHaveProperty('processed')
-      expect(result).toHaveProperty('failed')
-      expect(result).toHaveProperty('permanently_failed')
-      expect(result).toHaveProperty('timestamp')
-      expect(typeof result.success).toBe('boolean')
-      expect(typeof result.processed).toBe('number')
-      expect(typeof result.failed).toBe('number')
-    })
+    expect(first).toHaveLength(3)
+    expect(second).toEqual([])
+    expect(hoisted.workerCtor).toHaveBeenCalledTimes(3)
   })
 })
