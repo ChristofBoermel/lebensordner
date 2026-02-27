@@ -19,9 +19,13 @@ on:
         required: true
         default: 'e2e_only'
         type: choice
-        options:
+      options:
           - e2e_only
           - full
+
+concurrency:
+  group: ci-cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -137,8 +141,12 @@ jobs:
           tags: |
             ghcr.io/christofboermel/lebensordner/nextjs:latest
             ghcr.io/christofboermel/lebensordner/nextjs:${{ github.sha }}
-          cache-from: type=gha,scope=nextjs
-          cache-to: type=gha,mode=max,scope=nextjs
+          cache-from: |
+            type=gha,scope=nextjs
+            type=registry,ref=ghcr.io/christofboermel/lebensordner/nextjs:buildcache
+          cache-to: |
+            type=gha,mode=max,scope=nextjs
+            type=registry,ref=ghcr.io/christofboermel/lebensordner/nextjs:buildcache,mode=max
           build-args: |
             NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
             NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -170,8 +178,12 @@ jobs:
           tags: |
             ghcr.io/christofboermel/lebensordner/worker:latest
             ghcr.io/christofboermel/lebensordner/worker:${{ github.sha }}
-          cache-from: type=gha,scope=worker
-          cache-to: type=gha,mode=max,scope=worker
+          cache-from: |
+            type=gha,scope=worker
+            type=registry,ref=ghcr.io/christofboermel/lebensordner/worker:buildcache
+          cache-to: |
+            type=gha,mode=max,scope=worker
+            type=registry,ref=ghcr.io/christofboermel/lebensordner/worker:buildcache,mode=max
 
   deploy:
     needs: [build-nextjs, build-worker]
