@@ -42,23 +42,33 @@ Use this checklist before marking production as fully live.
 - [ ] Restore test succeeded to disposable target.
 - [ ] Last successful restore timestamp recorded.
 
-## 6) Monitoring and Alerts
+## 6) Admin Bootstrap
+
+- [ ] Operator account registered at `/registrieren`.
+- [ ] Operator email confirmation completed and onboarding reached `/dashboard`.
+- [ ] Operator account promoted to admin in `profiles.role`.
+- [ ] `/admin` is accessible for the promoted account.
+
+## 7) Monitoring and Alerts
 
 - [ ] Grafana/Prometheus/Loki/Promtail are up.
+- [ ] `postgres-exporter` container is running.
+- [ ] Prometheus target `job="postgres"` is `UP`.
 - [ ] Alerts exist for:
   - [ ] app down
   - [ ] worker down
   - [ ] DB down
   - [ ] TLS expiry threshold
-- [ ] Alert routing tested (email/Slack/etc.).
+- [ ] Telegram contact point exists and default notification policy routes to `Telegram`.
+- [ ] Alert routing tested via Worker Down fire + resolve messages in Telegram.
 
-## 7) Rollback Readiness
+## 8) Rollback Readiness
 
 - [ ] Previous known-good SHA tags identified for nextjs + worker.
 - [ ] Rollback by SHA procedure tested once.
 - [ ] Rollback execution time recorded.
 
-## 8) Final Gate
+## 9) Final Gate
 
 - [ ] Two consecutive successful deploys from `main`.
 - [ ] No critical errors across app/worker/caddy logs for 24h.

@@ -4,6 +4,9 @@
 
 Production deploy for self-hosted Lebensordner on `/opt/lebensordner/app/deploy`.
 
+Related runbooks:
+- `docs/ops/admin-bootstrap-monitoring-runbook.md` (one-time admin bootstrap + Telegram alert activation)
+
 ## Standard Deploy (GitHub Actions)
 
 1. Merge to `main`.

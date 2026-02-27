@@ -42,7 +42,14 @@
       "Bash(xargs grep:*)",
       "Bash(wmic logicaldisk:*)",
       "Bash(where bun:*)",
-      "Bash(du:*)"
+      "Bash(du:*)",
+      "Bash(gh run:*)",
+      "Bash(gh.exe run:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(cat:*)",
+      "Bash(awk NR>=1740 && NR<=1742 || NR>=2050 && NR<=2055:*)",
+      "Bash(git:*)"
     ]
   }
 }
