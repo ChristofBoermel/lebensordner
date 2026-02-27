@@ -19,7 +19,7 @@ on:
         required: true
         default: 'e2e_only'
         type: choice
-      options:
+        options:
           - e2e_only
           - full
 
