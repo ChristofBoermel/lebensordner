@@ -271,7 +271,7 @@ const ensureStorageState = async (
 
 const { unconsented, consented, outdatedPolicy } = getE2EUsers()
 
-test.describe.configure({ timeout: 120000 })
+test.describe.configure({ mode: 'serial', timeout: 120000 })
 
 let unconsentedUserId = ''
 let consentedUserId = ''

@@ -12,6 +12,16 @@ on:
       - 'docs/**'
       - '*.md'
       - '.claude/**'
+  workflow_dispatch:
+    inputs:
+      run_mode:
+        description: 'Choose what to run'
+        required: true
+        default: 'e2e_only'
+        type: choice
+        options:
+          - e2e_only
+          - full
 
 permissions:
   contents: read
@@ -19,6 +29,7 @@ permissions:
 
 jobs:
   unit-tests:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_mode == 'full'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +118,7 @@ jobs:
 
   build-nextjs:
     needs: unit-tests
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_mode == 'full'))
     runs-on: ubuntu-latest
     environment: Production
     steps:
@@ -140,7 +151,7 @@ jobs:
 
   build-worker:
     needs: unit-tests
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_mode == 'full'))
     runs-on: ubuntu-latest
     environment: Production
     steps:
@@ -164,6 +175,7 @@ jobs:
 
   deploy:
     needs: [build-nextjs, build-worker]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_mode == 'full'))
     runs-on: ubuntu-latest
     environment: Production
     steps:
