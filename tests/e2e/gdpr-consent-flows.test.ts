@@ -267,25 +267,12 @@ const ensureStorageState = async (
 
 const { unconsented, consented, outdatedPolicy } = getE2EUsers()
 
-const makeRunScopedEmail = (email: string, tag: string) => {
-  const parts = email.split('@')
-  if (parts.length !== 2) return email
-  const [localPart, domain] = parts
-  const runId = process.env.GITHUB_RUN_ID ?? `${Date.now()}`
-  return `${localPart}+${tag}-${runId}@${domain}`
-}
-
-const makeRunScopedPassword = (tag: string) => {
-  const runId = process.env.GITHUB_RUN_ID ?? `${Date.now()}`
-  return `L0-${tag}-${runId}-Aa!9`
-}
-
-let unconsentedEmail = makeRunScopedEmail(unconsented.email, 'unconsented')
-let consentedEmail = makeRunScopedEmail(consented.email, 'consented')
-let outdatedPolicyEmail = makeRunScopedEmail(outdatedPolicy.email, 'policy')
-let unconsentedPassword = makeRunScopedPassword('unconsented')
-let consentedPassword = makeRunScopedPassword('consented')
-let outdatedPolicyPassword = makeRunScopedPassword('policy')
+const unconsentedEmail = unconsented.email
+const consentedEmail = consented.email
+const outdatedPolicyEmail = outdatedPolicy.email
+const unconsentedPassword = unconsented.password
+const consentedPassword = consented.password
+const outdatedPolicyPassword = outdatedPolicy.password
 
 test.describe.configure({ mode: 'serial', timeout: 120000 })
 
