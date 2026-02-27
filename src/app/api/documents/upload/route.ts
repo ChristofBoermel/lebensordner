@@ -330,6 +330,7 @@ export async function POST(req: NextRequest) {
       }
 
       const { data: documentData, error: documentError } = await supabase
+        .schema("public")
         .from("documents")
         .insert({
           user_id: user.id,
@@ -358,7 +359,12 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (documentError) {
-        console.error("Document Insert Error:", documentError);
+        console.error("Document Insert Error:", {
+          message: documentError.message,
+          details: documentError.details,
+          hint: documentError.hint,
+          code: documentError.code,
+        });
         return NextResponse.json(
           { error: "Fehler beim Speichern des Dokuments" },
           { status: 500 },
