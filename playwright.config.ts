@@ -20,10 +20,10 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   webServer: {
-    command: 'npm run dev -- --port 3000',
+    command: process.env.CI ? 'npm run start' : 'npm run dev -- --port 3000',
     url: baseURL,
     reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
+    timeout: 60 * 1000,
   },
   projects: [
     {
