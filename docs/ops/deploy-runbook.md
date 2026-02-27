@@ -14,6 +14,15 @@ Related runbooks:
 3. Confirm:
    - `build-and-push` green
    - `deploy` green
+   - `smoke-check` green (runs `scripts/ops/verify-deploy.sh` on server)
+
+Automated post-deploy verification covers:
+- Server is on the expected commit SHA (no git drift)
+- Core + monitoring containers are running (and healthy when healthchecks exist)
+- `nextjs` + `worker` images are GHCR images
+- Public endpoints: apex, `api/health`, `www` redirect, Grafana, Studio
+- Grafana provisioning parse errors in logs
+- Prometheus target health for `lebensordner-app`, `postgres`, `redis`, `caddy`
 
 ## Post-Deploy Verification (Server)
 

@@ -184,10 +184,32 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: GITHUB_SHA
           script: |
+            set -euo pipefail
+            cd /opt/lebensordner/app
+
+            if ! git diff --quiet || ! git diff --cached --quiet; then
+              echo "Server repo has tracked local changes; refusing deploy to avoid drift."
+              git status --short
+              exit 1
+            fi
+
+            git fetch --prune origin main
+            git checkout main
+            git pull --ff-only origin main
+
+            ACTUAL_SHA=$(git rev-parse HEAD)
+            if [ "$ACTUAL_SHA" != "$GITHUB_SHA" ]; then
+              echo "Server commit mismatch. expected=${GITHUB_SHA} actual=${ACTUAL_SHA}"
+              exit 1
+            fi
+
             cd /opt/lebensordner/app/deploy
             docker compose pull
-            docker compose up -d
+            docker compose up -d --remove-orphans
+        env:
+          GITHUB_SHA: ${{ github.sha }}
 
   smoke-check:
     needs: deploy
@@ -195,20 +217,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     steps:
-      - name: Wait for containers to start
-        run: sleep 30
-
-      - name: HTTP health check
-        id: health
-        run: |
-          HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://lebensordner.org/api/health)
-          echo "code=$HTTP" >> $GITHUB_OUTPUT
-          if [ "$HTTP" != "200" ]; then
-            echo "Health check failed: HTTP $HTTP"
-            echo "result=failure" >> $GITHUB_OUTPUT
-          else
-            echo "result=success" >> $GITHUB_OUTPUT
-          fi
+      - name: Wait for containers to settle
+        run: sleep 45
 
       - name: Check containers and log result
         if: always()
@@ -217,20 +227,19 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: DEPLOY_RESULT,GITHUB_SHA
+          envs: GITHUB_SHA
           script: |
-            UNHEALTHY=$(docker ps --filter health=unhealthy --format '{{.Names}}' | grep '^lebensordner-' | wc -l)
-            if [ "$UNHEALTHY" -gt "0" ]; then
-              FINAL=failure
-              echo "Unhealthy app containers:"
-              docker ps --filter health=unhealthy --format '{{.Names}}' | grep '^lebensordner-'
-            else
-              FINAL=$DEPLOY_RESULT
+            set -euo pipefail
+            VERIFY_STATUS=success
+
+            if ! bash /opt/lebensordner/app/scripts/ops/verify-deploy.sh lebensordner.org /opt/lebensordner/app/deploy; then
+              VERIFY_STATUS=failure
+              echo "Post-deploy verification failed."
             fi
+
             mkdir -p /var/log/lebensordner
             TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            echo "$TS sha=${GITHUB_SHA:0:8} status=$FINAL" >> /var/log/lebensordner/deploy.log
-            [ "$FINAL" = "failure" ] && exit 1 || exit 0
+            echo "$TS sha=${GITHUB_SHA:0:8} status=${VERIFY_STATUS}" >> /var/log/lebensordner/deploy.log
+            [ "$VERIFY_STATUS" = "failure" ] && exit 1 || exit 0
         env:
-          DEPLOY_RESULT: ${{ steps.health.outputs.result }}
           GITHUB_SHA: ${{ github.sha }}
