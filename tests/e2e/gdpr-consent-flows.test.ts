@@ -45,18 +45,24 @@ ensureStorageStateFiles()
 
 const ensureAuthUser = async (email: string, password: string) => {
   const admin = supabase.auth.admin
-  if (!admin?.listUsers || !admin?.createUser) {
-    throw new Error('Supabase admin API unavailable: auth.admin.listUsers/createUser required')
+  if (!admin?.listUsers || !admin?.createUser || !admin?.updateUserById) {
+    throw new Error('Supabase admin API unavailable: auth.admin.listUsers/createUser/updateUserById required')
   }
 
   let page = 1
   const perPage = 1000
+  const normalizedEmail = email.toLowerCase()
   while (page <= 5) {
     const { data, error } = await admin.listUsers({ page, perPage })
     if (error) throw error
-    const existing = data?.users?.find((user) => user.email?.toLowerCase() === email.toLowerCase())
+    const existing = data?.users?.find((user) => user.email?.toLowerCase() === normalizedEmail)
     if (existing) {
-      return existing
+      const { data: updated, error: updateError } = await admin.updateUserById(existing.id, {
+        password,
+        email_confirm: true,
+      })
+      if (updateError) throw updateError
+      return updated.user ?? existing
     }
     if (!data?.users || data.users.length < perPage) break
     page += 1
@@ -95,19 +101,22 @@ const resetLoginSecurityState = async (email: string) => {
   const now = new Date().toISOString()
   const normalizedEmail = email.toLowerCase()
 
-  const { error: unlockError } = await supabase
-    .from('auth_lockouts')
-    .update({ unlocked_at: now })
-    .eq('email', normalizedEmail)
-    .is('unlocked_at', null)
-  if (unlockError) throw unlockError
+  const emailsToReset = email === normalizedEmail ? [normalizedEmail] : [email, normalizedEmail]
+  for (const currentEmail of emailsToReset) {
+    const { error: unlockError } = await supabase
+      .from('auth_lockouts')
+      .update({ unlocked_at: now })
+      .eq('email', currentEmail)
+      .is('unlocked_at', null)
+    if (unlockError) throw unlockError
 
-  const { error: resetFailuresError } = await supabase
-    .from('rate_limits')
-    .delete()
-    .eq('identifier', `login_email:${normalizedEmail}`)
-    .eq('endpoint', '/api/auth/login')
-  if (resetFailuresError) throw resetFailuresError
+    const { error: resetFailuresError } = await supabase
+      .from('rate_limits')
+      .delete()
+      .eq('identifier', `login_email:${currentEmail}`)
+      .eq('endpoint', '/api/auth/login')
+    if (resetFailuresError) throw resetFailuresError
+  }
 }
 
 const resetConsentLedger = async (userId: string, consentType: string) => {
