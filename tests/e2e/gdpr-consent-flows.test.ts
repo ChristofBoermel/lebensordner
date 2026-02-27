@@ -235,6 +235,11 @@ const ensureStorageState = async (
   const page = await context.newPage()
   const magicLink = await createMagicLink(email)
   await page.goto(magicLink)
+  if (page.url().includes('/anmelden#access_token=')) {
+    // CI sometimes stays on /anmelden after token hash processing; force target navigation.
+    await page.waitForTimeout(1000)
+    await page.goto('/dashboard')
+  }
   await page.waitForURL(/\/(dashboard|policy-update)/, { timeout: 20000 })
 
   if (page.url().includes('/policy-update')) {
