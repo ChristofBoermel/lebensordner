@@ -271,6 +271,18 @@ const ensureStorageState = async (
 
 const { unconsented, consented, outdatedPolicy } = getE2EUsers()
 
+const makeRunScopedEmail = (email: string, tag: string) => {
+  const parts = email.split('@')
+  if (parts.length !== 2) return email
+  const [localPart, domain] = parts
+  const runId = process.env.GITHUB_RUN_ID ?? `${Date.now()}`
+  return `${localPart}+${tag}-${runId}@${domain}`
+}
+
+let unconsentedEmail = makeRunScopedEmail(unconsented.email, 'unconsented')
+let consentedEmail = makeRunScopedEmail(consented.email, 'consented')
+let outdatedPolicyEmail = makeRunScopedEmail(outdatedPolicy.email, 'policy')
+
 test.describe.configure({ mode: 'serial', timeout: 120000 })
 
 let unconsentedUserId = ''
@@ -279,13 +291,13 @@ let outdatedPolicyUserId = ''
 
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(120000)
-  await resetLoginSecurityState(unconsented.email)
-  await resetLoginSecurityState(consented.email)
-  await resetLoginSecurityState(outdatedPolicy.email)
+  await resetLoginSecurityState(unconsentedEmail)
+  await resetLoginSecurityState(consentedEmail)
+  await resetLoginSecurityState(outdatedPolicyEmail)
 
-  const unconsentedUser = await ensureAuthUser(unconsented.email, unconsented.password)
+  const unconsentedUser = await ensureAuthUser(unconsentedEmail, unconsented.password)
   unconsentedUserId = unconsentedUser.id
-  await upsertProfile(unconsentedUserId, unconsented.email, {
+  await upsertProfile(unconsentedUserId, unconsentedEmail, {
     onboarding_completed: true,
     health_data_consent_granted: false,
     health_data_consent_timestamp: null,
@@ -294,9 +306,9 @@ test.beforeAll(async ({ browser }) => {
   await resetConsentLedger(unconsentedUserId, 'privacy_policy')
   await insertConsent(unconsentedUserId, 'privacy_policy', true, PRIVACY_POLICY_VERSION)
 
-  const consentedUser = await ensureAuthUser(consented.email, consented.password)
+  const consentedUser = await ensureAuthUser(consentedEmail, consented.password)
   consentedUserId = consentedUser.id
-  await upsertProfile(consentedUserId, consented.email, {
+  await upsertProfile(consentedUserId, consentedEmail, {
     onboarding_completed: true,
     health_data_consent_granted: true,
     health_data_consent_timestamp: new Date().toISOString(),
@@ -306,15 +318,15 @@ test.beforeAll(async ({ browser }) => {
   await resetConsentLedger(consentedUserId, 'privacy_policy')
   await insertConsent(consentedUserId, 'privacy_policy', true, PRIVACY_POLICY_VERSION)
 
-  const policyUser = await ensureAuthUser(outdatedPolicy.email, outdatedPolicy.password)
+  const policyUser = await ensureAuthUser(outdatedPolicyEmail, outdatedPolicy.password)
   outdatedPolicyUserId = policyUser.id
-  await upsertProfile(outdatedPolicyUserId, outdatedPolicy.email, {
+  await upsertProfile(outdatedPolicyUserId, outdatedPolicyEmail, {
     onboarding_completed: true,
   })
 
-  await ensureStorageState(browser, unconsented.email, unconsented.password, storageStates.unconsented, 'unconsented')
-  await ensureStorageState(browser, consented.email, consented.password, storageStates.consented, 'consented')
-  await ensureStorageState(browser, outdatedPolicy.email, outdatedPolicy.password, storageStates.outdatedPolicy, 'outdatedPolicy')
+  await ensureStorageState(browser, unconsentedEmail, unconsented.password, storageStates.unconsented, 'unconsented')
+  await ensureStorageState(browser, consentedEmail, consented.password, storageStates.consented, 'consented')
+  await ensureStorageState(browser, outdatedPolicyEmail, outdatedPolicy.password, storageStates.outdatedPolicy, 'outdatedPolicy')
 })
 
 test.describe('Health Consent Grant Flow', () => {
@@ -322,7 +334,7 @@ test.describe('Health Consent Grant Flow', () => {
 
   test('decline then grant consent from /notfall', async ({ page }) => {
     await resetConsentLedger(unconsentedUserId, 'health_data')
-    await upsertProfile(unconsentedUserId, unconsented.email, {
+    await upsertProfile(unconsentedUserId, unconsentedEmail, {
       health_data_consent_granted: false,
       health_data_consent_timestamp: null,
     })
@@ -364,7 +376,7 @@ test.describe('Health Consent Grant Flow', () => {
 
   test('does not fetch /api/notfall before consent and loads after grant', async ({ page }) => {
     await resetConsentLedger(unconsentedUserId, 'health_data')
-    await upsertProfile(unconsentedUserId, unconsented.email, {
+    await upsertProfile(unconsentedUserId, unconsentedEmail, {
       health_data_consent_granted: false,
       health_data_consent_timestamp: null,
     })
@@ -463,7 +475,7 @@ test.describe('Health Consent Withdrawal Flow', () => {
   test('cancel then withdraw consent from settings', async ({ page }) => {
     await resetConsentLedger(consentedUserId, 'health_data')
     await insertConsent(consentedUserId, 'health_data', true, CONSENT_VERSION)
-    await upsertProfile(consentedUserId, consented.email, {
+    await upsertProfile(consentedUserId, consentedEmail, {
       health_data_consent_granted: true,
       health_data_consent_timestamp: new Date().toISOString(),
     })
