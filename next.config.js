@@ -45,7 +45,7 @@ const nextConfig = {
           // PostHog analytics requires connect-src *.posthog.com for event tracking (eu.posthog.com, eu.i.posthog.com)
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' challenges.cloudflare.com https://challenges.cloudflare.com https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' *.supabase.co *.cloudflare.com *.posthog.com; frame-src https://challenges.cloudflare.com",
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' challenges.cloudflare.com https://challenges.cloudflare.com https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' *.supabase.co *.cloudflare.com *.posthog.com; frame-src https://challenges.cloudflare.com",
           },
         ],
       },
