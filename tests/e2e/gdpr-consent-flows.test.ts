@@ -18,8 +18,10 @@ const requireEnv = (key: string) => {
   return value
 }
 
+const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL')
+
 const supabase = createClient(
-  requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+  supabaseUrl,
   requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
   { auth: { persistSession: false } }
 )
@@ -211,7 +213,7 @@ const createMagicLink = async (email: string) => {
   return data.properties.action_link
 }
 
-const getSupabaseStorageKey = () => `sb-${new URL(baseURL).hostname.split('.')[0]}-auth-token`
+const getSupabaseStorageKey = () => `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`
 
 const base64UrlEncode = (value: string) =>
   Buffer.from(value, 'utf-8')
