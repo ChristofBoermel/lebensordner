@@ -181,29 +181,10 @@ const getConsentRecords = async (userId: string, consentType: string) => {
   return data ?? []
 }
 
-const createMagicLink = async (email: string) => {
-  const admin = supabase.auth.admin
-  if (!admin?.generateLink) {
-    throw new Error('Supabase admin API unavailable: auth.admin.generateLink required')
-  }
-
-  const { data, error } = await admin.generateLink({
-    type: 'magiclink',
-    email,
-    options: {
-      redirectTo: `${baseURL}/dashboard`,
-    },
-  })
-  if (error || !data?.properties?.action_link) {
-    throw error ?? new Error(`Failed to create magic link for ${email}`)
-  }
-  return data.properties.action_link
-}
-
 const ensureStorageState = async (
   browser: Browser,
   email: string,
-  _password: string,
+  password: string,
   filePath: string,
   userLabel: string
 ) => {
@@ -233,13 +214,25 @@ const ensureStorageState = async (
     },
   ])
   const page = await context.newPage()
-  const magicLink = await createMagicLink(email)
-  await page.goto(magicLink)
-  if (page.url().includes('/anmelden#access_token=')) {
-    // CI sometimes stays on /anmelden after token hash processing; force target navigation.
-    await page.waitForTimeout(1000)
-    await page.goto('/dashboard')
+  const loginResponse = await context.request.post(`${baseURL}/api/auth/login`, {
+    data: { email, password },
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!loginResponse.ok()) {
+    const responseBody = await loginResponse.text()
+    throw new Error(
+      `[${userLabel}] Login bootstrap failed with status ${loginResponse.status()}: ${responseBody}`
+    )
   }
+
+  const loginPayload = await loginResponse.json().catch(() => null)
+  if (!loginPayload?.success) {
+    throw new Error(
+      `[${userLabel}] Login bootstrap response was not successful: ${JSON.stringify(loginPayload)}`
+    )
+  }
+
+  await page.goto('/dashboard')
   await page.waitForURL(/\/(dashboard|policy-update)/, { timeout: 20000 })
 
   if (page.url().includes('/policy-update')) {
