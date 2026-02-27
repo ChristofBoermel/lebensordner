@@ -32,6 +32,9 @@
   }
 
   grafana.lebensordner.org {
+        basic_auth {
+                {$GRAFANA_USER} {$GRAFANA_PASSWORD_HASH}
+        }
         reverse_proxy grafana:3000
   }
   

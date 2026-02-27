@@ -7,6 +7,7 @@ groups:
     interval: 1m
     rules:
       - title: "App Down"
+        uid: app-down
         condition: C
         for: 2m
         noDataState: NoData
@@ -44,6 +45,7 @@ groups:
                       - 0
 
       - title: "Worker Down"
+        uid: worker-down
         condition: C
         for: 0s
         noDataState: NoData
@@ -81,6 +83,7 @@ groups:
                       - 0
 
       - title: "DB Down"
+        uid: db-down
         condition: C
         for: 2m
         noDataState: NoData
@@ -118,6 +121,7 @@ groups:
                       - 0
 
       - title: "TLS Expiry"
+        uid: tls-expiry
         condition: C
         for: 0s
         noDataState: NoData

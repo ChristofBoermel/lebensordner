@@ -46,6 +46,8 @@ Required at runtime by `deploy/docker-compose.yml`:
 - `NEXT_PUBLIC_APP_URL`
 - `DOMAIN`
 - `GRAFANA_ADMIN_PASSWORD`
+- `GRAFANA_USER`
+- `GRAFANA_PASSWORD_HASH`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 - `METRICS_SECRET` — runtime only; not a build arg, not needed in GitHub Actions
