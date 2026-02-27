@@ -1,5 +1,6 @@
 import { test, expect, type Browser } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import fs from 'fs'
 import path from 'path'
 import { CONSENT_VERSION, PRIVACY_POLICY_VERSION, CONSENT_COOKIE_NAME } from '../../src/lib/consent/constants'
@@ -181,6 +182,63 @@ const getConsentRecords = async (userId: string, consentType: string) => {
   return data ?? []
 }
 
+type SessionCookie = {
+  name: string
+  value: string
+  options: CookieOptions
+}
+
+const toPlaywrightSameSite = (sameSite?: CookieOptions['sameSite']) => {
+  if (sameSite === 'strict') return 'Strict' as const
+  if (sameSite === 'none') return 'None' as const
+  return 'Lax' as const
+}
+
+const createAuthCookiesForUser = async (email: string, password: string) => {
+  const cookieStore = new Map<string, SessionCookie>()
+
+  const authClient = createServerClient(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          cookieStore.set(name, { name, value, options })
+        },
+        remove(name: string, options: CookieOptions) {
+          cookieStore.set(name, { name, value: '', options: { ...options, maxAge: 0 } })
+        },
+      },
+    }
+  )
+
+  const { error } = await authClient.auth.signInWithPassword({ email, password })
+  if (error) {
+    throw new Error(`Direct Supabase sign-in failed for bootstrap user: ${error.message}`)
+  }
+
+  const url = new URL(baseURL)
+  const now = Math.floor(Date.now() / 1000)
+  return Array.from(cookieStore.values()).map((cookie) => ({
+    name: cookie.name,
+    value: cookie.value,
+    domain: url.hostname,
+    path: cookie.options.path ?? '/',
+    httpOnly: cookie.options.httpOnly ?? false,
+    secure: cookie.options.secure ?? url.protocol === 'https:',
+    sameSite: toPlaywrightSameSite(cookie.options.sameSite),
+    expires:
+      typeof cookie.options.maxAge === 'number'
+        ? now + cookie.options.maxAge
+        : cookie.options.maxAge === 0
+          ? 0
+          : -1,
+  }))
+}
+
 const ensureStorageState = async (
   browser: Browser,
   email: string,
@@ -201,7 +259,9 @@ const ensureStorageState = async (
   }
   fs.mkdirSync(authDir, { recursive: true })
   const context = await browser.newContext()
+  const authCookies = await createAuthCookiesForUser(email, password)
   await context.addCookies([
+    ...authCookies,
     {
       name: CONSENT_COOKIE_NAME,
       value: JSON.stringify({
@@ -214,41 +274,8 @@ const ensureStorageState = async (
     },
   ])
   const page = await context.newPage()
-
-  await page.goto('/anmelden')
-  await page.getByLabel('E-Mail-Adresse').fill(email)
-  await page.getByLabel('Passwort').fill(password)
-  await page.getByRole('button', { name: 'Anmelden' }).click()
-
-  const loginResult = await Promise.race([
-    page.waitForURL(/\/(dashboard|policy-update)/, { timeout: 15000 }).then(() => 'ok' as const),
-    page
-      .waitForResponse(
-        (response) =>
-          response.url().includes('/api/auth/login') &&
-          response.request().method() === 'POST' &&
-          response.status() >= 400,
-        { timeout: 15000 }
-      )
-      .then(async (response) => {
-        const status = response.status()
-        let details = ''
-        try {
-          const payload = await response.json()
-          const message = typeof payload?.error === 'string' ? payload.error : ''
-          if (message) {
-            details = ` (${message})`
-          }
-        } catch {
-          // Ignore invalid JSON response bodies
-        }
-        throw new Error(`Login failed for ${userLabel}: HTTP ${status}${details}`)
-      }),
-  ])
-
-  if (loginResult !== 'ok') {
-    throw new Error(`Unexpected login result for ${userLabel}`)
-  }
+  await page.goto('/dashboard')
+  await page.waitForURL(/\/(dashboard|policy-update)/, { timeout: 15000 })
 
   if (page.url().includes('/policy-update')) {
     await page.getByTestId('policy-update-checkbox').check()
