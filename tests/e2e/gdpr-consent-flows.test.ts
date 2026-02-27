@@ -1,6 +1,5 @@
 import { test, expect, type Browser } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import fs from 'fs'
 import path from 'path'
 import { CONSENT_VERSION, PRIVACY_POLICY_VERSION, CONSENT_COOKIE_NAME } from '../../src/lib/consent/constants'
@@ -182,67 +181,29 @@ const getConsentRecords = async (userId: string, consentType: string) => {
   return data ?? []
 }
 
-type SessionCookie = {
-  name: string
-  value: string
-  options: CookieOptions
-}
-
-const toPlaywrightSameSite = (sameSite?: CookieOptions['sameSite']) => {
-  if (sameSite === 'strict') return 'Strict' as const
-  if (sameSite === 'none') return 'None' as const
-  return 'Lax' as const
-}
-
-const createAuthCookiesForUser = async (email: string, password: string) => {
-  const cookieStore = new Map<string, SessionCookie>()
-
-  const authClient = createServerClient(
-    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
-    requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          cookieStore.set(name, { name, value, options })
-        },
-        remove(name: string, options: CookieOptions) {
-          cookieStore.set(name, { name, value: '', options: { ...options, maxAge: 0 } })
-        },
-      },
-    }
-  )
-
-  const { error } = await authClient.auth.signInWithPassword({ email, password })
-  if (error) {
-    throw new Error(`Direct Supabase sign-in failed for bootstrap user: ${error.message}`)
+const createMagicLink = async (email: string) => {
+  const admin = supabase.auth.admin
+  if (!admin?.generateLink) {
+    throw new Error('Supabase admin API unavailable: auth.admin.generateLink required')
   }
 
-  const url = new URL(baseURL)
-  const now = Math.floor(Date.now() / 1000)
-  return Array.from(cookieStore.values()).map((cookie) => ({
-    name: cookie.name,
-    value: cookie.value,
-    domain: url.hostname,
-    path: cookie.options.path ?? '/',
-    httpOnly: cookie.options.httpOnly ?? false,
-    secure: cookie.options.secure ?? url.protocol === 'https:',
-    sameSite: toPlaywrightSameSite(cookie.options.sameSite),
-    expires:
-      typeof cookie.options.maxAge === 'number'
-        ? now + cookie.options.maxAge
-        : cookie.options.maxAge === 0
-          ? 0
-          : -1,
-  }))
+  const { data, error } = await admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: {
+      redirectTo: `${baseURL}/dashboard`,
+    },
+  })
+  if (error || !data?.properties?.action_link) {
+    throw error ?? new Error(`Failed to create magic link for ${email}`)
+  }
+  return data.properties.action_link
 }
 
 const ensureStorageState = async (
   browser: Browser,
   email: string,
-  password: string,
+  _password: string,
   filePath: string,
   userLabel: string
 ) => {
@@ -259,9 +220,7 @@ const ensureStorageState = async (
   }
   fs.mkdirSync(authDir, { recursive: true })
   const context = await browser.newContext()
-  const authCookies = await createAuthCookiesForUser(email, password)
   await context.addCookies([
-    ...authCookies,
     {
       name: CONSENT_COOKIE_NAME,
       value: JSON.stringify({
@@ -274,8 +233,9 @@ const ensureStorageState = async (
     },
   ])
   const page = await context.newPage()
-  await page.goto('/dashboard')
-  await page.waitForURL(/\/(dashboard|policy-update)/, { timeout: 15000 })
+  const magicLink = await createMagicLink(email)
+  await page.goto(magicLink)
+  await page.waitForURL(/\/(dashboard|policy-update)/, { timeout: 20000 })
 
   if (page.url().includes('/policy-update')) {
     await page.getByTestId('policy-update-checkbox').check()
