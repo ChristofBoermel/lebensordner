@@ -19,6 +19,6 @@ contactPoints:
         settings:
           url: "http://nextjs:3000/api/webhooks/grafana-alert"
           httpMethod: POST
-          extra_headers:
-            X-Grafana-Webhook-Secret: "${GRAFANA_WEBHOOK_SECRET}"
+          httpHeaderName1: "X-Grafana-Webhook-Secret"
+          httpHeaderValue1: "${GRAFANA_WEBHOOK_SECRET}"
         disableResolveMessage: false
