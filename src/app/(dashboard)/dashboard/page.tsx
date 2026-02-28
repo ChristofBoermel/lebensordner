@@ -40,7 +40,12 @@ export default async function DashboardPage() {
       .select('full_name, onboarding_completed, storage_used')
       .eq('id', user.id)
       .single()
-      .then(({ data }) => data as ProfileRow | null),
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('[DASHBOARD] Profile query error:', error.code, error.message, error.details, error.hint)
+        }
+        return data as ProfileRow | null
+      }),
 
     // Documents query
     supabase

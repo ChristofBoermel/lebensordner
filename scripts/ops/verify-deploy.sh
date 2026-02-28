@@ -26,6 +26,11 @@ fi
 
 cd "$COMPOSE_DIR"
 
+if grep -q '\${SUPABASE_ANON_KEY}\|\${SUPABASE_SERVICE_KEY}' supabase/kong.yml; then
+  fail "deploy/supabase/kong.yml still contains unresolved SUPABASE placeholders"
+fi
+pass "kong.yml has resolved Supabase keys"
+
 require_service_running() {
   local service="$1"
   local container_id
@@ -68,6 +73,14 @@ check_http_status() {
   fail "unexpected status for ${url}: ${status} (allowed: ${allowed[*]})"
 }
 
+require_env_key() {
+  local key="$1"
+  local value
+  value="$(grep -E "^${key}=" .env | head -n1 | cut -d= -f2- || true)"
+  [[ -n "$value" ]] || fail "missing ${key} in ${COMPOSE_DIR}/.env"
+  printf '%s' "$value"
+}
+
 echo "Checking required services are running/healthy..."
 for svc in nextjs worker caddy redis db kong grafana prometheus loki promtail postgres-exporter redis-exporter node-exporter; do
   require_service_running "$svc"
@@ -90,6 +103,19 @@ check_http_status "https://${WWW_DOMAIN}" 301 308 200
 # Grafana/Studio may be protected by Basic Auth, so 401 is acceptable and expected in that case.
 check_http_status "https://${GRAFANA_DOMAIN}" 200 302 401
 check_http_status "https://${STUDIO_DOMAIN}" 200 302 401
+
+echo "Checking Supabase key-auth probes..."
+ANON_KEY="$(require_env_key ANON_KEY)"
+REST_STATUS="$(curl -sS -o /tmp/rest_openapi.json -w '%{http_code}' \
+  -H "apikey: ${ANON_KEY}" \
+  -H "Authorization: Bearer ${ANON_KEY}" \
+  -H "Accept: application/openapi+json" \
+  "https://${DOMAIN}/supabase/rest/v1/")"
+[[ "$REST_STATUS" == "200" ]] || fail "unexpected status for Supabase REST key-auth probe: ${REST_STATUS}"
+if grep -qi "No API key found in request" /tmp/rest_openapi.json; then
+  fail "Supabase REST probe returned key-auth rejection body"
+fi
+pass "Supabase REST key-auth probe passed"
 
 echo "Checking Grafana alert provisioning logs..."
 if docker compose logs --no-color --tail=400 grafana | grep -qiE "failure parsing rules|failed to parse|error loading alerting provisioning"; then

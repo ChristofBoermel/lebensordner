@@ -52,7 +52,8 @@
       "Bash(git:*)",
       "Bash(gh cache:*)",
       "Bash(gh secret:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(find:*)"
     ]
   }
 }

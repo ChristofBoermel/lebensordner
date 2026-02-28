@@ -231,10 +231,18 @@ jobs:
             # Resolve Kong config: substitute ANON_KEY and SERVICE_ROLE_KEY from .env
             ANON=$(grep '^ANON_KEY=' .env | cut -d= -f2-)
             SVC=$(grep '^SERVICE_ROLE_KEY=' .env | cut -d= -f2-)
+            if [ -z "$ANON" ] || [ -z "$SVC" ]; then
+              echo "Missing ANON_KEY or SERVICE_ROLE_KEY in deploy/.env"
+              exit 1
+            fi
             sed -e "s|\${SUPABASE_ANON_KEY}|$ANON|g" \
                 -e "s|\${SUPABASE_SERVICE_KEY}|$SVC|g" \
                 supabase/kong.yml > /tmp/kong-resolved.yml
             cp /tmp/kong-resolved.yml supabase/kong.yml
+            if grep -q '\${SUPABASE_ANON_KEY}\|\${SUPABASE_SERVICE_KEY}' supabase/kong.yml; then
+              echo "Kong config still contains unresolved SUPABASE placeholders"
+              exit 1
+            fi
 
             docker compose up -d --remove-orphans
         env:
