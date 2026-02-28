@@ -32,6 +32,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
       - "127.0.0.1:8443:8443"
+    entrypoint: ["/bin/sh", "/var/lib/kong/kong-start.sh"]
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
@@ -42,7 +43,8 @@ services:
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
     volumes:
-      - ./supabase/kong.yml:/var/lib/kong/kong.yml
+      - ./supabase/kong.yml:/var/lib/kong/kong.yml.template:ro
+      - ./supabase/kong-start.sh:/var/lib/kong/kong-start.sh:ro
     depends_on:
       db:
         condition: service_healthy
