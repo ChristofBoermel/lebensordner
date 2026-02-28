@@ -10,7 +10,7 @@ groups:
         uid: app-down
         condition: C
         for: 2m
-        noDataState: NoData
+        noDataState: Alerting
         execErrState: Error
         annotations:
           summary: "Lebensordner app is not responding to Prometheus scrapes"
@@ -23,7 +23,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: 'up{job="lebensordner-app"} == 0'
+              expr: 'up{job="lebensordner-app"} == bool 0'
               refId: A
           - refId: B
             datasourceUid: __expr__
@@ -48,7 +48,7 @@ groups:
         uid: worker-down
         condition: C
         for: 0s
-        noDataState: NoData
+        noDataState: OK
         execErrState: Error
         annotations:
           summary: "Lebensordner worker container has produced no logs in the last 5 minutes"
@@ -86,7 +86,7 @@ groups:
         uid: db-down
         condition: C
         for: 2m
-        noDataState: NoData
+        noDataState: Alerting
         execErrState: Error
         annotations:
           summary: "PostgreSQL database is unreachable according to postgres-exporter"
@@ -99,7 +99,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: "pg_up == 0"
+              expr: "pg_up == bool 0"
               refId: A
           - refId: B
             datasourceUid: __expr__
@@ -124,7 +124,7 @@ groups:
         uid: tls-expiry
         condition: C
         for: 0s
-        noDataState: NoData
+        noDataState: OK
         execErrState: Error
         annotations:
           summary: "A Caddy-managed TLS certificate expires in less than 14 days"
@@ -137,7 +137,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: "(caddy_tls_managed_certificate_expiry_seconds - time()) < 1209600"
+              expr: "(caddy_tls_managed_certificate_expiry_seconds - time()) < bool 1209600"
               refId: A
           - refId: B
             datasourceUid: __expr__
