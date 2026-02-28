@@ -239,7 +239,8 @@ async function sendTelegramMessage(payload: Record<string, unknown>): Promise<vo
 export async function POST(req: Request) {
   const expectedSecret = process.env.GRAFANA_WEBHOOK_SECRET
   const urlSecret = new URL(req.url).searchParams.get('secret')
-  const incomingSecret = req.headers.get('X-Grafana-Webhook-Secret') ?? urlSecret
+  const normalizedUrlSecret = urlSecret?.replace(/ /g, '+')
+  const incomingSecret = req.headers.get('X-Grafana-Webhook-Secret') ?? normalizedUrlSecret
 
   if (!expectedSecret || !incomingSecret || incomingSecret !== expectedSecret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
