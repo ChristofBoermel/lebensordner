@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { waitFor } from '@testing-library/react'
 
 const redisGetMock = vi.fn()
 
@@ -96,8 +97,10 @@ describe('Telegram Bot Callback Webhook Handler', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(redisGetMock).toHaveBeenCalledWith('alert:context:alert-id-123')
-    expect(fetchMock).toHaveBeenCalledTimes(3)
+    await waitFor(() => {
+      expect(redisGetMock).toHaveBeenCalledWith('alert:context:alert-id-123')
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
 
     const answerCallBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
     expect(answerCallBody.callback_query_id).toBe(payload.callback_query.id)
@@ -139,7 +142,9 @@ describe('Telegram Bot Callback Webhook Handler', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
     const fallbackBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body))
     expect(fallbackBody.text).toContain('Alert context expired or unavailable')
     expect(fallbackBody.text).toContain('grafana.lebensordner.org')
@@ -187,7 +192,9 @@ describe('Telegram Bot Callback Webhook Handler', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(fetchMock).toHaveBeenCalledTimes(3)
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
     const errorBody = JSON.parse(String(fetchMock.mock.calls[2][1]?.body))
     expect(errorBody.text).toContain('Could not create GitHub issue')
     expect(errorBody.text).toContain('Resource not accessible')
