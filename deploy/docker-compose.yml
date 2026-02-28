@@ -79,10 +79,10 @@ services:
       GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
       GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-noreply@lebensordner.org}
       GOTRUE_SMTP_MAX_FREQUENCY: 1ns
-      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_INVITE: /supabase/auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /supabase/auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /supabase/auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /supabase/auth/v1/verify
 
       GOTRUE_EXTERNAL_PHONE_ENABLED: false
       GOTRUE_SMS_AUTOCONFIRM: false
