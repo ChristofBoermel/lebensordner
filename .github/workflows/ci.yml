@@ -69,7 +69,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+          key: playwright-chromium-${{ runner.os }}-node20-${{ hashFiles('package-lock.json') }}
           restore-keys: playwright-chromium-
       - run: npx playwright install --with-deps chromium
         if: steps.playwright-cache.outputs.cache-hit != 'true'
@@ -79,7 +79,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .next/cache
-          key: nextjs-e2e-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**') }}
+          key: nextjs-e2e-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.js', 'tsconfig.json') }}
           restore-keys: |
             nextjs-e2e-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
             nextjs-e2e-${{ runner.os }}-
@@ -144,9 +144,7 @@ jobs:
           cache-from: |
             type=gha,scope=nextjs
             type=registry,ref=ghcr.io/christofboermel/lebensordner/nextjs:buildcache
-          cache-to: |
-            type=gha,mode=max,scope=nextjs
-            type=registry,ref=ghcr.io/christofboermel/lebensordner/nextjs:buildcache,mode=max
+          cache-to: type=gha,mode=max,scope=nextjs
           build-args: |
             NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
             NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -182,9 +180,7 @@ jobs:
           cache-from: |
             type=gha,scope=worker
             type=registry,ref=ghcr.io/christofboermel/lebensordner/worker:buildcache
-          cache-to: |
-            type=gha,mode=max,scope=worker
-            type=registry,ref=ghcr.io/christofboermel/lebensordner/worker:buildcache,mode=max
+          cache-to: type=gha,mode=max,scope=worker
 
   deploy:
     needs: [build-nextjs, build-worker]
@@ -221,7 +217,10 @@ jobs:
             fi
 
             cd /opt/lebensordner/app/deploy
-            docker compose pull
+            docker pull ghcr.io/christofboermel/lebensordner/nextjs:${GITHUB_SHA}
+            docker pull ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA}
+            docker tag ghcr.io/christofboermel/lebensordner/nextjs:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/nextjs:latest
+            docker tag ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/worker:latest
             docker compose up -d --remove-orphans
         env:
           GITHUB_SHA: ${{ github.sha }}
