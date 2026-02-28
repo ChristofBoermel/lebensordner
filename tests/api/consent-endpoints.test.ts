@@ -24,7 +24,13 @@ let mockProfileData: { health_data_consent_granted: boolean; health_data_consent
 
 let mockProfileError: Error | null = null
 
-const { client: supabaseMockClient, builder: supabaseBuilder, getUser: supabaseGetUser, single: supabaseSingle } = createSupabaseMock()
+const {
+  client: supabaseMockClient,
+  builder: supabaseBuilder,
+  getUser: supabaseGetUser,
+  single: supabaseSingle,
+  maybeSingle: supabaseMaybeSingle,
+} = createSupabaseMock()
 
 vi.mock('@/lib/consent/manager', () => ({
   grantHealthDataConsent: (...args: any[]) => mockGrantHealthDataConsent(...args),
@@ -64,6 +70,10 @@ describe('Consent API Endpoints', () => {
     }))
     // Configure single to read live mockProfileData/mockProfileError at call time
     supabaseSingle.mockImplementation(async () => ({
+      data: mockProfileData,
+      error: mockProfileError,
+    }))
+    supabaseMaybeSingle.mockImplementation(async () => ({
       data: mockProfileData,
       error: mockProfileError,
     }))
@@ -324,6 +334,10 @@ describe('Consent API Endpoints', () => {
     it('should return granted=false when consent not granted', async () => {
       mockHasHealthDataConsent.mockResolvedValueOnce(false)
       mockGetCurrentConsent.mockResolvedValueOnce(null)
+      mockProfileData = {
+        health_data_consent_granted: false,
+        health_data_consent_timestamp: null,
+      }
       vi.resetModules()
       const { GET } = await import('@/app/api/consent/check-health-consent/route')
 
@@ -350,6 +364,10 @@ describe('Consent API Endpoints', () => {
     it('should return null timestamp when consent not granted', async () => {
       mockHasHealthDataConsent.mockResolvedValueOnce(false)
       mockGetCurrentConsent.mockResolvedValueOnce(null)
+      mockProfileData = {
+        health_data_consent_granted: false,
+        health_data_consent_timestamp: null,
+      }
       vi.resetModules()
       const { GET } = await import('@/app/api/consent/check-health-consent/route')
 
@@ -374,6 +392,10 @@ describe('Consent API Endpoints', () => {
   describe('Notfall consent enforcement', () => {
     it('should return 403 on GET when health consent missing', async () => {
       mockHasHealthDataConsent.mockResolvedValueOnce(false)
+      mockProfileData = {
+        health_data_consent_granted: false,
+        health_data_consent_timestamp: null,
+      }
       vi.resetModules()
       const { GET } = await import('@/app/api/notfall/route')
 
@@ -389,6 +411,10 @@ describe('Consent API Endpoints', () => {
 
     it('should return 403 on PUT when health consent missing', async () => {
       mockHasHealthDataConsent.mockResolvedValueOnce(false)
+      mockProfileData = {
+        health_data_consent_granted: false,
+        health_data_consent_timestamp: null,
+      }
       vi.resetModules()
       const { PUT } = await import('@/app/api/notfall/route')
 
