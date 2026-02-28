@@ -840,7 +840,7 @@ export default function OnboardingPage() {
     })
     setShowExitSurvey(false)
     autoSave()
-    router.push('/dashboard')
+    router.push('/dokumente')
   }
 
   // Skip exit survey and just leave
@@ -856,7 +856,7 @@ export default function OnboardingPage() {
       timeSpent: getStepTimeSpent(currentStep),
     })
     autoSave()
-    router.push('/dashboard')
+    router.push('/dokumente')
   }
 
   // Quick start mode handler
