@@ -154,6 +154,9 @@ jobs:
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
             NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+          secrets: |
+            encryption_key=${{ secrets.ENCRYPTION_KEY }}
+            cron_secret=${{ secrets.CRON_SECRET }}
 
   build-worker:
     needs: unit-tests

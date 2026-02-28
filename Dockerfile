@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # Stage 1: Install dependencies
 FROM node:22-alpine AS deps
 WORKDIR /app
@@ -25,7 +27,11 @@ ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
 ENV NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 
-RUN npm run build
+RUN --mount=type=secret,id=encryption_key \
+    --mount=type=secret,id=cron_secret \
+    ENCRYPTION_KEY="$(cat /run/secrets/encryption_key)" \
+    CRON_SECRET="$(cat /run/secrets/cron_secret)" \
+    npm run build
 
 # Stage 3: Production runner
 FROM node:22-alpine AS runner
