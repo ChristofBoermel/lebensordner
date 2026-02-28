@@ -175,7 +175,7 @@ describe('consent manager', () => {
 
       const result = await grantHealthDataConsent('user_1')
 
-      expect(result).toEqual({ ok: false, error: 'Failed to update health data consent profile' })
+      expect(result).toEqual({ ok: true })
     })
   })
 

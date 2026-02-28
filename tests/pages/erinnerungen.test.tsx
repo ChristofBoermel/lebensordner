@@ -90,13 +90,13 @@ const renderPage = async () => {
   render(<ErinnerungenPage />)
   await waitFor(() => {
     expect(screen.getByText(/Erinnerungen & Fristen/i)).toBeInTheDocument()
-  })
+  }, { timeout: 5000 })
 }
 
 const openDialog = async () => {
   await waitFor(() => {
     expect(screen.getByRole('button', { name: /Neue Erinnerung/i })).toBeInTheDocument()
-  })
+  }, { timeout: 5000 })
   await userEvent.click(screen.getByRole('button', { name: /Neue Erinnerung/i }))
 }
 

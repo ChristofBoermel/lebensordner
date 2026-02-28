@@ -6,6 +6,7 @@ const mockGrantHealthDataConsent = vi.fn()
 const mockWithdrawHealthDataConsent = vi.fn()
 const mockRecordConsent = vi.fn()
 const mockHasHealthDataConsent = vi.fn()
+const mockGetCurrentConsent = vi.fn()
 const mockRequireAuth = vi.fn()
 
 const mockCheckRateLimit = vi.fn()
@@ -30,6 +31,7 @@ vi.mock('@/lib/consent/manager', () => ({
   withdrawHealthDataConsent: (...args: any[]) => mockWithdrawHealthDataConsent(...args),
   recordConsent: (...args: any[]) => mockRecordConsent(...args),
   hasHealthDataConsent: (...args: any[]) => mockHasHealthDataConsent(...args),
+  getCurrentConsent: (...args: any[]) => mockGetCurrentConsent(...args),
 }))
 
 vi.mock('@/lib/auth/guards', () => ({
@@ -66,6 +68,9 @@ describe('Consent API Endpoints', () => {
       error: mockProfileError,
     }))
     mockHasHealthDataConsent.mockResolvedValue(true)
+    mockGetCurrentConsent.mockResolvedValue({
+      timestamp: '2025-01-01T00:00:00.000Z',
+    })
     mockRequireAuth.mockImplementation(async () => {
       if (!mockAuthUser) {
         const error: any = new Error('Unauthorized')
@@ -301,10 +306,10 @@ describe('Consent API Endpoints', () => {
     })
 
     it('should return granted=true when consent exists', async () => {
-      mockProfileData = {
-        health_data_consent_granted: true,
-        health_data_consent_timestamp: '2025-01-01T00:00:00.000Z',
-      }
+      mockHasHealthDataConsent.mockResolvedValueOnce(true)
+      mockGetCurrentConsent.mockResolvedValueOnce({
+        timestamp: '2025-01-01T00:00:00.000Z',
+      })
       vi.resetModules()
       const { GET } = await import('@/app/api/consent/check-health-consent/route')
 
@@ -316,10 +321,8 @@ describe('Consent API Endpoints', () => {
     })
 
     it('should return granted=false when consent not granted', async () => {
-      mockProfileData = {
-        health_data_consent_granted: false,
-        health_data_consent_timestamp: null,
-      }
+      mockHasHealthDataConsent.mockResolvedValueOnce(false)
+      mockGetCurrentConsent.mockResolvedValueOnce(null)
       vi.resetModules()
       const { GET } = await import('@/app/api/consent/check-health-consent/route')
 
@@ -330,10 +333,10 @@ describe('Consent API Endpoints', () => {
     })
 
     it('should return timestamp when consent granted', async () => {
-      mockProfileData = {
-        health_data_consent_granted: true,
-        health_data_consent_timestamp: '2025-01-02T00:00:00.000Z',
-      }
+      mockHasHealthDataConsent.mockResolvedValueOnce(true)
+      mockGetCurrentConsent.mockResolvedValueOnce({
+        timestamp: '2025-01-02T00:00:00.000Z',
+      })
       vi.resetModules()
       const { GET } = await import('@/app/api/consent/check-health-consent/route')
 
@@ -344,10 +347,8 @@ describe('Consent API Endpoints', () => {
     })
 
     it('should return null timestamp when consent not granted', async () => {
-      mockProfileData = {
-        health_data_consent_granted: false,
-        health_data_consent_timestamp: null,
-      }
+      mockHasHealthDataConsent.mockResolvedValueOnce(false)
+      mockGetCurrentConsent.mockResolvedValueOnce(null)
       vi.resetModules()
       const { GET } = await import('@/app/api/consent/check-health-consent/route')
 
@@ -358,7 +359,7 @@ describe('Consent API Endpoints', () => {
     })
 
     it('should return 200 with granted: false on database error (fail-open)', async () => {
-      mockProfileError = new Error('db')
+      mockHasHealthDataConsent.mockRejectedValueOnce(new Error('db'))
       vi.resetModules()
       const { GET } = await import('@/app/api/consent/check-health-consent/route')
 
