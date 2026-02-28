@@ -49,9 +49,10 @@ cd /opt/lebensordner/app/deploy
 # Resolve Kong key-auth placeholders from deploy .env before recreate
 ANON=$(grep '^ANON_KEY=' .env | cut -d= -f2-)
 SVC=$(grep '^SERVICE_ROLE_KEY=' .env | cut -d= -f2-)
+git show HEAD:deploy/supabase/kong.yml > /tmp/kong-template.yml
 sed -e "s|\${SUPABASE_ANON_KEY}|$ANON|g" \
     -e "s|\${SUPABASE_SERVICE_KEY}|$SVC|g" \
-    supabase/kong.yml > /tmp/kong-resolved.yml
+    /tmp/kong-template.yml > /tmp/kong-resolved.yml
 cp /tmp/kong-resolved.yml supabase/kong.yml
 grep -q '\${SUPABASE_ANON_KEY}\|\${SUPABASE_SERVICE_KEY}' supabase/kong.yml && echo "ERROR: unresolved placeholders" && exit 1
 

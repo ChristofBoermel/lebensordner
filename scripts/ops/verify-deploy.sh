@@ -16,10 +16,6 @@ pass() {
   echo "PASS: $1"
 }
 
-warn() {
-  echo "WARN: $1"
-}
-
 if ! command -v docker >/dev/null 2>&1; then
   fail "docker is not installed"
 fi
@@ -110,21 +106,19 @@ check_http_status "https://${STUDIO_DOMAIN}" 200 302 401
 
 echo "Checking Supabase key-auth probes..."
 ANON_KEY="$(require_env_key ANON_KEY)"
-REST_STATUS="$(curl -sS -o /tmp/rest_openapi.json -w '%{http_code}' \
+REST_WITH_KEY_STATUS="$(curl -sS -o /tmp/rest_openapi_with_key.json -w '%{http_code}' \
   -H "apikey: ${ANON_KEY}" \
-  -H "Authorization: Bearer ${ANON_KEY}" \
   -H "Accept: application/openapi+json" \
   "https://${DOMAIN}/supabase/rest/v1/")"
-if [[ "$REST_STATUS" == "200" ]]; then
-  if grep -qi "No API key found in request" /tmp/rest_openapi.json; then
-    fail "Supabase REST probe returned key-auth rejection body"
-  fi
-  pass "Supabase REST key-auth probe passed"
-elif [[ "$REST_STATUS" == "401" ]]; then
-  warn "Supabase REST probe returned 401 (continuing). This usually indicates anon JWT/key mismatch in environment."
-else
-  fail "unexpected status for Supabase REST probe: ${REST_STATUS}"
+[[ "$REST_WITH_KEY_STATUS" == "200" ]] || fail "unexpected status for Supabase REST probe with apikey: ${REST_WITH_KEY_STATUS}"
+if grep -qi "No API key found in request" /tmp/rest_openapi_with_key.json; then
+  fail "Supabase REST probe with apikey returned key-auth rejection body"
 fi
+REST_NO_KEY_STATUS="$(curl -sS -o /tmp/rest_openapi_no_key.json -w '%{http_code}' \
+  -H "Accept: application/openapi+json" \
+  "https://${DOMAIN}/supabase/rest/v1/")"
+[[ "$REST_NO_KEY_STATUS" == "401" ]] || fail "expected 401 for Supabase REST probe without apikey, got ${REST_NO_KEY_STATUS}"
+pass "Supabase REST key-auth probe passed"
 
 echo "Checking Grafana alert provisioning logs..."
 if docker compose logs --no-color --tail=400 grafana | grep -qiE "failure parsing rules|failed to parse|error loading alerting provisioning"; then
