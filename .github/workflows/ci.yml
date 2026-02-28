@@ -244,6 +244,9 @@ jobs:
               exit 1
             fi
 
+            # Kong (db-less) only reads declarative config at startup.
+            # Force recreate so updated key-auth credentials are actually loaded.
+            docker compose up -d --no-deps --force-recreate kong
             docker compose up -d --remove-orphans
         env:
           GITHUB_SHA: ${{ github.sha }}

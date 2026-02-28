@@ -55,6 +55,8 @@ sed -e "s|\${SUPABASE_ANON_KEY}|$ANON|g" \
 cp /tmp/kong-resolved.yml supabase/kong.yml
 grep -q '\${SUPABASE_ANON_KEY}\|\${SUPABASE_SERVICE_KEY}' supabase/kong.yml && echo "ERROR: unresolved placeholders" && exit 1
 
+# Kong reads declarative config on startup only. Recreate to load new keys.
+docker compose up -d --no-deps --force-recreate kong
 docker compose pull
 docker compose up -d
 ```
