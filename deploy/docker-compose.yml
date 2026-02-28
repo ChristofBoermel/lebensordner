@@ -215,6 +215,7 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      SUPABASE_URL: ${SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
@@ -263,6 +264,7 @@ services:
     container_name: lebensordner-worker
     restart: unless-stopped
     environment:
+      SUPABASE_URL: ${SUPABASE_URL}
       REDIS_URL: ${REDIS_URL}
       NEXTJS_INTERNAL_URL: http://nextjs:3000
       CRON_SECRET: ${CRON_SECRET}

@@ -30,6 +30,7 @@ Required at runtime by `deploy/docker-compose.yml`:
 - `JWT_SECRET`
 - `ANON_KEY`
 - `SERVICE_ROLE_KEY`
+- `SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
 - `NEXT_PUBLIC_POSTHOG_KEY`
