@@ -471,12 +471,11 @@ export default function OnboardingPage() {
           .eq('id', user.id)
           .single()
 
-        // If profile exists and onboarding is completed, go to dashboard
+        // Do not auto-redirect here based on client-side reads.
+        // Server-side dashboard route remains the source of truth.
         if (profile?.onboarding_completed) {
           clearLocalProgress()
           clearServerProgress()
-          router.replace('/dashboard')
-          return
         }
 
         // If no profile exists, try to create one via API
