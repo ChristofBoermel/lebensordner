@@ -247,17 +247,6 @@ export async function POST(req: Request) {
       (!!normalizedUrlSecret && normalizedUrlSecret === expectedSecret))
 
   if (!isAuthorized) {
-    console.warn('[GrafanaWebhook] Unauthorized webhook request', {
-      hasExpectedSecret: !!expectedSecret,
-      hasHeaderSecret: !!headerSecret,
-      hasQuerySecret: !!normalizedUrlSecret,
-      headerMatches: !!expectedSecret && !!headerSecret && headerSecret === expectedSecret,
-      queryMatches:
-        !!expectedSecret && !!normalizedUrlSecret && normalizedUrlSecret === expectedSecret,
-      headerLength: headerSecret?.length ?? 0,
-      queryLength: normalizedUrlSecret?.length ?? 0,
-      expectedLength: expectedSecret?.length ?? 0,
-    })
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
