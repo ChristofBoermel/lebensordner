@@ -69,15 +69,8 @@ services:
           - /rest/v1/
     plugins:
       - name: cors
-      - name: key-auth
-        config:
-          hide_credentials: true
-      - name: acl
-        config:
-          hide_groups_header: true
-          allow:
-            - admin
-            - anon
+      # TEMPORARY: key-auth disabled to restore runtime access while
+      # Supabase anon/service key drift is being investigated.
 
   # Storage
   - name: storage-v1
@@ -90,12 +83,5 @@ services:
           - /storage/v1/
     plugins:
       - name: cors
-      - name: key-auth
-        config:
-          hide_credentials: false
-      - name: acl
-        config:
-          hide_groups_header: true
-          allow:
-            - admin
-            - anon
+      # TEMPORARY: key-auth disabled to restore runtime access while
+      # Supabase anon/service key drift is being investigated.
