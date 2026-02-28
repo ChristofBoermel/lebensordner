@@ -22,8 +22,8 @@ export async function GET() {
     if (error) {
       console.error('[CONSENT] Health consent check error:', error)
       return NextResponse.json(
-        { error: 'An unexpected error occurred' },
-        { status: 500 }
+        { granted: false, timestamp: null },
+        { status: 200 }
       )
     }
 
@@ -34,8 +34,8 @@ export async function GET() {
   } catch (error) {
     console.error('[CONSENT] Health consent check error:', error)
     return NextResponse.json(
-      { error: 'An unexpected error occurred' },
-      { status: 500 }
+      { granted: false, timestamp: null },
+      { status: 200 }
     )
   }
 }

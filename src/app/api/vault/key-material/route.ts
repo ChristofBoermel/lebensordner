@@ -2,35 +2,41 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 export async function GET() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  try {
+    const supabase = await createServerSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  const { data, error } = await supabase
-    .from('user_vault_keys')
-    .select('kdf_salt, kdf_params, wrapped_mk, wrapped_mk_with_recovery, recovery_key_salt')
-    .eq('user_id', user.id)
-    .maybeSingle()
+    const { data, error } = await supabase
+      .from('user_vault_keys')
+      .select('kdf_salt, kdf_params, wrapped_mk, wrapped_mk_with_recovery, recovery_key_salt')
+      .eq('user_id', user.id)
+      .maybeSingle()
 
-  if (error) {
-    return NextResponse.json({ error: 'Database error' }, { status: 500 })
-  }
+    if (error) {
+      console.error('[VAULT] Key material query error:', error)
+      return NextResponse.json({ exists: false })
+    }
 
-  if (!data) {
+    if (!data) {
+      return NextResponse.json({ exists: false })
+    }
+
+    return NextResponse.json({
+      exists: true,
+      kdf_salt: data.kdf_salt,
+      kdf_params: data.kdf_params,
+      wrapped_mk: data.wrapped_mk,
+      wrapped_mk_with_recovery: data.wrapped_mk_with_recovery,
+      recovery_key_salt: data.recovery_key_salt
+    })
+  } catch (error) {
+    console.error('[VAULT] Key material GET error:', error)
     return NextResponse.json({ exists: false })
   }
-
-  return NextResponse.json({
-    exists: true,
-    kdf_salt: data.kdf_salt,
-    kdf_params: data.kdf_params,
-    wrapped_mk: data.wrapped_mk,
-    wrapped_mk_with_recovery: data.wrapped_mk_with_recovery,
-    recovery_key_salt: data.recovery_key_salt
-  })
 }
 
 export async function POST(request: Request) {
