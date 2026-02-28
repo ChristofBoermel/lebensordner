@@ -17,11 +17,11 @@ export function startWorkers() {
       try {
         // Call the existing cron endpoint internally
         const response = await fetch(
-          `${process.env.NEXTJS_INTERNAL_URL || 'http://localhost:3000'}/api/cron/send-reminders`,
+          `${process.env['NEXTJS_INTERNAL_URL'] || 'http://localhost:3000'}/api/cron/send-reminders`,
           {
             method: 'GET',
             headers: {
-              Authorization: `Bearer ${process.env.CRON_SECRET}`,
+              Authorization: `Bearer ${process.env['CRON_SECRET']}`,
             },
           }
         )
@@ -55,11 +55,11 @@ export function startWorkers() {
         }
 
         const response = await fetch(
-          `${process.env.NEXTJS_INTERNAL_URL || 'http://localhost:3000'}${endpoint}`,
+          `${process.env['NEXTJS_INTERNAL_URL'] || 'http://localhost:3000'}${endpoint}`,
           {
             method: 'GET',
             headers: {
-              Authorization: `Bearer ${process.env.CRON_SECRET}`,
+              Authorization: `Bearer ${process.env['CRON_SECRET']}`,
             },
           }
         )
