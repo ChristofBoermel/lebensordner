@@ -59,6 +59,7 @@ describe('Telegram Bot Callback Webhook Handler', () => {
         alert_id: 'alert-id-123',
         error_type: 'server',
         error_message: "TypeError: Cannot read properties of undefined (reading 'userId')",
+        error_id: 'SPIKE-VAL-1',
         stack: 'TypeError: Cannot read properties of undefined\nat POST /api/documents/upload',
         endpoint: 'POST /api/documents/upload',
         count: 7,
@@ -112,6 +113,7 @@ describe('Telegram Bot Callback Webhook Handler', () => {
     expect(githubBody.labels).toEqual(['bug', 'auto-detected'])
     expect(githubBody.body).toContain('Suggested Traycer Prompt')
     expect(githubBody.body).toContain('POST /api/documents/upload')
+    expect(githubBody.body).toContain('| Environment | synthetic validation test |')
 
     const confirmationBody = JSON.parse(String(fetchMock.mock.calls[2][1]?.body))
     expect(confirmationBody.text).toContain('Issue #42 created')

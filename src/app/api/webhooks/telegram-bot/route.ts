@@ -19,6 +19,7 @@ type AlertContext = {
   alert_id: string
   error_type: string
   error_message: string
+  error_id?: string
   stack?: string
   endpoint?: string
   count: number
@@ -79,12 +80,19 @@ function markCallbackAsProcessing(callbackQueryId: string): boolean {
   return true
 }
 
+function isSyntheticValidationContext(context: AlertContext): boolean {
+  const errorId = context.error_id?.trim() ?? ''
+  const errorMessage = context.error_message?.toLowerCase() ?? ''
+  return /^spike[-_]/i.test(errorId) || errorMessage.includes('synthetic spike')
+}
+
 function buildIssueBody(context: AlertContext): string {
   const endpointOrQueue = context.endpoint?.trim() || 'n/a'
   const stackSnippet = clipStack(context.stack)
   const messageSnippet = clipText(context.error_message || 'No message', 500)
   const grafanaUrl = context.grafana_url || GRAFANA_DASHBOARD_URL
   const detectedAt = context.timestamp || new Date().toISOString()
+  const environment = isSyntheticValidationContext(context) ? 'synthetic validation test' : 'production'
 
   return [
     '## Error Summary',
@@ -95,6 +103,7 @@ function buildIssueBody(context: AlertContext): string {
     `| Total errors | ${context.count} in the last ${context.window_minutes || 5} minutes |`,
     `| Endpoint / Queue | ${endpointOrQueue} |`,
     `| Detected at | ${detectedAt} |`,
+    `| Environment | ${environment} |`,
     '',
     '## Most Recent Error',
     '',

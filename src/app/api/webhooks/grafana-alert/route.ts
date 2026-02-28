@@ -41,6 +41,7 @@ type LokiQueryResponse = {
 type ParsedErrorLog = {
   error_type: string
   error_message: string
+  error_id?: string
   stack: string
   endpoint: string
 }
@@ -156,6 +157,7 @@ async function fetchLokiLogs(lokiBaseUrl?: string): Promise<ParsedErrorLog[]> {
         return {
           error_type: String(parsed.error_type ?? 'unknown'),
           error_message: String(parsed.error_message ?? parsed.message ?? ''),
+          error_id: typeof parsed.error_id === 'string' ? parsed.error_id : undefined,
           stack: String(parsed.stack ?? ''),
           endpoint: String(parsed.endpoint ?? parsed.queue ?? ''),
         }
@@ -281,6 +283,7 @@ export async function POST(req: Request) {
       alert_id: alertId,
       error_type: errorType,
       error_message: errorMessage,
+      error_id: latest?.error_id,
       stack,
       endpoint,
       count,
