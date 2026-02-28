@@ -17,7 +17,7 @@ contactPoints:
       - uid: webhook-handler-receiver
         type: webhook
         settings:
-          url: "http://nextjs:3000/api/webhooks/grafana-alert"
+          url: "http://nextjs:3000/api/webhooks/grafana-alert?secret=${GRAFANA_WEBHOOK_SECRET}"
           httpMethod: POST
           httpHeaderName1: "X-Grafana-Webhook-Secret"
         secureSettings:
