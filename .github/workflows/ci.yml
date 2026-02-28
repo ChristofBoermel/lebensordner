@@ -227,6 +227,15 @@ jobs:
             docker pull ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA}
             docker tag ghcr.io/christofboermel/lebensordner/nextjs:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/nextjs:latest
             docker tag ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/worker:latest
+
+            # Resolve Kong config: substitute ANON_KEY and SERVICE_ROLE_KEY from .env
+            ANON=$(grep '^ANON_KEY=' .env | cut -d= -f2-)
+            SVC=$(grep '^SERVICE_ROLE_KEY=' .env | cut -d= -f2-)
+            sed -e "s|\${SUPABASE_ANON_KEY}|$ANON|g" \
+                -e "s|\${SUPABASE_SERVICE_KEY}|$SVC|g" \
+                supabase/kong.yml > /tmp/kong-resolved.yml
+            cp /tmp/kong-resolved.yml supabase/kong.yml
+
             docker compose up -d --remove-orphans
         env:
           GITHUB_SHA: ${{ github.sha }}
