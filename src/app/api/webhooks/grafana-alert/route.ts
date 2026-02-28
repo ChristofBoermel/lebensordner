@@ -240,9 +240,13 @@ export async function POST(req: Request) {
   const expectedSecret = process.env.GRAFANA_WEBHOOK_SECRET
   const urlSecret = new URL(req.url).searchParams.get('secret')
   const normalizedUrlSecret = urlSecret?.replace(/ /g, '+')
-  const incomingSecret = req.headers.get('X-Grafana-Webhook-Secret') ?? normalizedUrlSecret
+  const headerSecret = req.headers.get('X-Grafana-Webhook-Secret')
+  const isAuthorized =
+    !!expectedSecret &&
+    ((!!headerSecret && headerSecret === expectedSecret) ||
+      (!!normalizedUrlSecret && normalizedUrlSecret === expectedSecret))
 
-  if (!expectedSecret || !incomingSecret || incomingSecret !== expectedSecret) {
+  if (!isAuthorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
