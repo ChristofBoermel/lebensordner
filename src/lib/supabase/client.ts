@@ -2,8 +2,37 @@ import { createBrowserClient } from '@supabase/ssr'
 
 const PERSISTENCE_KEY = 'supabase-persist-mode'
 
+type RuntimePublicConfig = {
+  supabaseUrl?: string
+  supabaseAnonKey?: string
+}
+
+declare global {
+  interface Window {
+    __LEBENSORDNER_PUBLIC_CONFIG__?: RuntimePublicConfig
+  }
+}
+
 export interface CreateClientOptions {
   persist?: boolean
+}
+
+function getSupabaseConfig() {
+  const runtimeConfig =
+    typeof window !== 'undefined'
+      ? window.__LEBENSORDNER_PUBLIC_CONFIG__
+      : undefined
+
+  const supabaseUrl =
+    runtimeConfig?.supabaseUrl?.trim() || process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey =
+    runtimeConfig?.supabaseAnonKey?.trim() || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase client config is missing')
+  }
+
+  return { supabaseUrl, supabaseAnonKey }
 }
 
 /**
@@ -18,11 +47,12 @@ export interface CreateClientOptions {
  */
 export function createClient(options: CreateClientOptions = {}) {
   const persist = options.persist ?? shouldPersistSession()
+  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig()
 
   if (!persist && typeof window !== 'undefined') {
     return createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      supabaseUrl,
+      supabaseAnonKey,
       {
         auth: {
           persistSession: true,
@@ -33,8 +63,8 @@ export function createClient(options: CreateClientOptions = {}) {
   }
 
   return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    supabaseUrl,
+    supabaseAnonKey
   )
 }
 
