@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getCurrentConsent, hasHealthDataConsent } from '@/lib/consent/manager'
 
 export async function GET() {
   try {
@@ -13,23 +14,14 @@ export async function GET() {
       )
     }
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('health_data_consent_granted, health_data_consent_timestamp')
-      .eq('id', user.id)
-      .single()
-
-    if (error) {
-      console.error('[CONSENT] Health consent check error:', error)
-      return NextResponse.json(
-        { granted: false, timestamp: null },
-        { status: 200 }
-      )
-    }
+    const [granted, latestHealthConsent] = await Promise.all([
+      hasHealthDataConsent(user.id),
+      getCurrentConsent(user.id, 'health_data'),
+    ])
 
     return NextResponse.json({
-      granted: data?.health_data_consent_granted === true,
-      timestamp: data?.health_data_consent_timestamp ?? null,
+      granted,
+      timestamp: latestHealthConsent?.timestamp ?? null,
     })
   } catch (error) {
     console.error('[CONSENT] Health consent check error:', error)

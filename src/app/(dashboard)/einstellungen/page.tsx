@@ -216,6 +216,17 @@ export default function EinstellungenPage() {
   }
 
   const loadHealthConsent = useCallback(async (userId: string) => {
+    try {
+      const response = await fetch('/api/consent/check-health-consent')
+      if (response.ok) {
+        const data = await response.json()
+        setHealthDataConsent(data?.granted === true)
+        return
+      }
+    } catch {
+      // Fall back to profile field lookup below.
+    }
+
     const { data: profileData } = await supabase
       .from('profiles')
       .select('health_data_consent_granted')

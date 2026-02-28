@@ -21,6 +21,31 @@ function createServiceClient() {
   )
 }
 
+async function getLatestHealthConsentRecord(userId: string): Promise<ConsentRecord | null> {
+  try {
+    const supabase = createServiceClient()
+
+    const { data, error } = await supabase
+      .from('consent_ledger')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('consent_type', 'health_data')
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Failed to fetch latest health_data consent from ledger:', error)
+      return null
+    }
+
+    return (data as ConsentRecord | null) ?? null
+  } catch (error) {
+    console.error('Failed to fetch latest health_data consent from ledger:', error)
+    return null
+  }
+}
+
 // --- Functions ---
 
 export async function recordConsent(
@@ -112,15 +137,23 @@ export async function hasHealthDataConsent(userId: string): Promise<boolean> {
       .eq('id', userId)
       .single()
 
-    if (error) {
-      console.error('Failed to fetch health data consent:', error)
-      return false
+    if (!error) {
+      if (data?.health_data_consent_granted === true) {
+        return true
+      }
+
+      // Fall back to immutable ledger as source of truth if profile flag is false/stale.
+      const latestHealthConsent = await getLatestHealthConsentRecord(userId)
+      return latestHealthConsent?.granted === true
     }
 
-    return data?.health_data_consent_granted === true
+    console.error('Failed to fetch health data consent from profile:', error)
+    const latestHealthConsent = await getLatestHealthConsentRecord(userId)
+    return latestHealthConsent?.granted === true
   } catch (error) {
     console.error('Failed to fetch health data consent:', error)
-    return false
+    const latestHealthConsent = await getLatestHealthConsentRecord(userId)
+    return latestHealthConsent?.granted === true
   }
 }
 
@@ -153,8 +186,8 @@ export async function grantHealthDataConsent(
       .eq('id', userId)
 
     if (profileError) {
-      console.error('Failed to update health data consent profile:', profileError)
-      return { ok: false, error: 'Failed to update health data consent profile' }
+      // Keep flow successful: consent_ledger is authoritative and has been written.
+      console.error('Failed to update health data consent profile (continuing):', profileError)
     }
 
     return { ok: true }
