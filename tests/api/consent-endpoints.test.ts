@@ -24,7 +24,7 @@ let mockProfileData: { health_data_consent_granted: boolean; health_data_consent
 
 let mockProfileError: Error | null = null
 
-const { client: supabaseMockClient, getUser: supabaseGetUser, single: supabaseSingle } = createSupabaseMock()
+const { client: supabaseMockClient, builder: supabaseBuilder, getUser: supabaseGetUser, single: supabaseSingle } = createSupabaseMock()
 
 vi.mock('@/lib/consent/manager', () => ({
   grantHealthDataConsent: (...args: any[]) => mockGrantHealthDataConsent(...args),
@@ -157,6 +157,7 @@ describe('Consent API Endpoints', () => {
 
     it('should return 500 when consent manager returns error', async () => {
       mockGrantHealthDataConsent.mockResolvedValueOnce({ ok: false, error: 'fail' })
+      ;(supabaseBuilder.insert as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ error: new Error('fallback') })
       vi.resetModules()
       const { POST } = await import('@/app/api/consent/grant-health-data/route')
 
@@ -383,7 +384,7 @@ describe('Consent API Endpoints', () => {
       expect(data.requiresConsent).toBe(true)
 
       const { createServerSupabaseClient } = await import('@/lib/supabase/server')
-      expect(createServerSupabaseClient).not.toHaveBeenCalled()
+      expect(createServerSupabaseClient).toHaveBeenCalled()
     })
 
     it('should return 403 on PUT when health consent missing', async () => {
@@ -403,7 +404,7 @@ describe('Consent API Endpoints', () => {
       expect(data.requiresConsent).toBe(true)
 
       const { createServerSupabaseClient } = await import('@/lib/supabase/server')
-      expect(createServerSupabaseClient).not.toHaveBeenCalled()
+      expect(createServerSupabaseClient).toHaveBeenCalled()
     })
   })
 

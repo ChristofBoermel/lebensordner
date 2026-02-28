@@ -171,12 +171,45 @@ async function requireHealthDataConsent(userId: string) {
   return null
 }
 
+async function requireHealthDataConsentWithFallback(userId: string, supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>) {
+  const primary = await requireHealthDataConsent(userId)
+  if (!primary) return null
+
+  // Fallback: validate consent with user-scoped session if service-role path is unavailable.
+  const { data: profileData, error: profileError } = await supabase
+    .from('profiles')
+    .select('health_data_consent_granted')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (!profileError && profileData?.health_data_consent_granted === true) {
+    return null
+  }
+
+  const { data: ledgerData, error: ledgerError } = await supabase
+    .from('consent_ledger')
+    .select('granted')
+    .eq('user_id', userId)
+    .eq('consent_type', 'health_data')
+    .order('timestamp', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!ledgerError && ledgerData?.granted === true) {
+    return null
+  }
+
+  return primary
+}
+
+// --- Route handlers ---
+
 export async function GET() {
   try {
     const { user } = await requireAuth()
-    const consentResponse = await requireHealthDataConsent(user.id)
-    if (consentResponse) return consentResponse
     const supabase = await createServerSupabaseClient()
+    const consentResponse = await requireHealthDataConsentWithFallback(user.id, supabase)
+    if (consentResponse) return consentResponse
     const key = getEncryptionKey()
 
     const [contactsRes, medicalRes, directivesRes, funeralRes] = await Promise.all([
@@ -236,9 +269,9 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const { user } = await requireAuth()
-    const consentResponse = await requireHealthDataConsent(user.id)
-    if (consentResponse) return consentResponse
     const supabase = await createServerSupabaseClient()
+    const consentResponse = await requireHealthDataConsentWithFallback(user.id, supabase)
+    if (consentResponse) return consentResponse
     const key = getEncryptionKey()
 
     const body = await request.json()

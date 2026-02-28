@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { grantHealthDataConsent } from '@/lib/consent/manager'
+import { CONSENT_VERSION } from '@/lib/consent/constants'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_API } from '@/lib/security/rate-limit'
 
 export async function POST(request: NextRequest) {
@@ -37,10 +38,35 @@ export async function POST(request: NextRequest) {
     const result = await grantHealthDataConsent(user.id)
 
     if (!result.ok) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 500 }
-      )
+      // Fallback: use user-scoped client if service-role flow fails.
+      const { error: ledgerError } = await supabase
+        .from('consent_ledger')
+        .insert({
+          user_id: user.id,
+          consent_type: 'health_data',
+          granted: true,
+          version: CONSENT_VERSION,
+        })
+
+      if (ledgerError) {
+        console.error('[CONSENT] Fallback ledger insert failed:', ledgerError)
+        return NextResponse.json(
+          { error: result.error },
+          { status: 500 }
+        )
+      }
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          health_data_consent_granted: true,
+          health_data_consent_timestamp: new Date().toISOString(),
+        })
+        .eq('id', user.id)
+
+      if (profileError) {
+        console.error('[CONSENT] Fallback profile update failed (continuing):', profileError)
+      }
     }
 
     await incrementRateLimit({
