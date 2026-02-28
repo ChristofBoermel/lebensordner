@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq'
 import { redisConnection } from './connection'
 import { cleanupExpiredLimits } from '@/lib/security/rate-limit'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 let workersStarted = false
 
@@ -93,7 +94,12 @@ export function startWorkers() {
   // Error handlers
   for (const worker of [reminderWorker, emailWorker, cleanupWorker]) {
     worker.on('failed', (job, err) => {
-      console.error(`[Worker] Job ${job?.name} failed:`, err.message)
+      emitStructuredError({
+        error_type: 'worker',
+        error_message: err.message,
+        stack: err.stack,
+        queue: worker.name,
+      })
     })
     worker.on('completed', (job) => {
       console.log(`[Worker] Job ${job.name} completed`)

@@ -3,3 +3,7 @@ apiVersion: 1
 policies:
   - orgId: 1
     receiver: Telegram
+    routes:
+      - receiver: webhook-handler
+        matchers:
+          - alertname = "Error Spike"

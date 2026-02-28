@@ -157,3 +157,46 @@ groups:
                     type: gt
                     params:
                       - 0
+
+      - title: "Error Spike"
+        uid: error-spike
+        condition: C
+        for: 0s
+        noDataState: NoData
+        execErrState: Error
+        annotations:
+          summary: "More than 3 application errors detected in the last 5 minutes"
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({container=~"lebensordner-app|lebensordner-worker"} | json | level="error" [5m]))'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              reducer: last
+              expression: A
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 3
+        notification_settings:
+          receiver: webhook-handler
+          group_wait: "0s"
+          group_interval: "30m"
+          repeat_interval: "30m"

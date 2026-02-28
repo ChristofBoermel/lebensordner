@@ -10,3 +10,15 @@ contactPoints:
           bottoken: "${TELEGRAM_BOT_TOKEN}"
           chatid: "1895525228"
         disableResolveMessage: false
+
+  - orgId: 1
+    name: webhook-handler
+    receivers:
+      - uid: webhook-handler-receiver
+        type: webhook
+        settings:
+          url: "http://nextjs:3000/api/webhooks/grafana-alert"
+          httpMethod: POST
+          extra_headers:
+            X-Grafana-Webhook-Secret: "${GRAFANA_WEBHOOK_SECRET}"
+        disableResolveMessage: false

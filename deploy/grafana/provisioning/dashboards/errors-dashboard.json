@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 36,
+  "version": 1,
+  "uid": "errors-dashboard",
+  "title": "Error Dashboard",
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Server Errors (24h)",
+      "datasource": "Loki",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "noValue": "0"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\" | error_type=\"server\" [24h]))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Client Errors (24h)",
+      "datasource": "Loki",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "noValue": "0"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\" | error_type=~\"client|unhandled_rejection\" [24h]))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Worker Errors (24h)",
+      "datasource": "Loki",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 4 },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "noValue": "0"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\" | error_type=\"worker\" [24h]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Error Rate Over Time",
+      "datasource": "Loki",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (error_type) (count_over_time({container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\" [$__interval]))",
+          "legendFormat": "{{error_type}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Recent Error Log",
+      "datasource": "Loki",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 12 },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\""
+        }
+      ]
+    }
+  ]
+}

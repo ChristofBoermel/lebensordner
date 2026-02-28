@@ -4,6 +4,7 @@ import { PostHogProvider } from '@/components/analytics/posthog-provider'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { CookieConsent } from '@/components/consent/cookie-consent'
 import { ErrorBoundary } from '@/components/error/error-boundary'
+import { UnhandledRejectionProvider } from '@/components/error/unhandled-rejection-provider'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -35,6 +36,7 @@ export default function RootLayout({
               </PostHogProvider>
             </Suspense>
             <CookieConsent />
+            <UnhandledRejectionProvider />
           </ErrorBoundary>
         </ThemeProvider>
       </body>

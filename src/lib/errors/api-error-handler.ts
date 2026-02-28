@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 /**
  * Custom API error class with HTTP status code support.
@@ -91,11 +92,11 @@ export function withErrorHandler(
  * Logs an error with contextual information for server-side debugging.
  */
 export function logError(error: Error, context?: Record<string, unknown>): void {
-  console.error('[API Error]', {
-    message: error.message,
+  emitStructuredError({
+    error_type: 'server',
+    error_message: error.message,
     stack: error.stack,
-    timestamp: new Date().toISOString(),
-    ...context,
+    endpoint: context?.endpoint as string | undefined,
   })
 }
 

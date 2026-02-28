@@ -234,6 +234,11 @@ services:
       CRON_SECRET: ${CRON_SECRET}
       METRICS_SECRET: ${METRICS_SECRET}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      GRAFANA_WEBHOOK_SECRET: ${GRAFANA_WEBHOOK_SECRET}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
+      GITHUB_PAT: ${GITHUB_PAT}
+      LOKI_INTERNAL_URL: http://loki:3100
+      GITHUB_REPO: christofboermel/lebensordner
     depends_on:
       kong:
         condition: service_started
@@ -411,6 +416,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: https://grafana.${DOMAIN}
+      GRAFANA_WEBHOOK_SECRET: ${GRAFANA_WEBHOOK_SECRET}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
     volumes:
