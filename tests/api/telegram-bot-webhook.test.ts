@@ -9,10 +9,12 @@ vi.mock('@/lib/redis/client', () => ({
 }))
 
 function buildCallbackPayload(callbackData = 'create_issue:alert-id-123') {
+  const callbackId = `callback-${Math.random().toString(36).slice(2, 10)}`
+
   return {
     update_id: 111,
     callback_query: {
-      id: 'callback-1',
+      id: callbackId,
       data: callbackData,
       message: {
         message_id: 22,
@@ -81,6 +83,7 @@ describe('Telegram Bot Callback Webhook Handler', () => {
       } as unknown as Response)
 
     const { POST } = await import('@/app/api/webhooks/telegram-bot/route')
+    const payload = buildCallbackPayload()
     const response = await POST(
       new Request('http://localhost/api/webhooks/telegram-bot', {
         method: 'POST',
@@ -88,7 +91,7 @@ describe('Telegram Bot Callback Webhook Handler', () => {
           'Content-Type': 'application/json',
           'X-Telegram-Bot-Api-Secret-Token': 'telegram-secret',
         },
-        body: JSON.stringify(buildCallbackPayload()),
+        body: JSON.stringify(payload),
       })
     )
 
@@ -97,7 +100,7 @@ describe('Telegram Bot Callback Webhook Handler', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
 
     const answerCallBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
-    expect(answerCallBody.callback_query_id).toBe('callback-1')
+    expect(answerCallBody.callback_query_id).toBe(payload.callback_query.id)
 
     const githubCall = fetchMock.mock.calls[1]
     expect(String(githubCall[0])).toBe('https://api.github.com/repos/christofboermel/lebensordner/issues')
