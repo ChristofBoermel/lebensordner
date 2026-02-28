@@ -357,13 +357,15 @@ describe('Consent API Endpoints', () => {
       expect(data.timestamp).toBeNull()
     })
 
-    it('should return 500 on database error', async () => {
+    it('should return 200 with granted: false on database error (fail-open)', async () => {
       mockProfileError = new Error('db')
       vi.resetModules()
       const { GET } = await import('@/app/api/consent/check-health-consent/route')
 
       const response = await GET()
-      expect(response.status).toBe(500)
+      expect(response.status).toBe(200)
+      const data = await response.json()
+      expect(data.granted).toBe(false)
     })
   })
 
