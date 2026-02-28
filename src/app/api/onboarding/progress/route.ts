@@ -6,8 +6,8 @@ import { createServerClient } from '@supabase/ssr'
 // GET: Load onboarding progress from server
 export async function GET() {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseUrl = process.env['SUPABASE_URL']
+    const supabaseAnonKey = process.env['SUPABASE_ANON_KEY']
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
@@ -66,8 +66,8 @@ export async function GET() {
 // POST: Save onboarding progress to server
 export async function POST(request: Request) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseUrl = process.env['SUPABASE_URL']
+    const supabaseAnonKey = process.env['SUPABASE_ANON_KEY']
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
@@ -126,8 +126,8 @@ export async function POST(request: Request) {
 // DELETE: Clear onboarding progress from server
 export async function DELETE() {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseUrl = process.env['SUPABASE_URL']
+    const supabaseAnonKey = process.env['SUPABASE_ANON_KEY']
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {

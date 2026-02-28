@@ -7,7 +7,7 @@ import { logSecurityEvent, EVENT_TWO_FACTOR_VERIFIED } from '@/lib/security/audi
 // Use admin client to bypass RLS since user isn't authenticated yet
 const getSupabaseAdmin = () => {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env['SUPABASE_URL']!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 }

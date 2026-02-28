@@ -34,7 +34,7 @@ export const EVENT_GDPR_EXPORT_REQUESTED = 'gdpr_export_requested'
 
 function createServiceClient() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env['SUPABASE_URL']!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 }

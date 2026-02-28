@@ -8,7 +8,7 @@ import { logSecurityEvent, EVENT_DOWNLOAD_LINK_CREATED } from '@/lib/security/au
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_DOWNLOAD_LINK } from '@/lib/security/rate-limit'
 
 const getSupabaseAdmin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env['SUPABASE_URL']!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 

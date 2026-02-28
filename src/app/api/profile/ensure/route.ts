@@ -5,7 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 // Admin client for profile creation (bypasses RLS)
 const getSupabaseAdmin = () => {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env['SUPABASE_URL']!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 }

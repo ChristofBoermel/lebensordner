@@ -9,7 +9,7 @@ import { isAccountLocked } from '@/lib/security/auth-lockout'
 // Admin client for profile creation
 const getSupabaseAdmin = () => {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env['SUPABASE_URL']!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 }

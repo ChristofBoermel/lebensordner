@@ -6,7 +6,7 @@ import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscripti
 import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
 
 const getSupabaseAdmin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env['SUPABASE_URL']!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
