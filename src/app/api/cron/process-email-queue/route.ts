@@ -18,11 +18,18 @@ if (!CRON_SECRET) {
   console.error('[CRON] CRITICAL: CRON_SECRET environment variable is not set. Cron endpoint will reject all requests.')
 }
 
-const getSupabaseAdmin = () =>
-  createClient(
-    process.env['SUPABASE_URL']!,
-    process.env['SUPABASE_SERVICE_ROLE_KEY']!
-  )
+const sanitizeEnv = (value: string | undefined) => value?.trim().replace(/^['"]|['"]$/g, '')
+
+const getSupabaseAdmin = () => {
+  const url = sanitizeEnv(process.env['SUPABASE_URL'])
+  const key = sanitizeEnv(process.env['SUPABASE_SERVICE_ROLE_KEY'])
+
+  if (!url || !key) {
+    throw new Error('Supabase environment variables missing')
+  }
+
+  return createClient(url, key)
+}
 
 interface QueueItem {
   id: string
@@ -93,6 +100,11 @@ export async function GET(request: Request) {
       .limit(50)
 
     if (fetchError) {
+      if (fetchError.message?.includes('JWSInvalidSignature')) {
+        throw new Error(
+          'Failed to fetch queue items: Supabase service role key rejected (JWSInvalidSignature). Verify SUPABASE_SERVICE_ROLE_KEY for this deployment.'
+        )
+      }
       throw new Error(`Failed to fetch queue items: ${fetchError.message}`)
     }
 
