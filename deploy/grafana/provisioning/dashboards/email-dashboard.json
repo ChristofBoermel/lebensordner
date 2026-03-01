@@ -16,7 +16,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container_name=\"lebensordner-worker\"} |= \"Email job\" |= \"completed\" [1h]))",
+          "expr": "sum(count_over_time({container=\"lebensordner-worker\"} |= \"Email job\" |= \"completed\" [1h]))",
           "legendFormat": ""
         }
       ]
@@ -31,7 +31,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container_name=\"lebensordner-worker\"} |= \"Email job\" |= \"failed\" [1h]))",
+          "expr": "sum(count_over_time({container=\"lebensordner-worker\"} |= \"Email job\" |= \"failed\" [1h]))",
           "legendFormat": ""
         }
       ]

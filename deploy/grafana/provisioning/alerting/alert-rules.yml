@@ -47,13 +47,13 @@ groups:
       - title: "Worker Down"
         uid: worker-down
         condition: C
-        for: 0s
+        for: 15m
         noDataState: OK
         execErrState: Error
         annotations:
-          summary: "Lebensordner worker container has produced no logs in the last 5 minutes"
+          summary: "Lebensordner worker container has produced no logs in the last 15 minutes"
         labels:
-          severity: critical
+          severity: warning
         data:
           - refId: A
             relativeTimeRange:
@@ -61,7 +61,7 @@ groups:
               to: 0
             datasourceUid: loki
             model:
-              expr: 'absent_over_time({container_name="lebensordner-worker"}[5m])'
+              expr: 'absent_over_time({container="lebensordner-worker"}[15m])'
               refId: A
           - refId: B
             datasourceUid: __expr__
