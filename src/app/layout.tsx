@@ -26,8 +26,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   const runtimePublicConfig = {
-    supabaseUrl: process.env['SUPABASE_URL'] ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
-    supabaseAnonKey: process.env['SUPABASE_ANON_KEY'] ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+    supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
   }
   const runtimePublicConfigScript = `window.__LEBENSORDNER_PUBLIC_CONFIG__=${JSON.stringify(runtimePublicConfig).replace(/</g, '\\u003c')};`
 
