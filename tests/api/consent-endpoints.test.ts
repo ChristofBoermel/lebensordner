@@ -277,6 +277,7 @@ describe('Consent API Endpoints', () => {
 
     it('should return 500 when consent manager returns error', async () => {
       mockWithdrawHealthDataConsent.mockResolvedValueOnce({ ok: false, error: 'fail' })
+      ;(supabaseBuilder.insert as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ error: new Error('fallback') })
       vi.resetModules()
       const { POST } = await import('@/app/api/consent/withdraw-health-data/route')
 
