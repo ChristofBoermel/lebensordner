@@ -158,26 +158,26 @@ def check_kong_template_has_placeholders() -> None:
         if not has_svc:  missing.append(SVC_PLACEHOLDER)
         record("FAIL",
                "kong.yml template missing placeholder(s): " + ", ".join(missing),
-               "The deploy-time sed has nothing to replace -> Kong starts with the\n"
+               "The deploy-time render step has nothing to replace -> Kong starts with the\n"
                "literal placeholder string as the key, rejecting every request.")
 
 
-def check_ci_kong_sed_substitution() -> None:
+def check_ci_kong_render_step() -> None:
     workflow_path, workflow = get_deploy_workflow_content()
     if not workflow:
-        record("WARN", "No deploy workflow found -- skipping Kong sed check")
+        record("WARN", "No deploy workflow found -- skipping Kong render check")
         return
+    has_render_script = "render-kong-config.sh" in workflow
     has_anon_sed = bool(re.search(r"s[|/].*SUPABASE_ANON_KEY.*[|/]", workflow))
     has_svc_sed  = bool(re.search(r"s[|/].*SUPABASE_SERVICE_KEY.*[|/]", workflow))
-    if has_anon_sed and has_svc_sed:
+    if has_render_script:
+        record("PASS", f"Deploy workflow renders Kong config via script ({workflow_path})")
+    elif has_anon_sed and has_svc_sed:
         record("PASS", f"Deploy workflow sed-substitutes both Kong keys ({workflow_path})")
     else:
-        missing = []
-        if not has_anon_sed: missing.append("SUPABASE_ANON_KEY")
-        if not has_svc_sed:  missing.append("SUPABASE_SERVICE_KEY")
         record("FAIL",
-               f"Deploy workflow missing sed for: {', '.join(missing)}",
-               "The deploy script must substitute all keys before restarting Kong,\n"
+               "Deploy workflow is missing Kong render step",
+               "The deploy script must render/substitute all keys before restarting Kong,\n"
                "otherwise key-auth rejects all Supabase REST/storage requests.")
 
 
@@ -696,7 +696,7 @@ def main() -> int:
 
     section("Kong / API Gateway")
     check_kong_template_has_placeholders()
-    check_ci_kong_sed_substitution()
+    check_ci_kong_render_step()
     check_ci_kong_force_recreate()
     check_kong_key_auth_enabled()
 

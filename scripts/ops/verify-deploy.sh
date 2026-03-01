@@ -31,6 +31,19 @@ if grep -q '\${SUPABASE_ANON_KEY}\|\${SUPABASE_SERVICE_KEY}' supabase/kong.yml; 
 fi
 pass "kong.yml has resolved Supabase keys"
 
+extract_kong_key() {
+  local consumer="$1"
+  local line
+  line="$(
+    awk -v target="$consumer" '
+      $0 ~ "username:[[:space:]]*" target "$" { in_consumer=1; next }
+      in_consumer && $0 ~ "username:" { in_consumer=0 }
+      in_consumer && $0 ~ "key:[[:space:]]*" { sub(/.*key:[[:space:]]*/, "", $0); print $0; exit }
+    ' supabase/kong.yml
+  )"
+  printf '%s' "$line" | tr -d '\r'
+}
+
 require_service_running() {
   local service="$1"
   local container_id
@@ -78,7 +91,7 @@ require_env_key() {
   local value
   value="$(grep -E "^${key}=" .env | head -n1 | cut -d= -f2- || true)"
   [[ -n "$value" ]] || fail "missing ${key} in ${COMPOSE_DIR}/.env"
-  printf '%s' "$value"
+  printf '%s' "$value" | tr -d '\r'
 }
 
 echo "Checking required services are running/healthy..."
@@ -106,6 +119,14 @@ check_http_status "https://${STUDIO_DOMAIN}" 200 302 401
 
 echo "Checking Supabase key-auth probes..."
 ANON_KEY="$(require_env_key ANON_KEY)"
+SERVICE_ROLE_KEY="$(require_env_key SERVICE_ROLE_KEY)"
+KONG_ANON_KEY="$(extract_kong_key anon)"
+KONG_SERVICE_ROLE_KEY="$(extract_kong_key service_role)"
+[[ -n "$KONG_ANON_KEY" && -n "$KONG_SERVICE_ROLE_KEY" ]] || fail "could not extract anon/service_role keys from supabase/kong.yml"
+[[ "$KONG_ANON_KEY" == "$ANON_KEY" ]] || fail "kong.yml anon key does not match .env ANON_KEY"
+[[ "$KONG_SERVICE_ROLE_KEY" == "$SERVICE_ROLE_KEY" ]] || fail "kong.yml service_role key does not match .env SERVICE_ROLE_KEY"
+pass "kong.yml keys match deploy .env keys"
+
 REST_WITH_KEY_STATUS="$(curl -sS -o /tmp/rest_openapi_with_key.json -w '%{http_code}' \
   -H "apikey: ${ANON_KEY}" \
   -H "Accept: application/openapi+json" \

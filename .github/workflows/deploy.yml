@@ -135,22 +135,10 @@ jobs:
             docker tag ghcr.io/christofboermel/lebensordner/nextjs:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/nextjs:latest
             docker tag ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/worker:latest
 
-            # Resolve Kong config: substitute ANON_KEY and SERVICE_ROLE_KEY from .env
-            ANON=$(grep '^ANON_KEY=' .env | cut -d= -f2-)
-            SVC=$(grep '^SERVICE_ROLE_KEY=' .env | cut -d= -f2-)
-            if [ -z "$ANON" ] || [ -z "$SVC" ]; then
-              echo "Missing ANON_KEY or SERVICE_ROLE_KEY in deploy/.env"
-              exit 1
-            fi
-            git show HEAD:deploy/supabase/kong.yml > /tmp/kong-template.yml
-            sed -e "s|\${SUPABASE_ANON_KEY}|$ANON|g" \
-                -e "s|\${SUPABASE_SERVICE_KEY}|$SVC|g" \
-                /tmp/kong-template.yml > /tmp/kong-resolved.yml
-            cp /tmp/kong-resolved.yml supabase/kong.yml
-            if grep -q '\${SUPABASE_ANON_KEY}\|\${SUPABASE_SERVICE_KEY}' supabase/kong.yml; then
-              echo "Kong config still contains unresolved SUPABASE placeholders"
-              exit 1
-            fi
+            # Resolve Kong config from tracked template + deploy .env
+            bash /opt/lebensordner/app/scripts/ops/render-kong-config.sh \
+              /opt/lebensordner/app/deploy/.env \
+              /opt/lebensordner/app/deploy/supabase/kong.yml
 
             # Kong (db-less) only reads declarative config at startup.
             # Force recreate so updated key-auth credentials are actually loaded.

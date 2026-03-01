@@ -46,15 +46,10 @@ Expected:
 
 ```bash
 cd /opt/lebensordner/app/deploy
-# Resolve Kong key-auth placeholders from deploy .env before recreate
-ANON=$(grep '^ANON_KEY=' .env | cut -d= -f2-)
-SVC=$(grep '^SERVICE_ROLE_KEY=' .env | cut -d= -f2-)
-git show HEAD:deploy/supabase/kong.yml > /tmp/kong-template.yml
-sed -e "s|\${SUPABASE_ANON_KEY}|$ANON|g" \
-    -e "s|\${SUPABASE_SERVICE_KEY}|$SVC|g" \
-    /tmp/kong-template.yml > /tmp/kong-resolved.yml
-cp /tmp/kong-resolved.yml supabase/kong.yml
-grep -q '\${SUPABASE_ANON_KEY}\|\${SUPABASE_SERVICE_KEY}' supabase/kong.yml && echo "ERROR: unresolved placeholders" && exit 1
+# Render Kong config from tracked template + deploy .env
+bash /opt/lebensordner/app/scripts/ops/render-kong-config.sh \
+  /opt/lebensordner/app/deploy/.env \
+  /opt/lebensordner/app/deploy/supabase/kong.yml
 
 # Kong reads declarative config on startup only. Recreate to load new keys.
 docker compose up -d --no-deps --force-recreate kong
