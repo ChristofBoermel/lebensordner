@@ -99,9 +99,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: Production
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false
     steps:
       - uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262  # v1.0.3
         with:
