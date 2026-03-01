@@ -39,13 +39,7 @@ function PreviewEditDialog({
   medication: Medication | null
   onSave: (med: Medication) => void
 }) {
-  const [form, setForm] = useState<Medication>({ wirkstoff: '' })
-
-  useEffect(() => {
-    if (open && medication) {
-      setForm({ ...medication })
-    }
-  }, [medication, open])
+  const [form, setForm] = useState<Medication>(() => (medication ? { ...medication } : { wirkstoff: '' }))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -192,6 +186,7 @@ export function BmpScanDialog({
   const [scannedMedications, setScannedMedications] = useState<Medication[]>([])
   const [editingPreviewMed, setEditingPreviewMed] = useState<{ med: Medication; index: number } | null>(null)
   const [isPreviewEditOpen, setIsPreviewEditOpen] = useState(false)
+  const [previewEditOpenCycle, setPreviewEditOpenCycle] = useState(0)
   const [cameraError, setCameraError] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -394,6 +389,7 @@ export function BmpScanDialog({
                 size="icon"
                 className="flex-shrink-0"
                 onClick={() => {
+                  setPreviewEditOpenCycle((prev) => prev + 1)
                   setEditingPreviewMed({ med, index })
                   setIsPreviewEditOpen(true)
                 }}
@@ -527,6 +523,7 @@ export function BmpScanDialog({
       </Dialog>
 
       <PreviewEditDialog
+        key={`preview-edit-${previewEditOpenCycle}-${editingPreviewMed?.index ?? 'none'}`}
         open={isPreviewEditOpen}
         onOpenChange={setIsPreviewEditOpen}
         medication={editingPreviewMed?.med ?? null}

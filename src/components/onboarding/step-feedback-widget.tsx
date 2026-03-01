@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -36,25 +36,6 @@ export function StepFeedbackWidget({
 }: StepFeedbackWidgetProps) {
   const [selectedRating, setSelectedRating] = useState<number | null>(null)
   const [comments, setComments] = useState('')
-  const firstButtonRef = useRef<HTMLButtonElement>(null)
-
-  // Focus first rating button when dialog opens
-  useEffect(() => {
-    if (open && firstButtonRef.current) {
-      const timer = setTimeout(() => {
-        firstButtonRef.current?.focus()
-      }, 100)
-      return () => clearTimeout(timer)
-    }
-  }, [open])
-
-  // Reset state when dialog opens
-  useEffect(() => {
-    if (open) {
-      setSelectedRating(null)
-      setComments('')
-    }
-  }, [open])
 
   const handleSubmit = () => {
     if (selectedRating === null) return
@@ -98,7 +79,7 @@ export function StepFeedbackWidget({
             {RATING_OPTIONS.map((option, index) => (
               <button
                 key={option.value}
-                ref={index === 0 ? firstButtonRef : undefined}
+                autoFocus={index === 0}
                 type="button"
                 role="radio"
                 aria-checked={selectedRating === option.value}

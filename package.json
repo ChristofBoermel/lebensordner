@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --max-warnings=0",
     "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:ui": "vitest --ui",
@@ -16,7 +16,11 @@
     "encrypt-data": "tsx scripts/encrypt-existing-data.ts",
     "qa": "python scripts/ops/pre-deploy-qa.py",
     "qa:strict": "python scripts/ops/pre-deploy-qa.py --strict",
-    "qa:fast": "python scripts/ops/pre-deploy-qa.py --no-tsc"
+    "qa:fast": "python scripts/ops/pre-deploy-qa.py --no-tsc",
+    "cicd-audit": "python scripts/ops/cicd-audit.py",
+    "cicd-audit:strict": "python scripts/ops/cicd-audit.py --strict",
+    "cicd-audit:hints": "python scripts/ops/cicd-audit.py --fix-hints",
+    "audit:agent-rules": "python scripts/ops/agent-rules-audit.py"
   },
   "keywords": [
     "lebensordner",
@@ -81,6 +85,8 @@
     "@types/jspdf": "^1.3.3",
     "@types/twilio": "^3.19.2",
     "autoprefixer": "^10.4.23",
+    "eslint": "^9.39.3",
+    "eslint-config-next": "^16.1.6",
     "jsdom": "^27.0.1",
     "msw": "^2.12.7",
     "postcss": "^8.5.6",

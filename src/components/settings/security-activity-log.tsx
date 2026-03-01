@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Shield, Download, Loader2, AlertTriangle } from 'lucide-react'
@@ -36,29 +36,29 @@ export function SecurityActivityLog() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchEvents = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const params = new URLSearchParams({ limit: '3' })
-      const res = await fetch(`/api/security/audit-log?${params.toString()}`)
-      if (!res.ok) {
-        throw new Error('Fehler beim Laden')
-      }
-
-      const data = await res.json()
-      setEvents(data.events || [])
-    } catch {
-      setError('Aktivitäten konnten nicht geladen werden.')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
   useEffect(() => {
+    async function fetchEvents() {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const params = new URLSearchParams({ limit: '3' })
+        const res = await fetch(`/api/security/audit-log?${params.toString()}`)
+        if (!res.ok) {
+          throw new Error('Fehler beim Laden')
+        }
+
+        const data = await res.json()
+        setEvents(data.events || [])
+      } catch {
+        setError('Aktivitäten konnten nicht geladen werden.')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
     fetchEvents()
-  }, [fetchEvents])
+  }, [])
 
   const handleCsvExport = () => {
     if (events.length === 0) return

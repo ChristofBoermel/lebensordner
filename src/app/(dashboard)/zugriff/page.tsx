@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { useVault } from '@/lib/vault/VaultContext'
-import { VaultUnlockModal } from '@/components/vault/VaultUnlockModal'
 import { BulkShareDialog } from '@/components/sharing/BulkShareDialog'
 import { ActiveSharesList } from '@/components/sharing/ActiveSharesList'
 import { ReceivedSharesList } from '@/components/sharing/ReceivedSharesList'
@@ -105,7 +104,6 @@ export default function ZugriffPage() {
   const [isGeneratingLink, setIsGeneratingLink] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const vaultContext = useVault()
-  const [isVaultModalOpen, setIsVaultModalOpen] = useState(false)
   const [rkShareUrl, setRkShareUrl] = useState<string | null>(null)
   const [isGeneratingRk, setIsGeneratingRk] = useState<string | null>(null)
   const [rkDialogOpen, setRkDialogOpen] = useState(false)
@@ -499,7 +497,7 @@ export default function ZugriffPage() {
       const hasEncryptedDocuments = (documents || []).some((doc) => doc.is_encrypted)
 
       if (hasEncryptedDocuments && !vaultContext.isUnlocked) {
-        setIsVaultModalOpen(true)
+        vaultContext.requestUnlock()
         return
       }
 
@@ -565,7 +563,7 @@ export default function ZugriffPage() {
 
   const handleGenerateRelationshipKey = async (person: TrustedPerson) => {
     if (!vaultContext.isUnlocked || !vaultContext.masterKey) {
-      setIsVaultModalOpen(true)
+      vaultContext.requestUnlock()
       return
     }
 
@@ -1559,7 +1557,7 @@ export default function ZugriffPage() {
               {/* Geteilte Dokumente */}
               <div className="space-y-4">
                 <h3 className="text-lg sm:text-xl font-semibold text-warmgray-900">Geteilte Dokumente</h3>
-                <ReceivedSharesList onRequestVaultUnlock={() => setIsVaultModalOpen(true)} />
+                <ReceivedSharesList />
               </div>
 
               {/* Document Viewer Modal */}
@@ -1888,15 +1886,14 @@ export default function ZugriffPage() {
         </div>
       )}
 
-      <VaultUnlockModal isOpen={isVaultModalOpen} onClose={() => setIsVaultModalOpen(false)} />
-
       <BulkShareDialog
+        key={isBulkShareOpen ? 'open' : 'closed'}
         documents={sharingDocuments}
         trustedPersons={trustedPersons.filter(tp => tp.linked_user_id !== null)}
+        userId={currentUserId}
         isOpen={isBulkShareOpen}
         onClose={() => setIsBulkShareOpen(false)}
         onSuccess={() => { setIsBulkShareOpen(false); setSharesVersion(v => v + 1) }}
-        onRequestVaultUnlock={() => setIsVaultModalOpen(true)}
       />
     </div>
     </TooltipProvider>

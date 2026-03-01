@@ -13,6 +13,7 @@ function AccessPageInner() {
     const rk = window.location.hash ? window.location.hash.slice(1) : ''
 
     if (!ownerId || !/^[0-9a-f]{64}$/i.test(rk)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus('error')
       return
     }

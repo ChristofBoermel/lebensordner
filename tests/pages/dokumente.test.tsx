@@ -124,6 +124,10 @@ vi.mock('@/lib/vault/VaultContext', () => ({
     isSetUp: false,
     isUnlocked: true,
     masterKey: null,
+    requestUnlock: vi.fn(),
+    requestSetup: vi.fn(),
+    closeSetup: vi.fn(),
+    isSetupRequested: false,
     setup: vi.fn(),
     unlock: vi.fn(),
     unlockWithRecovery: vi.fn(),
@@ -968,7 +972,7 @@ vi.mock('@/components/sharing/BulkShareDialog', () => ({
     trustedPersons: Array<{ id: string; name: string; linked_user_id: string | null }>
     onClose: () => void
     onSuccess: () => void
-    onRequestVaultUnlock: () => void
+    userId: string | null
   }) => {
     bulkShareDialogProps = props as unknown as Record<string, unknown>
     return (

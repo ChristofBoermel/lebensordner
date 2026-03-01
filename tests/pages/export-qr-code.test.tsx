@@ -26,15 +26,15 @@ vi.mock('@/lib/vault/VaultContext', () => ({
     isSetUp: false,
     isUnlocked: false,
     masterKey: null,
+    requestUnlock: vi.fn(),
+    requestSetup: vi.fn(),
+    closeSetup: vi.fn(),
+    isSetupRequested: false,
     setup: vi.fn(),
     unlock: vi.fn(),
     unlockWithRecovery: vi.fn(),
     lock: vi.fn(),
   }),
-}))
-
-vi.mock('@/components/vault/VaultUnlockModal', () => ({
-  VaultUnlockModal: () => null,
 }))
 
 vi.mock('qrcode', () => ({

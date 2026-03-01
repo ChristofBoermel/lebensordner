@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -19,41 +19,39 @@ import { createClient } from '@/lib/supabase/client'
 interface ShareDocumentDialogProps {
   document: { id: string; title: string; wrapped_dek: string | null }
   trustedPersons: Array<{ id: string; name: string; linked_user_id: string | null }>
+  userId: string | null
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
-  onRequestVaultUnlock: () => void
 }
 
 export function ShareDocumentDialog({
   document,
   trustedPersons,
+  userId,
   isOpen,
   onClose,
   onSuccess,
-  onRequestVaultUnlock,
 }: ShareDocumentDialogProps) {
-  const { isUnlocked, masterKey } = useVault()
+  const { isUnlocked, masterKey, requestUnlock } = useVault()
   const [selectedPersonId, setSelectedPersonId] = useState('')
   const [permission, setPermission] = useState<'view' | 'download'>('view')
   const [duration, setDuration] = useState<'7' | '30' | '90' | 'none'>('7')
   const [isSharing, setIsSharing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   const supabase = createClient()
+  const hasUserId = Boolean(userId)
 
   const registeredPersons = trustedPersons.filter(tp => tp.linked_user_id !== null)
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setCurrentUserId(user.id)
-    })
-  }, [supabase])
-
   const handleShare = async () => {
-    if (!isUnlocked || !masterKey || !selectedPersonId || !currentUserId) return
+    if (!userId) {
+      setError('Ihr Benutzerkonto wird noch geladen. Bitte versuchen Sie es gleich erneut.')
+      return
+    }
+    if (!isUnlocked || !masterKey || !selectedPersonId) return
     setIsSharing(true)
     setError(null)
 
@@ -73,7 +71,7 @@ export function ShareDocumentDialog({
       const { data: rkData, error: rkError } = await supabase
         .from('document_relationship_keys')
         .select('wrapped_rk')
-        .eq('owner_id', currentUserId)
+        .eq('owner_id', userId)
         .eq('trusted_person_id', selectedPersonId)
         .single()
 
@@ -135,7 +133,7 @@ export function ShareDocumentDialog({
             Dokument teilen
           </DialogTitle>
           <DialogDescription>
-            Teilen Sie „{document.title}" mit einer Vertrauensperson.
+            Teilen Sie „{document.title}&quot; mit einer Vertrauensperson.
           </DialogDescription>
         </DialogHeader>
 
@@ -215,12 +213,18 @@ export function ShareDocumentDialog({
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={onRequestVaultUnlock}
+                onClick={() => requestUnlock()}
                 className="flex-shrink-0"
               >
                 Tresor entsperren
               </Button>
             </div>
+          )}
+
+          {!hasUserId && (
+            <p className="text-sm text-amber-700">
+              Benutzer-ID wird geladen. Teilen ist gleich verfügbar.
+            </p>
           )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -236,7 +240,7 @@ export function ShareDocumentDialog({
               </Button>
               <Button
                 onClick={handleShare}
-                disabled={!selectedPersonId || !isUnlocked || isSharing}
+                disabled={!selectedPersonId || !isUnlocked || !hasUserId || isSharing}
               >
                 {isSharing ? (
                   <>

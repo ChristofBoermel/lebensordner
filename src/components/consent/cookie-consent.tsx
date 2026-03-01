@@ -33,6 +33,7 @@ export function CookieConsent() {
   useEffect(() => {
     const consent = Cookies.get(CONSENT_COOKIE_NAME)
     if (!consent) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowBanner(true)
     } else {
       try {

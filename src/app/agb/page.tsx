@@ -32,7 +32,7 @@ export default function AGBPage() {
             <h2 className="text-xl font-semibold text-warmgray-900 mt-8 mb-4">§ 1 Geltungsbereich</h2>
             <p className="text-warmgray-700 mb-4">
               Diese Allgemeinen Geschäftsbedingungen gelten für die Nutzung der Plattform 
-              „Lebensordner Digital" (nachfolgend „Dienst"). Mit der Registrierung akzeptieren 
+              „Lebensordner Digital&quot; (nachfolgend „Dienst&quot;). Mit der Registrierung akzeptieren 
               Sie diese Bedingungen.
             </p>
 

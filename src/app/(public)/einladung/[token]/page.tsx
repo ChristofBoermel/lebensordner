@@ -176,7 +176,7 @@ export default function InvitationPage() {
                   <span className="font-medium text-warmgray-900">Was bedeutet das?</span>
                 </div>
                 <ul className="text-sm text-warmgray-600 space-y-2">
-                  <li>• Sie werden als "{invitation?.relationship}" eingetragen</li>
+                  <li>• Sie werden als &quot;{invitation?.relationship}&quot; eingetragen</li>
                   <li>• Zugriffslevel: {invitation?.access_level === 'immediate' ? 'Sofort' : invitation?.access_level === 'emergency' ? 'Im Notfall' : 'Nach Bestätigung'}</li>
                   <li>• Sie können im Notfall auf wichtige Dokumente zugreifen</li>
                 </ul>

@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/dialog'
 import { Loader2, CheckCircle2, Shield, Smartphone, Copy, Check } from 'lucide-react'
 import QRCode from 'qrcode'
-import { useEffect } from 'react'
 
 interface TwoFactorSetupProps {
   isOpen: boolean
@@ -24,25 +23,15 @@ interface TwoFactorSetupProps {
 }
 
 export function TwoFactorSetup({ isOpen, onClose, isEnabled, onStatusChange }: TwoFactorSetupProps) {
-  const [step, setStep] = useState<'intro' | 'setup' | 'verify' | 'success' | 'disable'>('intro')
+  const [step, setStep] = useState<'intro' | 'setup' | 'verify' | 'success' | 'disable'>(
+    isEnabled ? 'disable' : 'intro'
+  )
   const [secret, setSecret] = useState('')
   const [qrCodeUrl, setQrCodeUrl] = useState('')
   const [verifyCode, setVerifyCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [copied, setCopied] = useState(false)
-
-  // Only reset step when dialog OPENS, not when isEnabled changes
-  useEffect(() => {
-    if (isOpen) {
-      // Don't change step if we're in the middle of a flow (success step)
-      if (step !== 'success') {
-        setStep(isEnabled ? 'disable' : 'intro')
-      }
-      setVerifyCode('')
-      setError(null)
-    }
-  }, [isOpen]) // Removed isEnabled from dependencies
 
   const generateSecret = async () => {
     setIsLoading(true)
@@ -178,7 +167,7 @@ export function TwoFactorSetup({ isOpen, onClose, isEnabled, onStatusChange }: T
               <div className="flex items-start gap-3 p-4 rounded-lg bg-sage-50 border border-sage-200">
                 <Smartphone className="w-5 h-5 text-sage-600 mt-0.5" />
                 <div>
-                  <p className="font-medium text-warmgray-900">So funktioniert's</p>
+                  <p className="font-medium text-warmgray-900">So funktioniert&apos;s</p>
                   <p className="text-sm text-warmgray-600 mt-1">
                     Sie benötigen eine Authenticator-App wie Google Authenticator, 
                     Microsoft Authenticator oder Authy auf Ihrem Smartphone.

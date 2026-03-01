@@ -1,10 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Children, createContext, isValidElement, use, useState, type ReactNode } from 'react'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -13,119 +12,176 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 
+interface ConsentModalContextValue {
+  isLoading: boolean
+  isConfirmed: boolean
+  setIsConfirmed: (value: boolean) => void
+  onAccept: () => Promise<void>
+  onDecline: (() => void) | undefined
+  hasCheckbox: boolean
+}
+
+const ConsentModalContext = createContext<ConsentModalContextValue | null>(null)
+
+function useConsentModalContext() {
+  const context = use(ConsentModalContext)
+  if (!context) {
+    throw new Error('ConsentModal compound components must be used within ConsentModal')
+  }
+  return context
+}
+
 export interface ConsentModalProps {
   isOpen: boolean
   onAccept: () => Promise<void>
   onDecline?: () => void
-  title: string
-  description?: string
-  content?: ReactNode
-  acceptButtonText?: string
-  declineButtonText?: string
-  requireCheckbox?: boolean
-  checkboxLabel?: string
-  canDismiss?: boolean
-  type?: string
   testId?: string
+  children: ReactNode
 }
 
-export function ConsentModal({
+interface ConsentModalHeaderProps {
+  children: ReactNode
+}
+
+interface ConsentModalBodyProps {
+  children: ReactNode
+}
+
+interface ConsentModalCheckboxProps {
+  label: string
+}
+
+type ConsentModalComponent = ((props: ConsentModalProps) => ReactNode) & {
+  Header: (props: ConsentModalHeaderProps) => ReactNode
+  Body: (props: ConsentModalBodyProps) => ReactNode
+  Checkbox: (props: ConsentModalCheckboxProps) => ReactNode
+  Footer: () => ReactNode
+}
+
+const ConsentModalRoot = ({
   isOpen,
   onAccept,
   onDecline,
-  title,
-  description,
-  content,
-  acceptButtonText = 'Ich stimme zu',
-  declineButtonText = 'Ablehnen',
-  requireCheckbox = false,
-  checkboxLabel,
-  canDismiss = true,
-  type,
   testId,
-}: ConsentModalProps) {
+  children,
+}: ConsentModalProps) => {
   const [isLoading, setIsLoading] = useState(false)
   const [isConfirmed, setIsConfirmed] = useState(false)
+  const hasCheckbox = containsConsentCheckbox(children)
+  const isDismissEnabled = Boolean(onDecline)
 
-  const handleAccept = useCallback(async () => {
+  async function handleAccept() {
     setIsLoading(true)
     try {
       await onAccept()
     } finally {
       setIsLoading(false)
     }
-  }, [onAccept])
-
-  useEffect(() => {
-    if (!isOpen) {
-      setIsConfirmed(false)
-      setIsLoading(false)
-    }
-  }, [isOpen])
+  }
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      if (!canDismiss) return
-      if (onDecline) onDecline()
+    if (!nextOpen && onDecline) {
+      onDecline()
     }
   }
 
-  const isAcceptDisabled = isLoading || (requireCheckbox && !isConfirmed)
+  return (
+    <ConsentModalContext value={{ isLoading, isConfirmed, setIsConfirmed, onAccept: handleAccept, onDecline, hasCheckbox }}>
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+        <DialogContent
+          data-testid={testId ?? 'consent-modal'}
+          showCloseButton={isDismissEnabled}
+          onEscapeKeyDown={(event) => {
+            if (!isDismissEnabled) {
+              event.preventDefault()
+            }
+          }}
+          onPointerDownOutside={(event) => {
+            if (!isDismissEnabled) {
+              event.preventDefault()
+            }
+          }}
+        >
+          {children}
+        </DialogContent>
+      </Dialog>
+    </ConsentModalContext>
+  )
+}
+
+function ConsentModalHeader({ children }: ConsentModalHeaderProps) {
+  return (
+    <DialogHeader>
+      <DialogTitle>{children}</DialogTitle>
+    </DialogHeader>
+  )
+}
+
+function ConsentModalBody({ children }: ConsentModalBodyProps) {
+  return <div className="space-y-3 text-sm text-warmgray-600">{children}</div>
+}
+
+function ConsentModalCheckbox({ label }: ConsentModalCheckboxProps) {
+  const { isConfirmed, setIsConfirmed } = useConsentModalContext()
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className={canDismiss ? undefined : '[&>button]:hidden'}
-        data-testid={testId ?? (type ? `consent-modal-${type}` : 'consent-modal')}
-      >
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description
-            ? <DialogDescription>{description}</DialogDescription>
-            : <DialogDescription className="sr-only">{title}</DialogDescription>}
-        </DialogHeader>
-
-        {content ? (
-          <div className="space-y-3 text-sm text-warmgray-600">
-            {content}
-          </div>
-        ) : null}
-
-        {requireCheckbox && checkboxLabel ? (
-          <div className="rounded-lg border border-warmgray-200 bg-warmgray-50 p-3">
-            <div className="flex items-start gap-3">
-              <input
-                id="consent_confirm"
-                type="checkbox"
-                checked={isConfirmed}
-                onChange={(event) => setIsConfirmed(event.target.checked)}
-                className="w-4 h-4 rounded border border-warmgray-400 bg-white text-sage-600 mt-0.5"
-              />
-              <Label htmlFor="consent_confirm" className="text-sm text-warmgray-700">
-                {checkboxLabel}
-              </Label>
-            </div>
-          </div>
-        ) : null}
-
-        <DialogFooter>
-          {onDecline ? (
-            <Button variant="outline" onClick={onDecline} disabled={isLoading}>
-              {declineButtonText}
-            </Button>
-          ) : null}
-          <Button onClick={handleAccept} disabled={isAcceptDisabled}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Wird gespeichert...
-              </>
-            ) : (
-              acceptButtonText
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <div className="rounded-lg border border-warmgray-200 bg-warmgray-50 p-3">
+      <div className="flex items-start gap-3">
+        <input
+          id="consent_confirm"
+          type="checkbox"
+          checked={isConfirmed}
+          onChange={(event) => setIsConfirmed(event.target.checked)}
+          className="w-4 h-4 rounded border border-warmgray-400 bg-white text-sage-600 mt-0.5"
+        />
+        <Label htmlFor="consent_confirm" className="text-sm text-warmgray-700">
+          {label}
+        </Label>
+      </div>
+    </div>
   )
+}
+
+function ConsentModalFooter() {
+  const { isLoading, isConfirmed, onAccept, onDecline, hasCheckbox } = useConsentModalContext()
+  const isAcceptDisabled = isLoading || (hasCheckbox && !isConfirmed)
+
+  return (
+    <DialogFooter>
+      {onDecline ? (
+        <Button variant="outline" onClick={onDecline} disabled={isLoading}>
+          Ablehnen
+        </Button>
+      ) : null}
+      <Button onClick={onAccept} disabled={isAcceptDisabled}>
+        {isLoading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Wird gespeichert...
+          </>
+        ) : (
+          'Ich stimme zu'
+        )}
+      </Button>
+    </DialogFooter>
+  )
+}
+
+export const ConsentModal = ConsentModalRoot as ConsentModalComponent
+ConsentModal.Header = ConsentModalHeader
+ConsentModal.Body = ConsentModalBody
+ConsentModal.Checkbox = ConsentModalCheckbox
+ConsentModal.Footer = ConsentModalFooter
+
+function containsConsentCheckbox(node: ReactNode): boolean {
+  return Children.toArray(node).some((child) => {
+    if (!isValidElement(child)) {
+      return false
+    }
+    if (child.type === ConsentModalCheckbox) {
+      return true
+    }
+    const props = child.props as { children?: ReactNode }
+    return containsConsentCheckbox(props.children)
+  })
 }

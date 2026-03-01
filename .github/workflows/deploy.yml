@@ -1,0 +1,198 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  build-nextjs:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: Production
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          ref: ${{ env.TARGET_SHA }}
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ghcr.io/christofboermel/lebensordner/nextjs:latest
+            ghcr.io/christofboermel/lebensordner/nextjs:${{ env.TARGET_SHA }}
+          cache-from: |
+            type=gha,scope=nextjs
+            type=registry,ref=ghcr.io/christofboermel/lebensordner/nextjs:buildcache
+          cache-to: type=gha,mode=max,scope=nextjs
+          build-args: |
+            SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+            NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+            NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+          secrets: |
+            encryption_key=${{ secrets.ENCRYPTION_KEY }}
+            cron_secret=${{ secrets.CRON_SECRET }}
+
+  build-worker:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: Production
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          ref: ${{ env.TARGET_SHA }}
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
+        with:
+          context: .
+          file: deploy/Dockerfile.worker
+          push: true
+          tags: |
+            ghcr.io/christofboermel/lebensordner/worker:latest
+            ghcr.io/christofboermel/lebensordner/worker:${{ env.TARGET_SHA }}
+          cache-from: |
+            type=gha,scope=worker
+            type=registry,ref=ghcr.io/christofboermel/lebensordner/worker:buildcache
+          cache-to: type=gha,mode=max,scope=worker
+
+  deploy:
+    needs: [build-nextjs, build-worker]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: Production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262  # v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: GITHUB_SHA
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            cd /opt/lebensordner/app
+
+            if ! git diff --quiet || ! git diff --cached --quiet; then
+              echo "Server repo has tracked local changes; stashing before deploy."
+              git status --short
+              git stash push -m "pre-deploy-${GITHUB_SHA:0:8}-$(date +%Y%m%d%H%M%S)"
+              echo "Created stash entry:"
+              git stash list --max-count=1
+            fi
+
+            git fetch --prune origin main
+            git checkout main
+            git pull --ff-only origin main
+
+            ACTUAL_SHA=$(git rev-parse HEAD)
+            if [ "$ACTUAL_SHA" != "$GITHUB_SHA" ]; then
+              echo "Server commit mismatch. expected=${GITHUB_SHA} actual=${ACTUAL_SHA}"
+              exit 1
+            fi
+
+            cd /opt/lebensordner/app/deploy
+            docker pull ghcr.io/christofboermel/lebensordner/nextjs:${GITHUB_SHA}
+            docker pull ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA}
+            docker tag ghcr.io/christofboermel/lebensordner/nextjs:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/nextjs:latest
+            docker tag ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/worker:latest
+
+            # Resolve Kong config: substitute ANON_KEY and SERVICE_ROLE_KEY from .env
+            ANON=$(grep '^ANON_KEY=' .env | cut -d= -f2-)
+            SVC=$(grep '^SERVICE_ROLE_KEY=' .env | cut -d= -f2-)
+            if [ -z "$ANON" ] || [ -z "$SVC" ]; then
+              echo "Missing ANON_KEY or SERVICE_ROLE_KEY in deploy/.env"
+              exit 1
+            fi
+            git show HEAD:deploy/supabase/kong.yml > /tmp/kong-template.yml
+            sed -e "s|\${SUPABASE_ANON_KEY}|$ANON|g" \
+                -e "s|\${SUPABASE_SERVICE_KEY}|$SVC|g" \
+                /tmp/kong-template.yml > /tmp/kong-resolved.yml
+            cp /tmp/kong-resolved.yml supabase/kong.yml
+            if grep -q '\${SUPABASE_ANON_KEY}\|\${SUPABASE_SERVICE_KEY}' supabase/kong.yml; then
+              echo "Kong config still contains unresolved SUPABASE placeholders"
+              exit 1
+            fi
+
+            # Kong (db-less) only reads declarative config at startup.
+            # Force recreate so updated key-auth credentials are actually loaded.
+            docker compose up -d --no-deps --force-recreate kong
+            docker compose up -d --remove-orphans
+        env:
+          GITHUB_SHA: ${{ env.TARGET_SHA }}
+
+  smoke-check:
+    needs: deploy
+    if: always() && needs.deploy.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: Production
+    steps:
+      - name: Wait for containers to settle
+        run: sleep 45
+
+      - name: Check containers and log result
+        if: always()
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262  # v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: GITHUB_SHA
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+            VERIFY_STATUS=success
+
+            if ! bash /opt/lebensordner/app/scripts/ops/verify-deploy.sh lebensordner.org /opt/lebensordner/app/deploy; then
+              VERIFY_STATUS=failure
+              echo "Post-deploy verification failed."
+            fi
+
+            mkdir -p /var/log/lebensordner
+            TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            echo "$TS sha=${GITHUB_SHA:0:8} status=${VERIFY_STATUS}" >> /var/log/lebensordner/deploy.log
+            [ "$VERIFY_STATUS" = "failure" ] && exit 1 || exit 0
+        env:
+          GITHUB_SHA: ${{ env.TARGET_SHA }}

@@ -1,4 +1,4 @@
-import { getRedis } from '@/lib/redis/client'
+import { getRedis } from '../redis/client'
 
 // --- Interfaces ---
 

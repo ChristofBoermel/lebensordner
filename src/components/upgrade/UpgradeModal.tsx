@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -75,15 +74,6 @@ export function UpgradeModal({
   const config = featureConfig[feature]
   const Icon = config.icon
 
-  useEffect(() => {
-    if (isOpen) {
-      capture(ANALYTICS_EVENTS.UPGRADE_MODAL_SHOWN, {
-        feature_type: feature,
-        current_limit: currentLimit,
-      })
-    }
-  }, [isOpen, feature, currentLimit, capture])
-
   const handleClose = () => {
     capture(ANALYTICS_EVENTS.UPGRADE_MODAL_DISMISSED, {
       feature_type: feature,
@@ -99,7 +89,15 @@ export function UpgradeModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        onOpenAutoFocus={() => {
+          capture(ANALYTICS_EVENTS.UPGRADE_MODAL_SHOWN, {
+            feature_type: feature,
+            current_limit: currentLimit,
+          })
+        }}
+      >
         <DialogHeader className="text-center sm:text-center">
           <div className="mx-auto mb-4 text-6xl">
             {config.emoji}

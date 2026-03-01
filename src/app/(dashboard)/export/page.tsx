@@ -31,7 +31,6 @@ import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import QRCode from 'qrcode'
 import { useVault } from '@/lib/vault/VaultContext'
-import { VaultUnlockModal } from '@/components/vault/VaultUnlockModal'
 import type { Medication } from '@/types/medication'
 
 interface DocumentRow {
@@ -111,7 +110,6 @@ export default function ExportPage() {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null)
   const [isGeneratingQR, setIsGeneratingQR] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null)
-  const [isVaultModalOpen, setIsVaultModalOpen] = useState(false)
   const vaultContext = useVault()
 
   const supabase = createClient()
@@ -551,7 +549,7 @@ export default function ExportPage() {
     const failedFiles: string[] = []
     const hasEncryptedDocs = documents.some(d => d.is_encrypted)
     if (hasEncryptedDocs && !vaultContext.isUnlocked) {
-      setIsVaultModalOpen(true)
+      vaultContext.requestUnlock()
       setIsBackingUp(false)
       return
     }
@@ -1031,7 +1029,7 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
                 <div>
                   <p className="font-medium text-warmgray-900 text-sm">QR-Code drucken</p>
                   <p className="text-xs text-warmgray-500 mt-0.5">
-                    Rechtsklick auf den QR-Code → "Bild speichern" → Ausdrucken in Originalgröße
+                    Rechtsklick auf den QR-Code → &quot;Bild speichern&quot; → Ausdrucken in Originalgröße
                   </p>
                 </div>
               </div>
@@ -1215,11 +1213,6 @@ Bewahren Sie es sicher auf und löschen Sie es nach dem Import.
           </div>
         </CardContent>
       </Card>
-
-      <VaultUnlockModal
-        isOpen={isVaultModalOpen}
-        onClose={() => setIsVaultModalOpen(false)}
-      />
     </div>
   )
 }

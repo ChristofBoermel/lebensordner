@@ -1,17 +1,13 @@
-name: CI/CD
+name: CI
 
 on:
   push:
     branches: [main]
     paths-ignore:
       - 'docs/**'
-      - '*.md'
-      - '.claude/**'
   pull_request:
     paths-ignore:
       - 'docs/**'
-      - '*.md'
-      - '.claude/**'
   workflow_dispatch:
     inputs:
       run_mode:
@@ -24,28 +20,67 @@ on:
           - full
 
 concurrency:
-  group: ci-cd-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  unit-tests:
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_mode == 'full'
-    runs-on: ubuntu-latest
+  agent-rule-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - run: python scripts/ops/agent-rules-audit.py
+
+  lint:
+    needs: [agent-rule-guard]
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_mode == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
-          node-version: '20'
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
+  type-check:
+    needs: [agent-rule-guard]
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_mode == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run type-check
+
+  unit-tests:
+    needs: [agent-rule-guard]
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_mode == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: '22'
           cache: 'npm'
       - run: npm ci
       - run: npm run test
+      - run: python scripts/ops/pre-deploy-qa.py --no-tsc
 
   e2e-tests:
-    runs-on: ubuntu-latest
+    needs: [agent-rule-guard]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment: Production
     services:
       redis:
@@ -58,25 +93,25 @@ jobs:
           --health-timeout 3s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       - run: npm ci
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-node20-${{ hashFiles('package-lock.json') }}
+          key: playwright-chromium-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
           restore-keys: playwright-chromium-
       - run: npx playwright install --with-deps chromium
         if: steps.playwright-cache.outputs.cache-hit != 'true'
       - run: npx playwright install-deps chromium
         if: steps.playwright-cache.outputs.cache-hit == 'true'
       - name: Cache Next.js build
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: .next/cache
           key: nextjs-e2e-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.js', 'tsconfig.json') }}
@@ -123,164 +158,3 @@ jobs:
           E2E_CONSENTED_PASSWORD: ${{ secrets.E2E_CONSENTED_PASSWORD }}
           E2E_OUTDATED_POLICY_EMAIL: ${{ secrets.E2E_OUTDATED_POLICY_EMAIL }}
           E2E_OUTDATED_POLICY_PASSWORD: ${{ secrets.E2E_OUTDATED_POLICY_PASSWORD }}
-
-  build-nextjs:
-    needs: unit-tests
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_mode == 'full'))
-    runs-on: ubuntu-latest
-    environment: Production
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: |
-            ghcr.io/christofboermel/lebensordner/nextjs:latest
-            ghcr.io/christofboermel/lebensordner/nextjs:${{ github.sha }}
-          cache-from: |
-            type=gha,scope=nextjs
-            type=registry,ref=ghcr.io/christofboermel/lebensordner/nextjs:buildcache
-          cache-to: type=gha,mode=max,scope=nextjs
-          build-args: |
-            SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-            SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
-            NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
-            NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
-            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
-          secrets: |
-            encryption_key=${{ secrets.ENCRYPTION_KEY }}
-            cron_secret=${{ secrets.CRON_SECRET }}
-
-  build-worker:
-    needs: unit-tests
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_mode == 'full'))
-    runs-on: ubuntu-latest
-    environment: Production
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: deploy/Dockerfile.worker
-          push: true
-          tags: |
-            ghcr.io/christofboermel/lebensordner/worker:latest
-            ghcr.io/christofboermel/lebensordner/worker:${{ github.sha }}
-          cache-from: |
-            type=gha,scope=worker
-            type=registry,ref=ghcr.io/christofboermel/lebensordner/worker:buildcache
-          cache-to: type=gha,mode=max,scope=worker
-
-  deploy:
-    needs: [build-nextjs, build-worker]
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_mode == 'full'))
-    runs-on: ubuntu-latest
-    environment: Production
-    steps:
-      - uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: GITHUB_SHA
-          script: |
-            set -euo pipefail
-            cd /opt/lebensordner/app
-
-            if ! git diff --quiet || ! git diff --cached --quiet; then
-              echo "Server repo has tracked local changes; stashing before deploy."
-              git status --short
-              git stash push -m "pre-deploy-${GITHUB_SHA:0:8}-$(date +%Y%m%d%H%M%S)"
-              echo "Created stash entry:"
-              git stash list --max-count=1
-            fi
-
-            git fetch --prune origin main
-            git checkout main
-            git pull --ff-only origin main
-
-            ACTUAL_SHA=$(git rev-parse HEAD)
-            if [ "$ACTUAL_SHA" != "$GITHUB_SHA" ]; then
-              echo "Server commit mismatch. expected=${GITHUB_SHA} actual=${ACTUAL_SHA}"
-              exit 1
-            fi
-
-            cd /opt/lebensordner/app/deploy
-            docker pull ghcr.io/christofboermel/lebensordner/nextjs:${GITHUB_SHA}
-            docker pull ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA}
-            docker tag ghcr.io/christofboermel/lebensordner/nextjs:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/nextjs:latest
-            docker tag ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/worker:latest
-
-            # Resolve Kong config: substitute ANON_KEY and SERVICE_ROLE_KEY from .env
-            ANON=$(grep '^ANON_KEY=' .env | cut -d= -f2-)
-            SVC=$(grep '^SERVICE_ROLE_KEY=' .env | cut -d= -f2-)
-            if [ -z "$ANON" ] || [ -z "$SVC" ]; then
-              echo "Missing ANON_KEY or SERVICE_ROLE_KEY in deploy/.env"
-              exit 1
-            fi
-            git show HEAD:deploy/supabase/kong.yml > /tmp/kong-template.yml
-            sed -e "s|\${SUPABASE_ANON_KEY}|$ANON|g" \
-                -e "s|\${SUPABASE_SERVICE_KEY}|$SVC|g" \
-                /tmp/kong-template.yml > /tmp/kong-resolved.yml
-            cp /tmp/kong-resolved.yml supabase/kong.yml
-            if grep -q '\${SUPABASE_ANON_KEY}\|\${SUPABASE_SERVICE_KEY}' supabase/kong.yml; then
-              echo "Kong config still contains unresolved SUPABASE placeholders"
-              exit 1
-            fi
-
-            # Kong (db-less) only reads declarative config at startup.
-            # Force recreate so updated key-auth credentials are actually loaded.
-            docker compose up -d --no-deps --force-recreate kong
-            docker compose up -d --remove-orphans
-        env:
-          GITHUB_SHA: ${{ github.sha }}
-
-  smoke-check:
-    needs: deploy
-    if: always() && needs.deploy.result != 'skipped'
-    runs-on: ubuntu-latest
-    environment: Production
-    steps:
-      - name: Wait for containers to settle
-        run: sleep 45
-
-      - name: Check containers and log result
-        if: always()
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: GITHUB_SHA
-          script: |
-            set -euo pipefail
-            VERIFY_STATUS=success
-
-            if ! bash /opt/lebensordner/app/scripts/ops/verify-deploy.sh lebensordner.org /opt/lebensordner/app/deploy; then
-              VERIFY_STATUS=failure
-              echo "Post-deploy verification failed."
-            fi
-
-            mkdir -p /var/log/lebensordner
-            TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            echo "$TS sha=${GITHUB_SHA:0:8} status=${VERIFY_STATUS}" >> /var/log/lebensordner/deploy.log
-            [ "$VERIFY_STATUS" = "failure" ] && exit 1 || exit 0
-        env:
-          GITHUB_SHA: ${{ github.sha }}

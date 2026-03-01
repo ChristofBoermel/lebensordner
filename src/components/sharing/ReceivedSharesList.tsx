@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Loader2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,12 +36,8 @@ interface ReceivedShare {
   }
 }
 
-interface ReceivedSharesListProps {
-  onRequestVaultUnlock: () => void
-}
-
-export function ReceivedSharesList({ onRequestVaultUnlock }: ReceivedSharesListProps) {
-  const { isUnlocked, masterKey } = useVault()
+export function ReceivedSharesList() {
+  const { isUnlocked, masterKey, requestUnlock } = useVault()
   const [shares, setShares] = useState<ReceivedShare[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -54,7 +50,7 @@ export function ReceivedSharesList({ onRequestVaultUnlock }: ReceivedSharesListP
 
   const supabase = createClient()
 
-  const fetchShares = useCallback(async () => {
+  async function fetchShares() {
     setIsLoading(true)
     setError(null)
     try {
@@ -67,11 +63,11 @@ export function ReceivedSharesList({ onRequestVaultUnlock }: ReceivedSharesListP
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }
 
   useEffect(() => {
     fetchShares()
-  }, [fetchShares])
+  }, [])
 
   const getSharerName = (share: ReceivedShare): string => {
     const p = share.profiles
@@ -88,7 +84,7 @@ export function ReceivedSharesList({ onRequestVaultUnlock }: ReceivedSharesListP
 
   const decryptShare = async (share: ReceivedShare): Promise<{ url: string; type: string; fileName: string } | null> => {
     if (!isUnlocked || !masterKey) {
-      onRequestVaultUnlock()
+      requestUnlock()
       return null
     }
 

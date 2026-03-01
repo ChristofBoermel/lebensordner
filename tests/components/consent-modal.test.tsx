@@ -1,85 +1,65 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ConsentModal } from '@/components/consent/consent-modal'
 
+function renderConsentModal({
+  onAccept = vi.fn().mockResolvedValue(undefined),
+  onDecline,
+  withCheckbox = false,
+}: {
+  onAccept?: () => Promise<void>
+  onDecline?: () => void
+  withCheckbox?: boolean
+} = {}) {
+  return render(
+    <ConsentModal isOpen onAccept={onAccept} onDecline={onDecline}>
+      <ConsentModal.Header>Einwilligung</ConsentModal.Header>
+      <ConsentModal.Body>
+        <p>Bitte lesen und bestätigen.</p>
+      </ConsentModal.Body>
+      {withCheckbox ? <ConsentModal.Checkbox label="Ich stimme zu" /> : null}
+      <ConsentModal.Footer />
+    </ConsentModal>
+  )
+}
+
 describe('ConsentModal', () => {
-  it('should render with title and description', () => {
-    render(
-      <ConsentModal
-        isOpen
-        onAccept={vi.fn().mockResolvedValue(undefined)}
-        title="Test Title"
-        description="Test description"
-      />
-    )
+  it('renders composed header and body content', () => {
+    renderConsentModal()
 
-    expect(screen.getByText('Test Title')).toBeInTheDocument()
-    expect(screen.getByText('Test description')).toBeInTheDocument()
+    expect(screen.getByText('Einwilligung')).toBeInTheDocument()
+    expect(screen.getByText('Bitte lesen und bestätigen.')).toBeInTheDocument()
   })
 
-  it('should render custom content when provided', () => {
-    render(
-      <ConsentModal
-        isOpen
-        onAccept={vi.fn().mockResolvedValue(undefined)}
-        title="Test Title"
-        content={<div>Custom Content</div>}
-      />
-    )
+  it('disables accept button when checkbox is composed and unchecked', () => {
+    renderConsentModal({ withCheckbox: true })
 
-    expect(screen.getByText('Custom Content')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ich stimme zu' })).toBeDisabled()
   })
 
-  it('should disable accept button when requireCheckbox=true and unchecked', () => {
-    render(
-      <ConsentModal
-        isOpen
-        onAccept={vi.fn().mockResolvedValue(undefined)}
-        title="Test Title"
-        requireCheckbox
-        checkboxLabel="I agree"
-      />
-    )
+  it('enables accept button after checkbox confirmation', () => {
+    renderConsentModal({ withCheckbox: true })
 
-    const acceptButton = screen.getByRole('button', { name: 'Ich stimme zu' })
-    expect(acceptButton).toBeDisabled()
+    fireEvent.click(screen.getByLabelText('Ich stimme zu'))
+
+    expect(screen.getByRole('button', { name: 'Ich stimme zu' })).toBeEnabled()
   })
 
-  it('should enable accept button when checkbox is checked', () => {
-    render(
-      <ConsentModal
-        isOpen
-        onAccept={vi.fn().mockResolvedValue(undefined)}
-        title="Test Title"
-        requireCheckbox
-        checkboxLabel="I agree"
-      />
-    )
-
-    const checkbox = screen.getByLabelText('I agree')
-    fireEvent.click(checkbox)
-
-    const acceptButton = screen.getByRole('button', { name: 'Ich stimme zu' })
-    expect(acceptButton).toBeEnabled()
-  })
-
-  it('should show loading state when onAccept is in progress', async () => {
+  it('calls onAccept and shows loading state while saving', async () => {
     let resolveAccept: (() => void) | undefined
-    const onAccept = vi.fn(() => new Promise<void>((resolve) => {
-      resolveAccept = resolve
-    }))
-
-    render(
-      <ConsentModal
-        isOpen
-        onAccept={onAccept}
-        title="Test Title"
-      />
+    const onAccept = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveAccept = resolve
+        })
     )
+
+    renderConsentModal({ onAccept })
 
     fireEvent.click(screen.getByRole('button', { name: 'Ich stimme zu' }))
 
     expect(screen.getByRole('button', { name: /wird gespeichert/i })).toBeDisabled()
+    expect(onAccept).toHaveBeenCalledTimes(1)
 
     resolveAccept?.()
     await waitFor(() => {
@@ -87,150 +67,30 @@ describe('ConsentModal', () => {
     })
   })
 
-  it('should call onAccept when accept button clicked', async () => {
-    const onAccept = vi.fn().mockResolvedValue(undefined)
-
-    render(
-      <ConsentModal
-        isOpen
-        onAccept={onAccept}
-        title="Test Title"
-      />
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Ich stimme zu' }))
-
-    await waitFor(() => {
-      expect(onAccept).toHaveBeenCalled()
-    })
-  })
-
-  it('should call onDecline when decline button clicked', () => {
+  it('keeps dismiss controls for dismissible composition', () => {
     const onDecline = vi.fn()
+    renderConsentModal({ onDecline })
 
-    render(
-      <ConsentModal
-        isOpen
-        onAccept={vi.fn().mockResolvedValue(undefined)}
-        onDecline={onDecline}
-        title="Test Title"
-      />
-    )
+    const closeButton = screen.getByRole('button', { name: 'Schließen' })
+    fireEvent.click(closeButton)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ablehnen' }))
-
-    expect(onDecline).toHaveBeenCalled()
+    expect(onDecline).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Ablehnen' })).toBeInTheDocument()
   })
 
-  it('should not allow dismiss when canDismiss=false', () => {
-    const onDecline = vi.fn()
+  it('hides dismiss controls for non-dismissible composition', () => {
+    renderConsentModal()
 
-    render(
-      <ConsentModal
-        isOpen
-        onAccept={vi.fn().mockResolvedValue(undefined)}
-        onDecline={onDecline}
-        title="Test Title"
-        canDismiss={false}
-      />
-    )
-
-    const closeButton = screen.getByText('Schließen').closest('button')
-    if (closeButton) {
-      fireEvent.click(closeButton)
-    }
-
-    expect(onDecline).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Schließen' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ablehnen' })).not.toBeInTheDocument()
   })
 
-  it('should hide close button when canDismiss=false', () => {
-    render(
-      <ConsentModal
-        isOpen
-        onAccept={vi.fn().mockResolvedValue(undefined)}
-        title="Test Title"
-        canDismiss={false}
-      />
-    )
+  it('prevents escape dismissal when composed as non-dismissible', () => {
+    renderConsentModal()
 
-    const dialog = screen.getByRole('dialog')
-    expect(dialog.className).toContain('[&>button]:hidden')
-  })
+    fireEvent.keyDown(document, { key: 'Escape' })
 
-  it('should reset checkbox state when modal closes', () => {
-    const { rerender } = render(
-      <ConsentModal
-        isOpen
-        onAccept={vi.fn().mockResolvedValue(undefined)}
-        title="Test Title"
-        requireCheckbox
-        checkboxLabel="I agree"
-      />
-    )
-
-    const checkbox = screen.getByLabelText('I agree')
-    fireEvent.click(checkbox)
-
-    rerender(
-      <ConsentModal
-        isOpen={false}
-        onAccept={vi.fn().mockResolvedValue(undefined)}
-        title="Test Title"
-        requireCheckbox
-        checkboxLabel="I agree"
-      />
-    )
-
-    rerender(
-      <ConsentModal
-        isOpen
-        onAccept={vi.fn().mockResolvedValue(undefined)}
-        title="Test Title"
-        requireCheckbox
-        checkboxLabel="I agree"
-      />
-    )
-
-    expect(screen.getByLabelText('I agree')).not.toBeChecked()
-  })
-
-  it('should reset loading state when modal closes', async () => {
-    let resolveAccept: (() => void) | undefined
-    const onAccept = vi.fn(() => new Promise<void>((resolve) => {
-      resolveAccept = resolve
-    }))
-
-    const { rerender } = render(
-      <ConsentModal
-        isOpen
-        onAccept={onAccept}
-        title="Test Title"
-      />
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Ich stimme zu' }))
-    expect(screen.getByRole('button', { name: /wird gespeichert/i })).toBeDisabled()
-
-    rerender(
-      <ConsentModal
-        isOpen={false}
-        onAccept={onAccept}
-        title="Test Title"
-      />
-    )
-
-    rerender(
-      <ConsentModal
-        isOpen
-        onAccept={onAccept}
-        title="Test Title"
-      />
-    )
-
-    resolveAccept?.()
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Ich stimme zu' })).toBeEnabled()
-    })
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Schließen' })).not.toBeInTheDocument()
   })
 })

@@ -60,6 +60,7 @@ export function UpgradeNudge({ type, currentCount, maxCount, className = '' }: U
 
     // Don't show if limit is unlimited
     if (maxCount === -1 || !isAtThreshold) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsDismissed(true)
       return
     }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -42,19 +42,8 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   const [results, setResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
-
-  // Focus input when dialog opens
-  useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 100)
-      setQuery('')
-      setResults([])
-      setSelectedIndex(0)
-    }
-  }, [isOpen])
 
   // Search function
   const performSearch = useCallback(async (searchQuery: string) => {
@@ -224,7 +213,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
         <div className="flex items-center border-b border-warmgray-200 px-4">
           <Search className="w-5 h-5 text-warmgray-400 mr-3" />
           <Input
-            ref={inputRef}
+            autoFocus
             type="text"
             placeholder="Dokumente, Personen, Erinnerungen suchen..."
             value={query}

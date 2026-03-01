@@ -276,6 +276,7 @@ export default function OnboardingPage() {
   const [showFeedbackWidget, setShowFeedbackWidget] = useState(false)
   const [feedbackStep, setFeedbackStep] = useState<Step>('welcome')
   const [pendingNextStep, setPendingNextStep] = useState<Step | null>(null)
+  const [feedbackOpenCycle, setFeedbackOpenCycle] = useState(0)
 
   // Exit survey state
   const [showExitSurvey, setShowExitSurvey] = useState(false)
@@ -536,7 +537,7 @@ export default function OnboardingPage() {
     }
 
     checkOnboarding()
-  }, [supabase, router])
+  }, [supabase, router, capture])
 
   const resumeProgress = () => {
     if (savedProgress) {
@@ -574,14 +575,19 @@ export default function OnboardingPage() {
 
   const currentStepIndex = STEPS.findIndex(s => s.id === currentStep)
 
+  const openStepFeedback = (step: Step, nextStep: Step) => {
+    setFeedbackOpenCycle(prev => prev + 1)
+    setFeedbackStep(step)
+    setPendingNextStep(nextStep)
+    setShowFeedbackWidget(true)
+  }
+
   const goToNextStep = () => {
     const nextIndex = currentStepIndex + 1
     if (nextIndex < STEPS.length) {
       // Show feedback widget for non-welcome steps
       if (currentStep !== 'welcome') {
-        setFeedbackStep(currentStep)
-        setPendingNextStep(STEPS[nextIndex].id)
-        setShowFeedbackWidget(true)
+        openStepFeedback(currentStep, STEPS[nextIndex].id)
       } else {
         setCurrentStep(STEPS[nextIndex].id)
       }
@@ -718,9 +724,7 @@ export default function OnboardingPage() {
 
       if (quickStartMode) {
         // In quick start: skip documents, show feedback then go to emergency
-        setFeedbackStep('profile')
-        setPendingNextStep('emergency')
-        setShowFeedbackWidget(true)
+        openStepFeedback('profile', 'emergency')
       } else {
         goToNextStep()
       }
@@ -752,9 +756,7 @@ export default function OnboardingPage() {
 
       // In quick start mode, skip directly to complete (with feedback)
       if (quickStartMode) {
-        setFeedbackStep('emergency')
-        setPendingNextStep('complete')
-        setShowFeedbackWidget(true)
+        openStepFeedback('emergency', 'complete')
       } else {
         goToNextStep()
       }
@@ -1286,6 +1288,7 @@ export default function OnboardingPage() {
               </div>
             ) : (
               <ProgressiveField
+                key={profileFieldIndex}
                 fieldLabel={currentField.label}
                 fieldValue={profileForm[currentField.key as keyof typeof profileForm] as string}
                 onChange={(value) => setProfileForm({ ...profileForm, [currentField.key]: value })}
@@ -1510,6 +1513,7 @@ export default function OnboardingPage() {
             {!skippedEmergency ? (
               <>
                 <ProgressiveField
+                  key={emergencyFieldIndex}
                   fieldLabel={EMERGENCY_FIELDS[emergencyFieldIndex].label}
                   fieldValue={emergencyForm[EMERGENCY_FIELDS[emergencyFieldIndex].key]}
                   onChange={(value) => setEmergencyForm({ ...emergencyForm, [EMERGENCY_FIELDS[emergencyFieldIndex].key]: value })}
@@ -1948,6 +1952,7 @@ export default function OnboardingPage() {
 
       {/* Step Feedback Widget */}
       <StepFeedbackWidget
+        key={`step-feedback-${feedbackStep}-${feedbackOpenCycle}`}
         stepName={feedbackStep}
         timeSpentSeconds={getStepTimeSpent(feedbackStep)}
         onSubmit={handleFeedbackSubmit}

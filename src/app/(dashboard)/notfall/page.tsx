@@ -59,8 +59,6 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useVault } from "@/lib/vault/VaultContext";
-import { VaultSetupModal } from "@/components/vault/VaultSetupModal";
-import { VaultUnlockModal } from "@/components/vault/VaultUnlockModal";
 import type { Medication } from "@/types/medication";
 import { BmpScanDialog } from "@/components/notfall/BmpScanDialog";
 
@@ -339,6 +337,7 @@ function MedikamentDialog({
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm(medication ? { ...medication } : { wirkstoff: "" });
     }
   }, [medication, open]);
@@ -600,8 +599,6 @@ export default function NotfallPage() {
   const hasHealthConsentRef = useRef<boolean | null>(null);
   const router = useRouter();
   const vaultContext = useVault();
-  const [isVaultSetupModalOpen, setIsVaultSetupModalOpen] = useState(false);
-  const [isVaultUnlockModalOpen, setIsVaultUnlockModalOpen] = useState(false);
 
   // Check if user can upload Vollmachten (Basic tier or higher)
   const canUploadVollmachten = userTier.id !== "free";
@@ -786,6 +783,7 @@ export default function NotfallPage() {
       clearHealthDataState,
       fetchVaccinations,
       handleConsentRequired,
+      supabase,
     ],
   );
 
@@ -1033,9 +1031,9 @@ export default function NotfallPage() {
 
     if (!vaultContext.isUnlocked) {
       if (!vaultContext.isSetUp) {
-        setIsVaultSetupModalOpen(true);
+        vaultContext.requestSetup();
       } else {
-        setIsVaultUnlockModalOpen(true);
+        vaultContext.requestUnlock();
       }
       setIsUploadingDoc(null);
       return;
@@ -1150,7 +1148,7 @@ export default function NotfallPage() {
     }
 
     if (!vaultContext.masterKey) {
-      setIsVaultUnlockModalOpen(true);
+      vaultContext.requestUnlock();
       return;
     }
 
@@ -1537,17 +1535,19 @@ export default function NotfallPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-8 px-4 sm:px-0">
       <ConsentModal
-        type="health_data"
+        key={showConsentModal ? 'open' : 'closed'}
         isOpen={showConsentModal}
         onAccept={handleHealthConsentAccept}
         onDecline={handleHealthConsentDecline}
-        title="Einwilligung zur Verarbeitung von Gesundheitsdaten"
-        description="Bitte prüfen Sie die Einwilligung zur Verarbeitung Ihrer Gesundheitsdaten."
-        content={<HealthDataConsentContent />}
-        requireCheckbox
-        checkboxLabel="Ich stimme ausdrücklich der Verarbeitung meiner Gesundheitsdaten gemäß Art. 9 DSGVO zu"
-        canDismiss={false}
-      />
+        testId="consent-modal-health_data"
+      >
+        <ConsentModal.Header>Einwilligung zur Verarbeitung von Gesundheitsdaten</ConsentModal.Header>
+        <ConsentModal.Body>
+          <HealthDataConsentContent />
+        </ConsentModal.Body>
+        <ConsentModal.Checkbox label="Ich stimme ausdrücklich der Verarbeitung meiner Gesundheitsdaten gemäß Art. 9 DSGVO zu" />
+        <ConsentModal.Footer />
+      </ConsentModal>
       {consentToast ? (
         <div className="fixed top-6 right-6 z-50 w-[320px] rounded-lg border border-warmgray-200 bg-white p-4 shadow-lg">
           <p className="text-sm text-warmgray-700">{consentToast.message}</p>
@@ -3085,14 +3085,6 @@ export default function NotfallPage() {
           </Dialog>
         </>
       ) : null}
-      <VaultSetupModal
-        isOpen={isVaultSetupModalOpen}
-        onClose={() => setIsVaultSetupModalOpen(false)}
-      />
-      <VaultUnlockModal
-        isOpen={isVaultUnlockModalOpen}
-        onClose={() => setIsVaultUnlockModalOpen(false)}
-      />
     </div>
   );
 }

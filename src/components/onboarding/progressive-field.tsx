@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -45,22 +45,9 @@ export function ProgressiveField({
   isSaved,
   inputId,
 }: ProgressiveFieldProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [encouragement] = useState(
     () => ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
   )
-
-  useEffect(() => {
-    const timer = requestAnimationFrame(() => {
-      if (inputType === 'textarea') {
-        textareaRef.current?.focus()
-      } else {
-        inputRef.current?.focus()
-      }
-    })
-    return () => cancelAnimationFrame(timer)
-  }, [fieldIndex, inputType])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey && inputType !== 'textarea') {
@@ -120,7 +107,7 @@ export function ProgressiveField({
               {icon}
             </div>
             <textarea
-              ref={textareaRef}
+              autoFocus
               id={inputId}
               value={fieldValue}
               onChange={(e) => onChange(e.target.value)}
@@ -130,7 +117,7 @@ export function ProgressiveField({
           </div>
         ) : inputType === 'date' ? (
           <Input
-            ref={inputRef}
+            autoFocus
             id={inputId}
             type="date"
             value={fieldValue}
@@ -144,7 +131,7 @@ export function ProgressiveField({
               {icon}
             </div>
             <Input
-              ref={inputRef}
+              autoFocus
               id={inputId}
               type={inputType}
               value={fieldValue}

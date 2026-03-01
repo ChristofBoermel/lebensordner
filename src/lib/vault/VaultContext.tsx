@@ -1,18 +1,23 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { createContext, use, useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   deriveMasterKey,
-  wrapKey,
-  unwrapKey,
+  fromBase64,
   toBase64,
-  fromBase64
+  unwrapKey,
+  wrapKey,
 } from '@/lib/security/document-e2ee'
+import { VaultUnlockModal } from '@/components/vault/VaultUnlockModal'
 
 interface VaultContextValue {
   isSetUp: boolean
   isUnlocked: boolean
   masterKey: CryptoKey | null
+  isSetupRequested: boolean
+  requestUnlock: () => void
+  requestSetup: () => void
+  closeSetup: () => void
   setup(passphrase: string, recoveryKeyHex: string, signal?: AbortSignal): Promise<void>
   unlock(passphrase: string): Promise<void>
   unlockWithRecovery(recoveryKeyHex: string): Promise<void>
@@ -25,20 +30,23 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const [isSetUp, setIsSetUp] = useState(false)
   const [isUnlocked, setIsUnlocked] = useState(false)
   const [masterKey, setMasterKey] = useState<CryptoKey | null>(null)
+  const [isUnlockRequested, setIsUnlockRequested] = useState(false)
+  const [isSetupRequested, setIsSetupRequested] = useState(false)
 
   useEffect(() => {
     let cancelled = false
 
     async function checkSetup() {
       try {
-        const res = await fetch('/api/vault/key-material')
-        if (!res.ok) {
+        const response = await fetch('/api/vault/key-material')
+        if (!response.ok) {
           if (!cancelled) {
             setIsSetUp(false)
           }
           return
         }
-        const data = await res.json()
+
+        const data = await response.json()
         if (!cancelled) {
           setIsSetUp(data.exists === true)
         }
@@ -49,7 +57,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    checkSetup()
+    void checkSetup()
     return () => {
       cancelled = true
     }
@@ -61,14 +69,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     const pdk = await deriveMasterKey(passphrase, salt, kdf_params)
     const mk = await globalThis.crypto.subtle.generateKey({ name: 'AES-KW', length: 256 }, true, [
       'wrapKey',
-      'unwrapKey'
+      'unwrapKey',
     ])
     const wrapped_mk = await wrapKey(mk, pdk)
     const recovery_key_salt = globalThis.crypto.getRandomValues(new Uint8Array(32))
     const rdk = await deriveMasterKey(recoveryKeyHex, recovery_key_salt, kdf_params)
     const wrapped_mk_with_recovery = await wrapKey(mk, rdk)
 
-    const res = await fetch('/api/vault/key-material', {
+    const response = await fetch('/api/vault/key-material', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal,
@@ -77,22 +85,23 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         kdf_params,
         wrapped_mk,
         wrapped_mk_with_recovery,
-        recovery_key_salt: toBase64(recovery_key_salt)
-      })
+        recovery_key_salt: toBase64(recovery_key_salt),
+      }),
     })
 
-    if (!res.ok) {
+    if (!response.ok) {
       throw new Error('Failed to store vault keys')
     }
 
     setMasterKey(mk)
     setIsSetUp(true)
     setIsUnlocked(true)
+    setIsSetupRequested(false)
   }, [])
 
   const unlock = useCallback(async (passphrase: string) => {
-    const res = await fetch('/api/vault/key-material')
-    const data = await res.json()
+    const response = await fetch('/api/vault/key-material')
+    const data = await response.json()
     const { kdf_salt, kdf_params, wrapped_mk } = data || {}
 
     const pdk = await deriveMasterKey(passphrase, fromBase64(kdf_salt), kdf_params)
@@ -107,8 +116,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const unlockWithRecovery = useCallback(async (recoveryKeyHex: string) => {
-    const res = await fetch('/api/vault/key-material')
-    const data = await res.json()
+    const response = await fetch('/api/vault/key-material')
+    const data = await response.json()
     const { wrapped_mk_with_recovery, kdf_params, recovery_key_salt } = data || {}
 
     const rdk = await deriveMasterKey(recoveryKeyHex, fromBase64(recovery_key_salt), kdf_params)
@@ -127,23 +136,51 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setIsUnlocked(false)
   }, [])
 
+  function requestUnlock() {
+    setIsUnlockRequested(true)
+  }
+
+  function requestSetup() {
+    setIsSetupRequested(true)
+  }
+
+  function closeSetup() {
+    setIsSetupRequested(false)
+  }
+
+  useEffect(() => {
+    if (isUnlocked) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsUnlockRequested(false)
+    }
+  }, [isUnlocked])
+
   const value: VaultContextValue = {
     isSetUp,
     isUnlocked,
     masterKey,
+    isSetupRequested,
+    requestUnlock,
+    requestSetup,
+    closeSetup,
     setup,
     unlock,
     unlockWithRecovery,
-    lock
+    lock,
   }
 
-  return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>
+  return (
+    <VaultContext.Provider value={value}>
+      {children}
+      {isUnlockRequested ? <VaultUnlockModal onClose={() => setIsUnlockRequested(false)} /> : null}
+    </VaultContext.Provider>
+  )
 }
 
 export function useVault() {
-  const ctx = useContext(VaultContext)
-  if (!ctx) {
+  const context = use(VaultContext)
+  if (!context) {
     throw new Error('useVault must be used within VaultProvider')
   }
-  return ctx
+  return context
 }

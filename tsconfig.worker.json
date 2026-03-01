@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "declaration": false,
+    "sourceMap": false,
+    "incremental": false,
+    "plugins": []
+  },
+  "include": [
+    "src/worker-entrypoint.ts",
+    "src/lib/queue/**/*.ts",
+    "src/lib/security/rate-limit.ts",
+    "src/lib/errors/structured-logger.ts",
+    "src/lib/redis/client.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "tests",
+    ".next"
+  ]
+}

@@ -40,10 +40,10 @@ const makeShareDialogProps = (overrides: Record<string, unknown> = {}) => ({
     { id: 'tp-1', name: 'Max Mustermann', linked_user_id: 'user-tp-1' },
     { id: 'tp-2', name: 'Unregistriert', linked_user_id: null },
   ],
+  userId: 'user-owner',
   isOpen: true,
   onClose: vi.fn(),
   onSuccess: vi.fn(),
-  onRequestVaultUnlock: vi.fn(),
   ...overrides,
 })
 
@@ -55,7 +55,11 @@ describe('ShareDocumentDialog', () => {
       getUser: { data: { user: { id: 'user-owner' } }, error: null },
     })
     mockCreateClient.mockReturnValue(client)
-    mockUseVault.mockReturnValue({ isUnlocked: true, masterKey: {} })
+    mockUseVault.mockReturnValue({
+      isUnlocked: true,
+      masterKey: {},
+      requestUnlock: vi.fn(),
+    })
   })
 
   it('renders only registered trusted persons (linked_user_id !== null) in the select', async () => {
@@ -68,7 +72,11 @@ describe('ShareDocumentDialog', () => {
   })
 
   it('shows amber vault warning and disables Teilen button when vault is locked', async () => {
-    mockUseVault.mockReturnValue({ isUnlocked: false, masterKey: null })
+    mockUseVault.mockReturnValue({
+      isUnlocked: false,
+      masterKey: null,
+      requestUnlock: vi.fn(),
+    })
 
     render(<ShareDocumentDialog {...makeShareDialogProps()} />)
 
@@ -229,14 +237,18 @@ describe('ReceivedSharesList', () => {
       json: async () => ({ shares: makeReceivedShares() }),
     })
     vi.stubGlobal('fetch', fetchMock)
-    mockUseVault.mockReturnValue({ isUnlocked: true, masterKey: {} })
+    mockUseVault.mockReturnValue({
+      isUnlocked: true,
+      masterKey: {},
+      requestUnlock: vi.fn(),
+    })
 
     const { client } = createSupabaseMock()
     mockCreateClient.mockReturnValue(client)
   })
 
   it('shows amber expiry warning for share expiring within 48 hours', async () => {
-    render(<ReceivedSharesList onRequestVaultUnlock={vi.fn()} />)
+    render(<ReceivedSharesList />)
 
     await waitFor(() => {
       expect(screen.getByText(/Zugriff läuft in \d+ Stunden ab/)).toBeInTheDocument()
@@ -244,7 +256,7 @@ describe('ReceivedSharesList', () => {
   })
 
   it('does not render Herunterladen button for view-only shares', async () => {
-    render(<ReceivedSharesList onRequestVaultUnlock={vi.fn()} />)
+    render(<ReceivedSharesList />)
 
     await waitFor(() => {
       expect(screen.getByText('Ablaufendes Dokument')).toBeInTheDocument()
@@ -260,7 +272,7 @@ describe('ReceivedSharesList', () => {
   })
 
   it('renders Herunterladen button for download-permission shares', async () => {
-    render(<ReceivedSharesList onRequestVaultUnlock={vi.fn()} />)
+    render(<ReceivedSharesList />)
 
     await waitFor(() => {
       expect(screen.getByText('Download Dokument')).toBeInTheDocument()

@@ -1,0 +1,4 @@
+export { VaultSetupIntro } from './intro'
+export { VaultSetupPassphrase } from './passphrase'
+export { VaultSetupRecoveryKey } from './recovery-key'
+export { VaultSetupConfirm } from './confirm'

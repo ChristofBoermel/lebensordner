@@ -1,7 +1,30 @@
 'use client'
 
-import { VaultProvider } from '@/lib/vault/VaultContext'
+import { VaultSetup, VaultSetupModal } from '@/components/vault/VaultSetupModal'
+import { VaultProvider, useVault } from '@/lib/vault/VaultContext'
+
+function VaultSetupModalHost() {
+  const { isSetupRequested, closeSetup } = useVault()
+
+  if (!isSetupRequested) {
+    return null
+  }
+
+  return (
+    <VaultSetupModal isOpen={isSetupRequested} onClose={closeSetup} key={isSetupRequested ? 'open' : 'closed'}>
+      <VaultSetup.Intro />
+      <VaultSetup.Passphrase />
+      <VaultSetup.RecoveryKey />
+      <VaultSetup.Confirm />
+    </VaultSetupModal>
+  )
+}
 
 export function VaultClientWrapper({ children }: { children: React.ReactNode }) {
-  return <VaultProvider>{children}</VaultProvider>
+  return (
+    <VaultProvider>
+      {children}
+      <VaultSetupModalHost />
+    </VaultProvider>
+  )
 }

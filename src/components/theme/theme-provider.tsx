@@ -18,35 +18,28 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(false)
   const [theme, setTheme] = useState<Theme>('light')
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
-  const [fontSize, setFontSize] = useState<FontSize>('normal')
-  const [seniorMode, setSeniorMode] = useState<boolean>(false)
+  const [fontSize, setFontSize] = useState<FontSize>(() => {
+    if (typeof window === 'undefined') return 'normal'
+    const saved = localStorage.getItem('fontSize') as FontSize | null
+    return saved ?? 'normal'
+  })
+  const [seniorMode, setSeniorMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('seniorMode') === 'true'
+  })
 
   useEffect(() => {
-    setMounted(true)
     // Force light theme and remove saved theme
-    setTheme('light')
-    setResolvedTheme('light')
     localStorage.removeItem('theme')
-
-    // Load saved font size
-    const savedFontSize = localStorage.getItem('fontSize') as FontSize | null
-    if (savedFontSize) {
-      setFontSize(savedFontSize)
-    }
-    // Load saved senior mode
-    const savedSeniorMode = localStorage.getItem('seniorMode')
-    if (savedSeniorMode === 'true') {
-      setSeniorMode(true)
-    }
   }, [])
 
   useEffect(() => {
     const root = window.document.documentElement
 
     // Force light mode
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setResolvedTheme('light')
 
     // Apply theme class

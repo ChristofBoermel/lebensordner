@@ -101,8 +101,6 @@ import { UpgradeNudge, UpgradeModal } from "@/components/upgrade";
 import Link from "next/link";
 import { decryptField, unwrapKey } from "@/lib/security/document-e2ee";
 import { useVault } from "@/lib/vault/VaultContext";
-import { VaultSetupModal } from "@/components/vault/VaultSetupModal";
-import { VaultUnlockModal } from "@/components/vault/VaultUnlockModal";
 import { ShareDocumentDialog } from "@/components/sharing/ShareDocumentDialog";
 import { BulkShareDialog } from "@/components/sharing/BulkShareDialog";
 
@@ -245,8 +243,7 @@ export default function DocumentsPage() {
   );
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [isVaultSetupModalOpen, setIsVaultSetupModalOpen] = useState(false);
-  const [isVaultUnlockModalOpen, setIsVaultUnlockModalOpen] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Share dialog state
   const [shareDocument, setShareDocument] = useState<Document | null>(null);
@@ -272,6 +269,7 @@ export default function DocumentsPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -615,9 +613,9 @@ export default function DocumentsPage() {
     // Vault gate: once vault is set up, all uploads must be encrypted
     if (!vaultContext.isUnlocked) {
       if (!vaultContext.isSetUp) {
-        setIsVaultSetupModalOpen(true);
+        vaultContext.requestSetup();
       } else {
-        setIsVaultUnlockModalOpen(true);
+        vaultContext.requestUnlock();
       }
       return;
     }
@@ -882,7 +880,7 @@ export default function DocumentsPage() {
   const handleDownload = async (doc: Document) => {
     if (doc.is_encrypted) {
       if (!vaultContext.masterKey) {
-        setIsVaultUnlockModalOpen(true);
+        vaultContext.requestUnlock();
         return;
       }
       try {
@@ -940,7 +938,7 @@ export default function DocumentsPage() {
       return;
     }
     if (!vaultContext.masterKey) {
-      setIsVaultUnlockModalOpen(true);
+      vaultContext.requestUnlock();
       return;
     }
     try {
@@ -1771,7 +1769,7 @@ export default function DocumentsPage() {
             className="w-full sm:w-auto h-10 senior-mode:h-12 flex-shrink-0"
           >
             <Upload className="mr-2 h-4 w-4" />
-            In "{folder.name}" ablegen
+            In &quot;{folder.name}&quot; ablegen
           </Button>
         </div>
 
@@ -2364,23 +2362,14 @@ export default function DocumentsPage() {
         ) : null}
       </Dialog>
       {/* Document Preview */}
-      <VaultSetupModal
-        isOpen={isVaultSetupModalOpen}
-        onClose={() => setIsVaultSetupModalOpen(false)}
-      />
-      <VaultUnlockModal
-        isOpen={isVaultUnlockModalOpen}
-        onClose={() => setIsVaultUnlockModalOpen(false)}
-      />
-
       {shareDocument !== null && (
         <ShareDocumentDialog
           document={shareDocument}
           trustedPersons={familyMembers}
+          userId={userId}
           isOpen={isShareDialogOpen}
           onClose={() => { setIsShareDialogOpen(false); setShareDocument(null); }}
           onSuccess={() => { setIsShareDialogOpen(false); setShareDocument(null); }}
-          onRequestVaultUnlock={() => setIsVaultUnlockModalOpen(true)}
         />
       )}
 
@@ -2578,12 +2567,13 @@ export default function DocumentsPage() {
         </div>
       )}
       <BulkShareDialog
+        key={isBulkShareDialogOpen ? "open" : "closed"}
         documents={bulkShareDocuments}
         trustedPersons={familyMembers}
+        userId={userId}
         isOpen={isBulkShareDialogOpen}
         onClose={() => setIsBulkShareDialogOpen(false)}
         onSuccess={() => setIsBulkShareDialogOpen(false)}
-        onRequestVaultUnlock={() => setIsVaultUnlockModalOpen(true)}
       />
       {/* Category Dialog */}
       <Dialog

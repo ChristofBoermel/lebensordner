@@ -58,8 +58,6 @@ import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
 import Link from 'next/link'
 import { SecurityActivityLog } from '@/components/settings/security-activity-log'
 import { useVault } from '@/lib/vault/VaultContext'
-import { VaultSetupModal } from '@/components/vault/VaultSetupModal'
-import { VaultUnlockModal } from '@/components/vault/VaultUnlockModal'
 
 const GDPRExportDialog = dynamic(
   () => import('@/components/settings/gdpr-export-dialog').then((mod) => ({ default: mod.GDPRExportDialog })),
@@ -128,8 +126,6 @@ export default function EinstellungenPage() {
   const [isLoadingConsent, setIsLoadingConsent] = useState(false)
 
   // Vault state
-  const [isVaultSetupModalOpen, setIsVaultSetupModalOpen] = useState(false)
-  const [isVaultUnlockModalOpen, setIsVaultUnlockModalOpen] = useState(false)
   const vault = useVault()
 
   const router = useRouter()
@@ -491,7 +487,6 @@ export default function EinstellungenPage() {
   }
 
   // Fetch consent state on mount
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     const fetchConsent = async () => {
       try {
@@ -850,7 +845,7 @@ export default function EinstellungenPage() {
                         <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-warmgray-100 text-warmgray-600">
                           Nicht eingerichtet
                         </span>
-                        <Button size="lg" onClick={() => setIsVaultSetupModalOpen(true)}>
+                        <Button size="lg" onClick={() => vault.requestSetup()}>
                           Tresor einrichten
                         </Button>
                       </>
@@ -863,7 +858,7 @@ export default function EinstellungenPage() {
                         <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
                           Gesperrt 🔒
                         </span>
-                        <Button size="lg" onClick={() => setIsVaultUnlockModalOpen(true)}>
+                        <Button size="lg" onClick={() => vault.requestUnlock()}>
                           Entsperren
                         </Button>
                       </>
@@ -998,10 +993,8 @@ export default function EinstellungenPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        <TwoFactorSetup isOpen={is2FADialogOpen} onClose={() => setIs2FADialogOpen(false)} isEnabled={is2FAEnabled} onStatusChange={setIs2FAEnabled} />
+        <TwoFactorSetup key={is2FADialogOpen ? 'open' : 'closed'} isOpen={is2FADialogOpen} onClose={() => setIs2FADialogOpen(false)} isEnabled={is2FAEnabled} onStatusChange={setIs2FAEnabled} />
         <DeleteAccountModal open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen} onDeleted={handleAccountDeleted} />
-        <VaultSetupModal isOpen={isVaultSetupModalOpen} onClose={() => setIsVaultSetupModalOpen(false)} />
-        <VaultUnlockModal isOpen={isVaultUnlockModalOpen} onClose={() => setIsVaultUnlockModalOpen(false)} />
       </div>
     )
   }
@@ -1337,7 +1330,7 @@ export default function EinstellungenPage() {
                   <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-warmgray-100 text-warmgray-600">
                     Nicht eingerichtet
                   </span>
-                  <Button onClick={() => setIsVaultSetupModalOpen(true)}>
+                  <Button onClick={() => vault.requestSetup()}>
                     Tresor einrichten
                   </Button>
                 </>
@@ -1350,7 +1343,7 @@ export default function EinstellungenPage() {
                   <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
                     Gesperrt 🔒
                   </span>
-                  <Button onClick={() => setIsVaultUnlockModalOpen(true)}>
+                  <Button onClick={() => vault.requestUnlock()}>
                     Entsperren
                   </Button>
                 </>
@@ -1788,6 +1781,7 @@ export default function EinstellungenPage() {
 
       {/* 2FA Setup Dialog */}
       <TwoFactorSetup
+        key={is2FADialogOpen ? 'open' : 'closed'}
         isOpen={is2FADialogOpen}
         onClose={() => setIs2FADialogOpen(false)}
         isEnabled={is2FAEnabled}
@@ -1800,9 +1794,6 @@ export default function EinstellungenPage() {
         onOpenChange={setIsDeleteDialogOpen}
         onDeleted={handleAccountDeleted}
       />
-      <VaultSetupModal isOpen={isVaultSetupModalOpen} onClose={() => setIsVaultSetupModalOpen(false)} />
-      <VaultUnlockModal isOpen={isVaultUnlockModalOpen} onClose={() => setIsVaultUnlockModalOpen(false)} />
-
       {/* Health Consent Withdrawal Dialog */}
       <HealthConsentWithdrawalDialog
         open={showHealthWithdrawalDialog}

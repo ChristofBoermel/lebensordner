@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -39,60 +39,47 @@ export interface DocumentViewerProps {
   streamUrlBase?: string // Custom stream URL base, defaults to /api/family/view/stream
 }
 
-export function DocumentViewer({
-  documents,
-  ownerName,
-  ownerTier,
-  categories,
-  viewMode = 'page',
-  showHeader = true,
-  showInfoBanner = true,
-  streamUrlBase = '/api/family/view/stream',
-}: DocumentViewerProps) {
-  const [selectedDoc, setSelectedDoc] = useState<DocumentMetadata | null>(null)
+function getStreamUrl(doc: DocumentMetadata, streamUrlBase: string) {
+  if (!doc.streamToken) return null
+  return `${streamUrlBase}?docId=${encodeURIComponent(doc.id)}&token=${encodeURIComponent(doc.streamToken)}`
+}
+
+function getFileIcon(fileType: string) {
+  if (fileType.startsWith('image/')) return <ImageIcon className="w-5 h-5 text-sage-600" />
+  if (fileType === 'application/pdf') return <FileText className="w-5 h-5 text-red-500" />
+  return <File className="w-5 h-5 text-warmgray-500" />
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+}
+
+interface DocumentPreviewDialogProps {
+  selectedDoc: DocumentMetadata | null
+  onClose: () => void
+  getStreamUrl: (doc: DocumentMetadata) => string | null
+  getFileIcon: (fileType: string) => React.ReactNode
+}
+
+function DocumentPreviewDialog({
+  selectedDoc,
+  onClose,
+  getStreamUrl,
+  getFileIcon,
+}: DocumentPreviewDialogProps) {
   const [zoom, setZoom] = useState(100)
   const [rotation, setRotation] = useState(0)
-
-  // Reset zoom and rotation when document changes
-  useEffect(() => {
-    setZoom(100)
-    setRotation(0)
-  }, [selectedDoc?.id])
-
-  const handleZoomIn = () => setZoom(prev => Math.min(prev + 25, 200))
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 25, 50))
-  const handleRotate = () => setRotation(prev => (prev + 90) % 360)
-
-  // Build the stream URL for secure inline viewing
-  const getStreamUrl = (doc: DocumentMetadata) => {
-    if (!doc.streamToken) return null
-    return `${streamUrlBase}?docId=${encodeURIComponent(doc.id)}&token=${encodeURIComponent(doc.streamToken)}`
-  }
-
-  const getFileIcon = (fileType: string) => {
-    if (fileType.startsWith('image/')) return <ImageIcon className="w-5 h-5 text-sage-600" />
-    if (fileType === 'application/pdf') return <FileText className="w-5 h-5 text-red-500" />
-    return <File className="w-5 h-5 text-warmgray-500" />
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / 1024 / 1024).toFixed(2)} MB`
-  }
-
-  // Group documents by category
-  const documentsByCategory = documents.reduce((acc, doc) => {
-    const cat = doc.category
-    if (!acc[cat]) acc[cat] = []
-    acc[cat].push(doc)
-    return acc
-  }, {} as Record<string, DocumentMetadata[]>)
 
   const isImage = selectedDoc?.file_type?.startsWith('image/')
   const isPDF = selectedDoc?.file_type === 'application/pdf'
   const canPreview = isImage || isPDF
   const streamUrl = selectedDoc ? getStreamUrl(selectedDoc) : null
+
+  const handleZoomIn = () => setZoom((prev) => Math.min(prev + 25, 200))
+  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 25, 50))
+  const handleRotate = () => setRotation((prev) => (prev + 90) % 360)
 
   const renderPreview = () => {
     if (!streamUrl) {
@@ -145,6 +132,167 @@ export function DocumentViewer({
     )
   }
 
+  return (
+    <Dialog open={!!selectedDoc} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-4xl max-h-[95vh] overflow-hidden">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2">
+              {selectedDoc && getFileIcon(selectedDoc.file_type)}
+              {selectedDoc?.title || 'Dokument'}
+            </DialogTitle>
+          </div>
+          <DialogDescription className="sr-only">
+            Vorschau des Dokuments {selectedDoc?.title}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Toolbar - only show for images with zoom/rotate controls */}
+        {canPreview && streamUrl && isImage && (
+          <div className="flex flex-wrap items-center gap-2 py-2 px-1 border-b border-warmgray-200" role="toolbar" aria-label="Bildsteuerung">
+            <div className="flex items-center gap-1 sm:gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleZoomOut}
+                disabled={zoom <= 50}
+                aria-label="Verkleinern"
+                className="h-8 w-8 sm:h-10 sm:w-10"
+              >
+                <ZoomOut className="w-4 h-4" aria-hidden="true" />
+              </Button>
+              <span className="text-xs sm:text-sm text-warmgray-600 min-w-[3rem] sm:min-w-[4rem] text-center" aria-live="polite">
+                {zoom}%
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleZoomIn}
+                disabled={zoom >= 200}
+                aria-label="Vergroessern"
+                className="h-8 w-8 sm:h-10 sm:w-10"
+              >
+                <ZoomIn className="w-4 h-4" aria-hidden="true" />
+              </Button>
+              <div className="w-px h-6 bg-warmgray-200 mx-1 sm:mx-2" aria-hidden="true" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRotate}
+                aria-label="Um 90 Grad drehen"
+                className="h-8 w-8 sm:h-10 sm:w-10"
+              >
+                <RotateCw className="w-4 h-4" aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Preview Content */}
+        <div className="mt-2">{renderPreview()}</div>
+
+        {/* Document Info */}
+        <div className="mt-4 pt-4 border-t border-warmgray-200 space-y-3">
+          {/* Expiry Date */}
+          {selectedDoc?.expiry_date && (
+            <div className="flex items-start gap-2">
+              <Calendar className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-medium text-warmgray-700">Ablaufdatum</p>
+                <p
+                  className={`text-sm ${new Date(selectedDoc.expiry_date) < new Date()
+                    ? 'text-red-600 font-medium'
+                    : new Date(selectedDoc.expiry_date) < new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000)
+                      ? 'text-amber-600'
+                      : 'text-warmgray-600'
+                    }`}
+                >
+                  {new Date(selectedDoc.expiry_date).toLocaleDateString('de-DE', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                  {new Date(selectedDoc.expiry_date) < new Date() && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-red-600">
+                      <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                      Abgelaufen
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          {selectedDoc?.notes && (
+            <div className="flex items-start gap-2">
+              <StickyNote className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-medium text-warmgray-700">Notizen</p>
+                <p className="text-sm text-warmgray-600 whitespace-pre-wrap">{selectedDoc.notes}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Metadata / Dokumentdetails */}
+          {selectedDoc?.metadata && Object.keys(selectedDoc.metadata).length > 0 && (
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-medium text-warmgray-700">Dokumentdetails</p>
+                <div className="space-y-1 mt-1">
+                  {(() => {
+                    const fields = CATEGORY_METADATA_FIELDS[selectedDoc.category as DocumentCategory]
+                    return Object.entries(selectedDoc.metadata!).map(([key, value]) => {
+                      const fieldDef = fields?.find((f) => f.key === key || f.name === key)
+                      const label = fieldDef?.label || key
+                      const displayValue = fieldDef?.type === 'date' && value
+                        ? new Date(value).toLocaleDateString('de-DE')
+                        : value
+                      return (
+                        <p key={key} className="text-sm text-warmgray-600">
+                          <span className="font-medium">{label}:</span> {displayValue}
+                        </p>
+                      )
+                    })
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* File Info */}
+          <div className="flex items-center justify-between text-sm text-warmgray-500 pt-2">
+            <span>{selectedDoc?.file_name}</span>
+            <span>{selectedDoc?.file_size ? formatFileSize(selectedDoc.file_size) : ''}</span>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function DocumentViewer({
+  documents,
+  ownerName,
+  ownerTier,
+  categories,
+  viewMode = 'page',
+  showHeader = true,
+  showInfoBanner = true,
+  streamUrlBase = '/api/family/view/stream',
+}: DocumentViewerProps) {
+  const [selectedDoc, setSelectedDoc] = useState<DocumentMetadata | null>(null)
+
+  // Group documents by category
+  const documentsByCategory = documents.reduce((acc, doc) => {
+    const cat = doc.category
+    if (!acc[cat]) acc[cat] = []
+    acc[cat].push(doc)
+    return acc
+  }, {} as Record<string, DocumentMetadata[]>)
+
   const renderTierBadge = () => {
     if (ownerTier === 'basic') {
       return (
@@ -191,9 +339,7 @@ export function DocumentViewer({
       {/* Modal Header */}
       {showHeader && viewMode === 'modal' && (
         <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold text-warmgray-900">
-            Dokumente von {ownerName}
-          </span>
+          <span className="text-lg font-semibold text-warmgray-900">Dokumente von {ownerName}</span>
           {renderTierBadge()}
         </div>
       )}
@@ -204,14 +350,14 @@ export function DocumentViewer({
           ownerTier === 'premium' ? 'border-green-200 bg-green-50' :
           ownerTier === 'basic' ? 'border-blue-200 bg-blue-50' :
           'border-warmgray-200 bg-warmgray-50'
-        }`}>
+          }`}>
           <CardContent className="py-4">
             <div className="flex items-center gap-3">
               <Eye className={`w-5 h-5 shrink-0 ${
                 ownerTier === 'premium' ? 'text-green-600' :
                 ownerTier === 'basic' ? 'text-blue-600' :
                 'text-warmgray-500'
-              }`} aria-hidden="true" />
+                }`} aria-hidden="true" />
               {ownerTier === 'premium' ? (
                 <p className="text-sm text-green-800">
                   Sie haben vollen Zugriff auf diese Dokumente. Sie können alle Dokumente als ZIP-Datei herunterladen.
@@ -235,9 +381,7 @@ export function DocumentViewer({
         <Card>
           <CardContent className="pt-12 pb-12 text-center">
             <FolderOpen className="w-16 h-16 text-warmgray-300 mx-auto mb-4" aria-hidden="true" />
-            <h3 className="text-lg font-medium text-warmgray-900 mb-2">
-              Keine Dokumente vorhanden
-            </h3>
+            <h3 className="text-lg font-medium text-warmgray-900 mb-2">Keine Dokumente vorhanden</h3>
             <p className="text-warmgray-600 max-w-md mx-auto">
               Diese Person hat noch keine Dokumente in ihrem Lebensordner hochgeladen.
             </p>
@@ -250,9 +394,7 @@ export function DocumentViewer({
               <CardContent className="pt-6">
                 <div className="flex items-center gap-2 mb-4">
                   <FolderOpen className="w-5 h-5 text-sage-600" aria-hidden="true" />
-                  <h2 className="text-lg font-semibold text-warmgray-900">
-                    {categories[category] || category}
-                  </h2>
+                  <h2 className="text-lg font-semibold text-warmgray-900">{categories[category] || category}</h2>
                   <span className="text-sm text-warmgray-500">
                     ({docs.length} {docs.length === 1 ? 'Dokument' : 'Dokumente'})
                   </span>
@@ -289,7 +431,7 @@ export function DocumentViewer({
                               : new Date(doc.expiry_date) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
                                 ? 'text-amber-600'
                                 : ''
-                          }`}>
+                            }`}>
                             <Calendar className="w-4 h-4" aria-hidden="true" />
                             <span aria-label={`Ablaufdatum: ${new Date(doc.expiry_date).toLocaleDateString('de-DE')}`}>
                               {new Date(doc.expiry_date).toLocaleDateString('de-DE')}
@@ -313,148 +455,13 @@ export function DocumentViewer({
         </div>
       )}
 
-      {/* Document Preview Dialog */}
-      <Dialog open={!!selectedDoc} onOpenChange={(open) => !open && setSelectedDoc(null)}>
-        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-4xl max-h-[95vh] overflow-hidden">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2">
-                {selectedDoc && getFileIcon(selectedDoc.file_type)}
-                {selectedDoc?.title || 'Dokument'}
-              </DialogTitle>
-            </div>
-            <DialogDescription className="sr-only">
-              Vorschau des Dokuments {selectedDoc?.title}
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Toolbar - only show for images with zoom/rotate controls */}
-          {canPreview && streamUrl && isImage && (
-            <div className="flex flex-wrap items-center gap-2 py-2 px-1 border-b border-warmgray-200" role="toolbar" aria-label="Bildsteuerung">
-              <div className="flex items-center gap-1 sm:gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleZoomOut}
-                  disabled={zoom <= 50}
-                  aria-label="Verkleinern"
-                  className="h-8 w-8 sm:h-10 sm:w-10"
-                >
-                  <ZoomOut className="w-4 h-4" aria-hidden="true" />
-                </Button>
-                <span className="text-xs sm:text-sm text-warmgray-600 min-w-[3rem] sm:min-w-[4rem] text-center" aria-live="polite">
-                  {zoom}%
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleZoomIn}
-                  disabled={zoom >= 200}
-                  aria-label="Vergroessern"
-                  className="h-8 w-8 sm:h-10 sm:w-10"
-                >
-                  <ZoomIn className="w-4 h-4" aria-hidden="true" />
-                </Button>
-                <div className="w-px h-6 bg-warmgray-200 mx-1 sm:mx-2" aria-hidden="true" />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleRotate}
-                  aria-label="Um 90 Grad drehen"
-                  className="h-8 w-8 sm:h-10 sm:w-10"
-                >
-                  <RotateCw className="w-4 h-4" aria-hidden="true" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Preview Content */}
-          <div className="mt-2">
-            {renderPreview()}
-          </div>
-
-          {/* Document Info */}
-          <div className="mt-4 pt-4 border-t border-warmgray-200 space-y-3">
-            {/* Expiry Date */}
-            {selectedDoc?.expiry_date && (
-              <div className="flex items-start gap-2">
-                <Calendar className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
-                <div>
-                  <p className="text-sm font-medium text-warmgray-700">Ablaufdatum</p>
-                  <p className={`text-sm ${new Date(selectedDoc.expiry_date) < new Date()
-                    ? 'text-red-600 font-medium'
-                    : new Date(selectedDoc.expiry_date) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-                      ? 'text-amber-600'
-                      : 'text-warmgray-600'
-                    }`}>
-                    {new Date(selectedDoc.expiry_date).toLocaleDateString('de-DE', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
-                    {new Date(selectedDoc.expiry_date) < new Date() && (
-                      <span className="ml-2 inline-flex items-center gap-1 text-red-600">
-                        <AlertTriangle className="w-3 h-3" aria-hidden="true" />
-                        Abgelaufen
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Notes */}
-            {selectedDoc?.notes && (
-              <div className="flex items-start gap-2">
-                <StickyNote className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
-                <div>
-                  <p className="text-sm font-medium text-warmgray-700">Notizen</p>
-                  <p className="text-sm text-warmgray-600 whitespace-pre-wrap">{selectedDoc.notes}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Metadata / Dokumentdetails */}
-            {selectedDoc?.metadata && Object.keys(selectedDoc.metadata).length > 0 && (
-              <div className="flex items-start gap-2">
-                <Info className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
-                <div>
-                  <p className="text-sm font-medium text-warmgray-700">Dokumentdetails</p>
-                  <div className="space-y-1 mt-1">
-                    {(() => {
-                      const fields = CATEGORY_METADATA_FIELDS[selectedDoc.category as DocumentCategory]
-                      return Object.entries(selectedDoc.metadata!).map(([key, value]) => {
-                        const fieldDef = fields?.find(f => f.key === key || f.name === key)
-                        const label = fieldDef?.label || key
-                        const displayValue = fieldDef?.type === 'date' && value
-                          ? new Date(value).toLocaleDateString('de-DE')
-                          : value
-                        return (
-                          <p key={key} className="text-sm text-warmgray-600">
-                            <span className="font-medium">{label}:</span> {displayValue}
-                          </p>
-                        )
-                      })
-                    })()}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* File Info */}
-            <div className="flex items-center justify-between text-sm text-warmgray-500 pt-2">
-              <span>{selectedDoc?.file_name}</span>
-              <span>
-                {selectedDoc?.file_size
-                  ? formatFileSize(selectedDoc.file_size)
-                  : ''}
-              </span>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DocumentPreviewDialog
+        key={selectedDoc?.id}
+        selectedDoc={selectedDoc}
+        onClose={() => setSelectedDoc(null)}
+        getStreamUrl={(doc) => getStreamUrl(doc, streamUrlBase)}
+        getFileIcon={getFileIcon}
+      />
     </div>
   )
 }

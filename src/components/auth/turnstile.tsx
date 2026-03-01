@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useRef, useImperativeHandle } from 'react'
 
 export interface TurnstileWidgetRef {
   reset: () => void
@@ -8,6 +8,7 @@ export interface TurnstileWidgetRef {
 
 interface TurnstileWidgetProps {
   onVerify: (token: string) => void
+  ref?: React.Ref<TurnstileWidgetRef>
 }
 
 declare global {
@@ -28,7 +29,7 @@ declare global {
   }
 }
 
-const TurnstileWidget = forwardRef<TurnstileWidgetRef, TurnstileWidgetProps>(function TurnstileWidget({ onVerify }, ref) {
+function TurnstileWidget({ onVerify, ref }: TurnstileWidgetProps & { ref?: React.Ref<TurnstileWidgetRef> }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const widgetIdRef = useRef<string | null>(null)
   const scriptLoadedRef = useRef(false)
@@ -41,27 +42,21 @@ const TurnstileWidget = forwardRef<TurnstileWidgetRef, TurnstileWidgetProps>(fun
     },
   }), [])
 
-  const renderWidget = useCallback(() => {
-    if (!containerRef.current || !window.turnstile) return
-    if (widgetIdRef.current) return // Already rendered
-
-    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
-    if (!siteKey) {
-      console.error('[Turnstile] NEXT_PUBLIC_TURNSTILE_SITE_KEY not configured')
-      return
-    }
-
-    widgetIdRef.current = window.turnstile.render(containerRef.current, {
-      sitekey: siteKey,
-      callback: onVerify,
-      theme: 'light',
-    })
-  }, [onVerify])
-
   useEffect(() => {
     // Check if script is already loaded
     if (window.turnstile) {
-      renderWidget()
+      if (!containerRef.current || !window.turnstile) return
+      if (widgetIdRef.current) return
+      const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+      if (!siteKey) {
+        console.error('[Turnstile] NEXT_PUBLIC_TURNSTILE_SITE_KEY not configured')
+        return
+      }
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: onVerify,
+        theme: 'light',
+      })
       return
     }
 
@@ -72,13 +67,39 @@ const TurnstileWidget = forwardRef<TurnstileWidgetRef, TurnstileWidgetProps>(fun
     )
     if (existingScript) {
       scriptLoadedRef.current = true
-      window.onTurnstileLoad = renderWidget
+      window.onTurnstileLoad = () => {
+        if (!containerRef.current || !window.turnstile) return
+        if (widgetIdRef.current) return
+        const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+        if (!siteKey) {
+          console.error('[Turnstile] NEXT_PUBLIC_TURNSTILE_SITE_KEY not configured')
+          return
+        }
+        widgetIdRef.current = window.turnstile.render(containerRef.current, {
+          sitekey: siteKey,
+          callback: onVerify,
+          theme: 'light',
+        })
+      }
       return
     }
 
     // Load the Turnstile script
     scriptLoadedRef.current = true
-    window.onTurnstileLoad = renderWidget
+    window.onTurnstileLoad = () => {
+      if (!containerRef.current || !window.turnstile) return
+      if (widgetIdRef.current) return
+      const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+      if (!siteKey) {
+        console.error('[Turnstile] NEXT_PUBLIC_TURNSTILE_SITE_KEY not configured')
+        return
+      }
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: onVerify,
+        theme: 'light',
+      })
+    }
 
     const script = document.createElement('script')
     script.src =
@@ -93,13 +114,13 @@ const TurnstileWidget = forwardRef<TurnstileWidgetRef, TurnstileWidgetProps>(fun
         widgetIdRef.current = null
       }
     }
-  }, [renderWidget])
+  }, [onVerify])
 
   return (
     <div className="flex justify-center py-3">
       <div ref={containerRef} />
     </div>
   )
-})
+}
 
 export default TurnstileWidget

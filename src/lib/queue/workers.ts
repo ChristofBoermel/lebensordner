@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq'
 import { redisConnection } from './connection'
-import { cleanupExpiredLimits } from '@/lib/security/rate-limit'
-import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { cleanupExpiredLimits } from '../security/rate-limit'
+import { emitStructuredError } from '../errors/structured-logger'
 
 let workersStarted = false
 

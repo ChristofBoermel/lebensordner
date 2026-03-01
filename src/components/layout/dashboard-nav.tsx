@@ -88,15 +88,25 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
   const router = useRouter()
   const supabase = createClient()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchOpenCycle, setSearchOpenCycle] = useState(0)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [healthConsentGranted, setHealthConsentGranted] = useState<boolean | null>(null)
   const { theme, setTheme, resolvedTheme, fontSize, setFontSize, seniorMode, setSeniorMode } = useTheme()
+
+  const openGlobalSearch = () => {
+    setSearchOpenCycle((prev) => prev + 1)
+    setIsSearchOpen(true)
+  }
+
+  const closeGlobalSearch = () => {
+    setIsSearchOpen(false)
+  }
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
-        setIsSearchOpen(true)
+        openGlobalSearch()
       }
     }
 
@@ -136,7 +146,11 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
 
   return (
     <>
-      <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+      <GlobalSearch
+        key={`global-search-${searchOpenCycle}`}
+        isOpen={isSearchOpen}
+        onClose={closeGlobalSearch}
+      />
       {/* Desktop Sidebar */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col print:hidden">
         <div className="flex h-full flex-col border-r border-warmgray-200 dark:border-warmgray-800 bg-white dark:bg-warmgray-900 overflow-hidden">
@@ -154,7 +168,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
             {/* Search Button */}
             <div className="px-4 pt-4">
               <button
-                onClick={() => setIsSearchOpen(true)}
+                onClick={openGlobalSearch}
                 className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border border-warmgray-200 bg-warmgray-50 text-warmgray-500 hover:bg-warmgray-100 transition-colors"
               >
                 <Search className="w-4 h-4" />
