@@ -13,7 +13,10 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:e2e": "playwright test",
-    "encrypt-data": "tsx scripts/encrypt-existing-data.ts"
+    "encrypt-data": "tsx scripts/encrypt-existing-data.ts",
+    "qa": "python scripts/ops/pre-deploy-qa.py",
+    "qa:strict": "python scripts/ops/pre-deploy-qa.py --strict",
+    "qa:fast": "python scripts/ops/pre-deploy-qa.py --no-tsc"
   },
   "keywords": [
     "lebensordner",
