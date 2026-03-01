@@ -21,7 +21,7 @@ if (!CRON_SECRET) {
 const sanitizeEnv = (value: string | undefined) => value?.trim().replace(/^['"]|['"]$/g, '')
 
 const getSupabaseAdmin = () => {
-  const url = sanitizeEnv(process.env['SUPABASE_URL'])
+  const url = sanitizeEnv(process.env['SUPABASE_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'])
   const key = sanitizeEnv(process.env['SUPABASE_SERVICE_ROLE_KEY'])
 
   if (!url || !key) {
