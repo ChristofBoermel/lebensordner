@@ -16,19 +16,26 @@ const AdminDashboard = dynamic(
   }
 )
 
+const firstHeaderToken = (value: string | null) => value?.split(',')[0]?.trim() ?? null
+
 const normalizeOrigin = (value: string | null | undefined) => {
   if (!value) return null
   const trimmed = value.trim().replace(/\/+$/, '')
   if (!trimmed) return null
-  if (!/^https?:\/\//i.test(trimmed)) return null
-  return trimmed
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+    return `${url.protocol}//${url.host}`
+  } catch {
+    return null
+  }
 }
 
 const resolveRequestOrigin = async () => {
   const headerStore = await headers()
-  const forwardedHost = headerStore.get('x-forwarded-host')
-  const host = forwardedHost ?? headerStore.get('host')
-  const forwardedProto = headerStore.get('x-forwarded-proto')
+  const forwardedHost = firstHeaderToken(headerStore.get('x-forwarded-host'))
+  const host = forwardedHost ?? firstHeaderToken(headerStore.get('host'))
+  const forwardedProto = firstHeaderToken(headerStore.get('x-forwarded-proto'))
   const proto = forwardedProto ?? (host?.includes('localhost') ? 'http' : 'https')
 
   if (host) {
