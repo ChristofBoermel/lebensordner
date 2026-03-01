@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers'
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { requireAdmin, ForbiddenError, UnauthorizedError } from '@/lib/auth/guards'
@@ -14,6 +15,33 @@ const AdminDashboard = dynamic(
     ),
   }
 )
+
+const normalizeOrigin = (value: string | null | undefined) => {
+  if (!value) return null
+  const trimmed = value.trim().replace(/\/+$/, '')
+  if (!trimmed) return null
+  if (!/^https?:\/\//i.test(trimmed)) return null
+  return trimmed
+}
+
+const resolveRequestOrigin = async () => {
+  const headerStore = await headers()
+  const forwardedHost = headerStore.get('x-forwarded-host')
+  const host = forwardedHost ?? headerStore.get('host')
+  const forwardedProto = headerStore.get('x-forwarded-proto')
+  const proto = forwardedProto ?? (host?.includes('localhost') ? 'http' : 'https')
+
+  if (host) {
+    const headerOrigin = normalizeOrigin(`${proto}://${host}`)
+    if (headerOrigin) return headerOrigin
+  }
+
+  return (
+    normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL) ??
+    normalizeOrigin(process.env.SITE_URL) ??
+    'http://localhost:3000'
+  )
+}
 
 export default async function AdminPage() {
   try {
@@ -33,14 +61,14 @@ export default async function AdminPage() {
     .map((c) => `${c.name}=${c.value}`)
     .join('; ')
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const origin = await resolveRequestOrigin()
 
   const [statsRes, usersRes] = await Promise.all([
-    fetch(`${baseUrl}/api/admin/stats`, {
+    fetch(`${origin}/api/admin/stats`, {
       headers: { cookie: cookieHeader },
       cache: 'no-store',
     }),
-    fetch(`${baseUrl}/api/admin/users`, {
+    fetch(`${origin}/api/admin/users`, {
       headers: { cookie: cookieHeader },
       cache: 'no-store',
     }),

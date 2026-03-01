@@ -26,7 +26,13 @@ export function startWorkers() {
           }
         )
         if (!response.ok) {
-          throw new Error(`Reminder cron returned ${response.status}`)
+          let errorBody = ''
+          try {
+            errorBody = await response.text()
+          } catch (e) {
+            errorBody = 'Could not read response body'
+          }
+          throw new Error(`Reminder cron returned ${response.status}: ${errorBody.substring(0, 500)}`)
         }
         const result = await response.json()
         console.log(`[Worker] Reminder job completed:`, result)
@@ -64,7 +70,13 @@ export function startWorkers() {
           }
         )
         if (!response.ok) {
-          throw new Error(`Email cron ${endpoint} returned ${response.status}`)
+          let errorBody = ''
+          try {
+            errorBody = await response.text()
+          } catch (e) {
+            errorBody = 'Could not read response body'
+          }
+          throw new Error(`Email cron ${endpoint} returned ${response.status}: ${errorBody.substring(0, 500)}`)
         }
         const result = await response.json()
         console.log(`[Worker] Email job ${job.name} completed:`, result)

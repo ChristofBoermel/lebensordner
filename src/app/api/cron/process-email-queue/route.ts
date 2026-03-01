@@ -108,13 +108,17 @@ export async function GET(request: Request) {
     for (const item of queueItems as QueueItem[]) {
       results.processed++
 
-      // Mark as processing
-      await supabase
-        .from('email_retry_queue')
-        .update({ status: 'processing' })
-        .eq('id', item.id)
-
       try {
+        // Mark as processing
+        const { error: updateError } = await supabase
+          .from('email_retry_queue')
+          .update({ status: 'processing' })
+          .eq('id', item.id)
+
+        if (updateError) {
+          throw new Error(`Failed to update status to processing: ${updateError.message}`)
+        }
+
         // Fetch trusted person details
         const { data: trustedPerson, error: tpError } = await supabase
           .from('trusted_persons')
@@ -123,7 +127,7 @@ export async function GET(request: Request) {
           .single()
 
         if (tpError || !trustedPerson) {
-          throw new Error(`Trusted person not found: ${item.trusted_person_id}`)
+          throw new Error(`Trusted person not found: ${item.trusted_person_id}${tpError ? ` (${tpError.message})` : ''}`)
         }
 
         // Fetch owner profile
@@ -134,7 +138,7 @@ export async function GET(request: Request) {
           .single()
 
         if (profileError || !profile) {
-          throw new Error(`Owner profile not found for user: ${(trustedPerson as TrustedPerson).user_id}`)
+          throw new Error(`Owner profile not found for user: ${(trustedPerson as TrustedPerson).user_id}${profileError ? ` (${profileError.message})` : ''}`)
         }
 
         const tp = trustedPerson as TrustedPerson
@@ -257,16 +261,25 @@ export async function GET(request: Request) {
           }
         }
       } catch (itemError: any) {
-        // Mark queue item for retry on unexpected errors
+        console.error(`Error processing queue item ${item.id}:`, itemError)
+        
+        // Mark queue item for retry on unexpected errors, but increment retry count and push next_retry_at
+        // to avoid infinite immediate loops of failing items
+        const newRetryCount = item.retry_count + 1
+        const nextRetryAt = calculateNextRetryTime(newRetryCount)
+
         await supabase
           .from('email_retry_queue')
           .update({
             status: 'pending',
-            last_error: itemError.message,
+            last_error: `UNEXPECTED: ${itemError.message}`,
+            retry_count: newRetryCount,
+            next_retry_at: nextRetryAt,
           })
           .eq('id', item.id)
 
         results.errors.push(`Error processing ${item.id}: ${itemError.message}`)
+        results.failed++
       }
     }
 

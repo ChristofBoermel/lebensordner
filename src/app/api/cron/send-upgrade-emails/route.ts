@@ -15,12 +15,22 @@ if (!CRON_SECRET) {
   console.error('[CRON] CRITICAL: CRON_SECRET not configured')
 }
 
-const getSupabaseAdmin = () => createClient(
-  process.env['SUPABASE_URL']!,
-  process.env['SUPABASE_SERVICE_ROLE_KEY']!
-)
+const getSupabaseAdmin = () => {
+  const url = process.env['SUPABASE_URL']
+  const key = process.env['SUPABASE_SERVICE_ROLE_KEY']
+  if (!url || !key) {
+    throw new Error('Supabase environment variables missing')
+  }
+  return createClient(url, key)
+}
 
-const getResend = () => new Resend(process.env.RESEND_API_KEY)
+const getResend = () => {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY missing')
+  }
+  return new Resend(apiKey)
+}
 
 interface EligibleUser {
   id: string
@@ -202,8 +212,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabaseAdmin()
-  const resend = getResend()
   const results = {
     checked: 0,
     sent: 0,
@@ -211,6 +219,9 @@ export async function GET(request: Request) {
   }
 
   try {
+    const supabase = getSupabaseAdmin()
+    const resend = getResend()
+
     // Calculate the date 7 days ago
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
@@ -228,11 +239,7 @@ export async function GET(request: Request) {
       .or('subscription_status.is.null,subscription_status.eq.canceled')
 
     if (profileError) {
-      console.error('Error fetching profiles:', profileError)
-      return NextResponse.json({
-        error: 'Failed to fetch profiles',
-        details: profileError.message,
-      }, { status: 500 })
+      throw new Error(`Failed to fetch profiles: ${profileError.message}`)
     }
 
     if (!eligibleProfiles || eligibleProfiles.length === 0) {
@@ -290,9 +297,8 @@ export async function GET(request: Request) {
         results.sent++
         console.log(`Sent 7-day upgrade email to ${profile.email} (${documentCount} documents)`)
 
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-        results.errors.push(`Error processing ${profile.email}: ${errorMessage}`)
+      } catch (err: any) {
+        results.errors.push(`Error processing ${profile.email}: ${err.message}`)
       }
     }
 
@@ -301,11 +307,13 @@ export async function GET(request: Request) {
       results,
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Upgrade email cron error:', error)
     return NextResponse.json({
-      error: 'Failed to process upgrade emails',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      ...results,
     }, { status: 500 })
   }
 }
