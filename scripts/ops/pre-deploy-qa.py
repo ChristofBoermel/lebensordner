@@ -65,6 +65,24 @@ def read(rel: str) -> str:
     return p.read_text(encoding="utf-8", errors="replace") if p.exists() else ""
 
 
+def get_deploy_workflow_content() -> tuple[str, str]:
+    """
+    Return (path, content) for the workflow that contains deploy logic.
+    Supports split CI/deploy workflows while keeping backward compatibility.
+    """
+    candidates = [
+        ".github/workflows/deploy.yml",
+        ".github/workflows/ci.yml",
+    ]
+    for path in candidates:
+        content = read(path)
+        if not content:
+            continue
+        if "docker compose" in content or "appleboy/ssh-action" in content or "deploy:" in content:
+            return path, content
+    return "", ""
+
+
 def ts_files() -> list[Path]:
     src = ROOT / "src"
     return [
@@ -145,34 +163,34 @@ def check_kong_template_has_placeholders() -> None:
 
 
 def check_ci_kong_sed_substitution() -> None:
-    ci = read(".github/workflows/ci.yml")
-    if not ci:
-        record("WARN", "ci.yml not found -- skipping Kong sed check")
+    workflow_path, workflow = get_deploy_workflow_content()
+    if not workflow:
+        record("WARN", "No deploy workflow found -- skipping Kong sed check")
         return
-    has_anon_sed = bool(re.search(r"s[|/].*SUPABASE_ANON_KEY.*[|/]", ci))
-    has_svc_sed  = bool(re.search(r"s[|/].*SUPABASE_SERVICE_KEY.*[|/]", ci))
+    has_anon_sed = bool(re.search(r"s[|/].*SUPABASE_ANON_KEY.*[|/]", workflow))
+    has_svc_sed  = bool(re.search(r"s[|/].*SUPABASE_SERVICE_KEY.*[|/]", workflow))
     if has_anon_sed and has_svc_sed:
-        record("PASS", "CI deploy sed-substitutes both Kong keys")
+        record("PASS", f"Deploy workflow sed-substitutes both Kong keys ({workflow_path})")
     else:
         missing = []
         if not has_anon_sed: missing.append("SUPABASE_ANON_KEY")
         if not has_svc_sed:  missing.append("SUPABASE_SERVICE_KEY")
         record("FAIL",
-               f"CI deploy missing sed for: {', '.join(missing)}",
+               f"Deploy workflow missing sed for: {', '.join(missing)}",
                "The deploy script must substitute all keys before restarting Kong,\n"
                "otherwise key-auth rejects all Supabase REST/storage requests.")
 
 
 def check_ci_kong_force_recreate() -> None:
     """Kong (db-less) only reads declarative config at startup -- must force-recreate."""
-    ci = read(".github/workflows/ci.yml")
-    if not ci:
+    workflow_path, workflow = get_deploy_workflow_content()
+    if not workflow:
         return
-    if "--force-recreate kong" in ci or re.search(r"--force-recreate\s+kong", ci):
-        record("PASS", "CI force-recreates Kong after key substitution")
+    if "--force-recreate kong" in workflow or re.search(r"--force-recreate\s+kong", workflow):
+        record("PASS", f"Deploy workflow force-recreates Kong ({workflow_path})")
     else:
         record("FAIL",
-               "CI does not --force-recreate kong",
+               "Deploy workflow does not --force-recreate kong",
                "Kong in db-less mode caches config at startup only.\n"
                "Without force-recreate, old or placeholder key-auth creds stay active.")
 
