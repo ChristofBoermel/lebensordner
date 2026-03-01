@@ -2,11 +2,18 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 
-// Service role client to update trusted_persons
+// Service role client to update trusted_persons when RLS blocks user-scoped writes.
 const getSupabaseAdmin = () => {
+  const supabaseUrl = process.env['SUPABASE_URL'] || process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+
+  if (!supabaseUrl || !serviceKey) {
+    return null
+  }
+
   return createClient(
-    process.env['SUPABASE_URL']!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    supabaseUrl,
+    serviceKey
   )
 }
 
@@ -19,57 +26,72 @@ export async function POST() {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
     }
 
-    const adminClient = getSupabaseAdmin()
-
-    // Find any trusted_persons records where email matches and invitation was accepted
-    // but linked_user_id is not yet set
-    // Use ilike for case-insensitive email matching
-    const { data: pendingLinks, error: fetchError } = await adminClient
-      .from('trusted_persons')
-      .select('id, user_id, name, email, invitation_status')
-      .ilike('email', user.email || '')
-      .is('linked_user_id', null)
-
-    console.log('Link API - User email:', user.email)
-    console.log('Link API - Found pending links:', pendingLinks)
-
-    if (fetchError) {
-      console.error('Error fetching pending links:', fetchError)
-      return NextResponse.json({ error: 'Datenbankfehler' }, { status: 500 })
-    }
-
-    // Filter to only accepted invitations
-    const acceptedLinks = (pendingLinks || []).filter(
-      link => link.invitation_status === 'accepted'
-    )
-
-    if (acceptedLinks.length === 0) {
+    if (!user.email) {
       return NextResponse.json({
         success: true,
         linked: 0,
-        message: 'Keine ausstehenden Verknüpfungen gefunden',
-        debug: { userEmail: user.email, foundRecords: pendingLinks?.length || 0 }
+        message: 'Keine E-Mail am Konto vorhanden, keine Verknüpfung möglich',
       })
     }
 
-    // Link all matching records by their IDs
-    const idsToLink = acceptedLinks.map(link => link.id)
-    const { error: updateError } = await adminClient
+    // 1) Try user-scoped linking first (works when DB policies allow invitee self-linking).
+    const { data: userUpdateRows, error: userUpdateError } = await supabase
       .from('trusted_persons')
       .update({ linked_user_id: user.id })
-      .in('id', idsToLink)
+      .ilike('email', user.email)
+      .eq('invitation_status', 'accepted')
+      .is('linked_user_id', null)
+      .select('id')
 
-    if (updateError) {
-      console.error('Error linking trusted person:', updateError)
-      return NextResponse.json({ error: 'Verknüpfung fehlgeschlagen' }, { status: 500 })
+    if (!userUpdateError) {
+      const linkedCount = userUpdateRows?.length ?? 0
+      return NextResponse.json({
+        success: true,
+        linked: linkedCount,
+        message: linkedCount > 0
+          ? `${linkedCount} Verknüpfung(en) erstellt`
+          : 'Keine ausstehenden Verknüpfungen gefunden',
+      })
     }
 
-    console.log(`Linked ${acceptedLinks.length} trusted person record(s) for user ${user.id}`)
+    console.warn('User-scoped trusted-person linking failed, trying admin fallback:', userUpdateError)
+
+    // 2) Fallback: service-role update for environments where invitee self-linking is blocked by RLS.
+    const adminClient = getSupabaseAdmin()
+    if (!adminClient) {
+      console.error('Missing service-role client config for trusted-person link fallback')
+      return NextResponse.json({
+        success: true,
+        linked: 0,
+        message: 'Verknüpfung derzeit nicht möglich (Konfiguration)',
+      })
+    }
+
+    const { data: adminUpdateRows, error: adminUpdateError } = await adminClient
+      .from('trusted_persons')
+      .update({ linked_user_id: user.id })
+      .ilike('email', user.email)
+      .eq('invitation_status', 'accepted')
+      .is('linked_user_id', null)
+      .select('id')
+
+    if (adminUpdateError) {
+      console.error('Admin fallback trusted-person linking failed:', adminUpdateError)
+      return NextResponse.json({
+        success: true,
+        linked: 0,
+        message: 'Verknüpfung derzeit nicht möglich',
+      })
+    }
+
+    const linkedCount = adminUpdateRows?.length ?? 0
 
     return NextResponse.json({
       success: true,
-      linked: acceptedLinks.length,
-      message: `${acceptedLinks.length} Verknüpfung(en) erstellt`
+      linked: linkedCount,
+      message: linkedCount > 0
+        ? `${linkedCount} Verknüpfung(en) erstellt`
+        : 'Keine ausstehenden Verknüpfungen gefunden',
     })
   } catch (error: any) {
     console.error('Link trusted person error:', error)
