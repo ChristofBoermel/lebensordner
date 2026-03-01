@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { useVault } from '@/lib/vault/VaultContext'
@@ -129,6 +129,7 @@ export default function ZugriffPage() {
   const [viewerOwnerTier, setViewerOwnerTier] = useState<'free' | 'basic' | 'premium'>('free')
   const [isLoadingViewer, setIsLoadingViewer] = useState(false)
   const [downloadingFor, setDownloadingFor] = useState<string | null>(null)
+  const familyLoadTriggeredRef = useRef(false)
 
   const [isBulkShareOpen, setIsBulkShareOpen] = useState(false)
   const [sharesVersion, setSharesVersion] = useState(0)
@@ -319,7 +320,13 @@ export default function ZugriffPage() {
 
   // Load family members when Familie tab becomes active
   useEffect(() => {
-    if (activeMainTab === 'familie' && familyMembers.length === 0 && !isFamilyLoading) {
+    if (activeMainTab !== 'familie') {
+      familyLoadTriggeredRef.current = false
+      return
+    }
+
+    if (!familyLoadTriggeredRef.current && familyMembers.length === 0 && !isFamilyLoading) {
+      familyLoadTriggeredRef.current = true
       linkPendingInvitations().then(() => fetchFamilyMembers())
     }
   }, [activeMainTab, familyMembers.length, isFamilyLoading, linkPendingInvitations, fetchFamilyMembers])
