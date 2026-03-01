@@ -11,6 +11,7 @@ import {
 } from '@/lib/security/auth-lockout'
 import { isNewDevice } from '@/lib/security/device-detection'
 import { sendSecurityNotification } from '@/lib/email/security-notifications'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // --- Constants ---
 
@@ -24,7 +25,11 @@ const LOCKOUT_THRESHOLD = 5
 async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY
   if (!secret) {
-    console.error('[AUTH] TURNSTILE_SECRET_KEY not configured')
+    emitStructuredError({
+      error_type: 'config',
+      error_message: 'TURNSTILE_SECRET_KEY not configured',
+      endpoint: '/api/auth/login',
+    })
     return false
   }
 
@@ -45,7 +50,12 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
     const data = await response.json()
     return data.success === true
   } catch (error) {
-    console.error('[AUTH] Turnstile verification failed:', error)
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: `Turnstile verification failed: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/auth/login',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return false
   }
 }
@@ -278,10 +288,22 @@ export async function POST(request: NextRequest) {
             timestamp: new Date().toISOString(),
             ipAddress: clientIp,
             userAgent,
-          }).catch((err) => console.error('New device notification failed:', err))
+          }).catch((err) =>
+            emitStructuredError({
+              error_type: 'notification',
+              error_message: `New device notification failed: ${err instanceof Error ? err.message : String(err)}`,
+              endpoint: '/api/auth/login',
+              stack: err instanceof Error ? err.stack : undefined,
+            })
+          )
         }
       } catch (err) {
-        console.error('Device detection failed:', err)
+        emitStructuredError({
+          error_type: 'auth',
+          error_message: `Device detection failed: ${err instanceof Error ? err.message : String(err)}`,
+          endpoint: '/api/auth/login',
+          stack: err instanceof Error ? err.stack : undefined,
+        })
       }
     }
 
@@ -291,7 +313,12 @@ export async function POST(request: NextRequest) {
       refresh_token: data.session?.refresh_token,
     })
   } catch (error) {
-    console.error('[AUTH] Login error:', error)
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: `Login error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/auth/login',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -40,12 +41,21 @@ export async function POST(
       .eq('id', downloadToken.id)
 
     if (updateError) {
-      console.error('Error marking download link used:', updateError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error marking download link used: ${updateError.message}`,
+        endpoint: '/api/download-link/[token]/mark-used',
+      })
     }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('Mark download link used error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Mark download link used error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/download-link/[token]/mark-used',
+      stack: error?.stack,
+    })
     return NextResponse.json({ success: true })
   }
 }

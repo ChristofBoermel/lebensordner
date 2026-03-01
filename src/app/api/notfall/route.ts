@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth/guards'
 import { encrypt, decrypt, encryptJson, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
 import type { Medication } from '@/types/medication'
 import { hasHealthDataConsent } from '@/lib/consent/manager'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // --- Encryption helpers ---
 
@@ -19,7 +20,11 @@ function decryptField(value: string | null | undefined, isEncrypted: boolean, ke
     const parsed: EncryptedData = JSON.parse(value)
     return decrypt(parsed, key)
   } catch (e) {
-    console.error('Failed to decrypt field:', e)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Failed to decrypt field: ${e instanceof Error ? e.message : String(e)}`,
+      endpoint: '/api/notfall',
+    })
     return null
   }
 }
@@ -42,7 +47,11 @@ function decryptMedications(value: string | null | undefined, isEncrypted: boole
     }
     return result as Medication[]
   } catch (e) {
-    console.error('Failed to decrypt medications field:', e)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Failed to decrypt medications field: ${e instanceof Error ? e.message : String(e)}`,
+      endpoint: '/api/notfall',
+    })
     return []
   }
 }
@@ -64,7 +73,11 @@ function decryptArray(value: string | null | undefined, isEncrypted: boolean, ke
     const decrypted = decrypt(parsed, key)
     return JSON.parse(decrypted)
   } catch (e) {
-    console.error('Failed to decrypt array field:', e)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Failed to decrypt array field: ${e instanceof Error ? e.message : String(e)}`,
+      endpoint: '/api/notfall',
+    })
     return []
   }
 }
@@ -261,7 +274,12 @@ export async function GET() {
     if (error.statusCode === 401) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
     }
-    console.error('Notfall GET error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Notfall GET error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/notfall',
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Fehler beim Laden der Notfalldaten' }, { status: 500 })
   }
 }
@@ -402,7 +420,12 @@ export async function PUT(request: Request) {
     if (error.statusCode === 401) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
     }
-    console.error('Notfall PUT error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Notfall PUT error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/notfall',
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Fehler beim Speichern der Notfalldaten' }, { status: 500 })
   }
 }

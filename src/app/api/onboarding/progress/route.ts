@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // GET: Load onboarding progress from server
 export async function GET() {
@@ -58,7 +59,12 @@ export async function GET() {
 
     return NextResponse.json({ progress })
   } catch (error) {
-    console.error('Error loading onboarding progress:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Error loading onboarding progress: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/onboarding/progress',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json({ progress: null })
   }
 }
@@ -118,7 +124,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error saving onboarding progress:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Error saving onboarding progress: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/onboarding/progress',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json({ success: false, fallback: true })
   }
 }
@@ -162,7 +173,12 @@ export async function DELETE() {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error clearing onboarding progress:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Error clearing onboarding progress: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/onboarding/progress',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json({ success: false })
   }
 }

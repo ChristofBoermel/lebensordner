@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -66,7 +67,12 @@ export async function GET(
       linkType: downloadToken.link_type || 'download',
     })
   } catch (error: any) {
-    console.error('Verify token error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Verify token error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/download-link/verify/[token]',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: 'Serverfehler' },
       { status: 500 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { getConsentHistory } from '@/lib/consent/manager'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function GET() {
   try {
@@ -18,7 +19,12 @@ export async function GET() {
 
     return NextResponse.json({ history })
   } catch (error) {
-    console.error('[CONSENT] History error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Consent history error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/consent/history',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }

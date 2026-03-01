@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function GET(request: Request) {
   try {
@@ -43,7 +44,12 @@ export async function GET(request: Request) {
       invitationStatus: trustedPerson.invitation_status,
     })
   } catch (error: any) {
-    console.error('Invite status error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Invite status error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/trusted-person/invite-status',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Fehler beim Abrufen des Status' },
       { status: 500 }

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { requireAdmin } from '@/lib/auth/guards'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { logSecurityEvent, EVENT_ADMIN_ROLE_CHANGED } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 function createServiceClient() {
   return createClient(
@@ -62,7 +63,12 @@ export async function POST(request: NextRequest) {
     if (error.statusCode === 403) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
-    console.error('Admin role update error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Admin role update error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/admin/users/role',
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

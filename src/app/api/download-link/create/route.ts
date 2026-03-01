@@ -6,6 +6,7 @@ import { randomBytes } from 'crypto'
 import { getTierFromSubscription, getDownloadLinkType, canCreateDownloadLinks } from '@/lib/subscription-tiers'
 import { logSecurityEvent, EVENT_DOWNLOAD_LINK_CREATED } from '@/lib/security/audit-log'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_DOWNLOAD_LINK } from '@/lib/security/rate-limit'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -127,7 +128,11 @@ export async function POST(request: Request) {
       .single()
 
     if (insertError) {
-      console.error('Error creating download token:', insertError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error creating download token: ${insertError.message}`,
+        endpoint: '/api/download-link/create',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Erstellen des Download-Links' },
         { status: 500 }
@@ -177,7 +182,11 @@ export async function POST(request: Request) {
         )
 
       if (documentsInsertError) {
-        console.error('Error inserting download link documents:', documentsInsertError)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Error inserting download link documents: ${documentsInsertError.message}`,
+          endpoint: '/api/download-link/create',
+        })
       }
     }
 
@@ -195,7 +204,11 @@ export async function POST(request: Request) {
         )
 
       if (wrappedDeksInsertError) {
-        console.error('Error inserting download link wrapped deks:', wrappedDeksInsertError)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Error inserting download link wrapped deks: ${wrappedDeksInsertError.message}`,
+          endpoint: '/api/download-link/create',
+        })
       }
     }
 
@@ -304,7 +317,12 @@ export async function POST(request: Request) {
         `,
       })
     } catch (emailError) {
-      console.error('Error sending download link email:', emailError)
+      emitStructuredError({
+        error_type: 'notification',
+        error_message: `Error sending download link email: ${emailError instanceof Error ? emailError.message : String(emailError)}`,
+        endpoint: '/api/download-link/create',
+        stack: emailError instanceof Error ? emailError.stack : undefined,
+      })
       // Continue anyway - the link was created
     }
 
@@ -321,7 +339,12 @@ export async function POST(request: Request) {
         : 'Download-Link wurde erstellt und per E-Mail gesendet',
     })
   } catch (error: any) {
-    console.error('Create download link error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Create download link error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/download-link/create',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Serverfehler' },
       { status: 500 }

@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { recordConsent } from '@/lib/consent/manager'
 import { PRIVACY_POLICY_VERSION } from '@/lib/consent/constants'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_API } from '@/lib/security/rate-limit'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,7 +52,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('[CONSENT] Accept privacy policy error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Accept privacy policy error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/consent/accept-privacy-policy',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }

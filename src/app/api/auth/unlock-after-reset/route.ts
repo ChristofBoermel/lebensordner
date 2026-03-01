@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { unlockAccount, resetFailureCount } from '@/lib/security/auth-lockout'
 import { logSecurityEvent } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,7 +50,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('[AUTH] Unlock error:', error)
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: `Unlock error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/auth/unlock-after-reset',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }

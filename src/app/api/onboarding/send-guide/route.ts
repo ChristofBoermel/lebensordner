@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { sendEmailWithTimeout, DEFAULT_EMAIL_TIMEOUT_MS } from '@/lib/email/resend-service'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 function generateWelcomeEmail({ userName }: { userName: string }): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.lebensordner.org'
@@ -132,7 +133,11 @@ export async function POST() {
       })
     }
 
-    console.error('Guide email failed:', emailResult.error)
+    emitStructuredError({
+      error_type: 'notification',
+      error_message: `Guide email failed: ${emailResult.error || 'unknown error'}`,
+      endpoint: '/api/onboarding/send-guide',
+    })
     const errorMessage = emailResult.error || 'Fehler beim Senden der Anleitung'
     const isRateLimited = /rate|too many|429/i.test(errorMessage)
     return NextResponse.json(
@@ -143,7 +148,12 @@ export async function POST() {
       { status: isRateLimited ? 429 : 500 }
     )
   } catch (error: any) {
-    console.error('Send guide error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Send guide error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/onboarding/send-guide',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Fehler beim Senden der Anleitung' },
       { status: 500 }

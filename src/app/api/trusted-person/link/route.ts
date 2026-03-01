@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // Service role client to update trusted_persons when RLS blocks user-scoped writes.
 const getSupabaseAdmin = () => {
@@ -59,7 +60,11 @@ export async function POST() {
     // 2) Fallback: service-role update for environments where invitee self-linking is blocked by RLS.
     const adminClient = getSupabaseAdmin()
     if (!adminClient) {
-      console.error('Missing service-role client config for trusted-person link fallback')
+      emitStructuredError({
+        error_type: 'config',
+        error_message: 'Missing service-role client config for trusted-person link fallback',
+        endpoint: '/api/trusted-person/link',
+      })
       return NextResponse.json({
         success: true,
         linked: 0,
@@ -76,7 +81,11 @@ export async function POST() {
       .select('id')
 
     if (adminUpdateError) {
-      console.error('Admin fallback trusted-person linking failed:', adminUpdateError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Admin fallback trusted-person linking failed: ${adminUpdateError.message}`,
+        endpoint: '/api/trusted-person/link',
+      })
       return NextResponse.json({
         success: true,
         linked: 0,
@@ -94,7 +103,12 @@ export async function POST() {
         : 'Keine ausstehenden Verknüpfungen gefunden',
     })
   } catch (error: any) {
-    console.error('Link trusted person error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Link trusted person error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/trusted-person/link',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Serverfehler' },
       { status: 500 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // Admin client for profile creation (bypasses RLS)
 const getSupabaseAdmin = () => {
@@ -44,13 +45,22 @@ export async function POST() {
       })
 
     if (error) {
-      console.error('Failed to create profile:', error)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Failed to create profile: ${error.message}`,
+        endpoint: '/api/profile/ensure',
+      })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ exists: true, created: true })
   } catch (error: any) {
-    console.error('Ensure profile error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Ensure profile error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/profile/ensure',
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

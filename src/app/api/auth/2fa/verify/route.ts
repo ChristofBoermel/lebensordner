@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import * as OTPAuth from 'otpauth'
 import { decrypt, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
 import { logSecurityEvent, EVENT_TWO_FACTOR_VERIFIED } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // Use admin client to bypass RLS since user isn't authenticated yet
 const getSupabaseAdmin = () => {
@@ -38,7 +39,11 @@ export async function POST(request: Request) {
     })
 
     if (profileError) {
-      console.error('Profile fetch error:', profileError)
+      emitStructuredError({
+        error_type: 'auth',
+        error_message: `Profile fetch error: ${profileError.message}`,
+        endpoint: '/api/auth/2fa/verify',
+      })
       return NextResponse.json({ error: 'Profil nicht gefunden' }, { status: 400 })
     }
 
@@ -53,7 +58,12 @@ export async function POST(request: Request) {
         const parsed: EncryptedData = JSON.parse(profile.two_factor_secret)
         secretBase32 = decrypt(parsed, key)
       } catch (e) {
-        console.error('Failed to decrypt two_factor_secret:', e)
+        emitStructuredError({
+          error_type: 'auth',
+          error_message: `Failed to decrypt two_factor_secret: ${e instanceof Error ? e.message : String(e)}`,
+          endpoint: '/api/auth/2fa/verify',
+          stack: e instanceof Error ? e.stack : undefined,
+        })
         return NextResponse.json({ error: 'Fehler beim Entschlüsseln des 2FA-Secrets' }, { status: 500 })
       }
     } else {
@@ -86,7 +96,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('2FA verify error:', error)
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: `2FA verify error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/auth/2fa/verify',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Ein Fehler ist aufgetreten' },
       { status: 500 }

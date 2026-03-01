@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function GET() {
   try {
@@ -17,7 +18,11 @@ export async function GET() {
       .maybeSingle()
 
     if (error) {
-      console.error('[VAULT] Key material query error:', error)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Key material query error: ${error.message}`,
+        endpoint: '/api/vault/key-material',
+      })
       return NextResponse.json({ exists: false })
     }
 
@@ -34,7 +39,12 @@ export async function GET() {
       recovery_key_salt: data.recovery_key_salt
     })
   } catch (error) {
-    console.error('[VAULT] Key material GET error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Key material GET error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/vault/key-material',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json({ exists: false })
   }
 }

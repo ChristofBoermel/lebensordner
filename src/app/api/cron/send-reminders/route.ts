@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { emitStructuredError } from "@/lib/errors/structured-logger";
 
 // This endpoint should be called by a cron job (e.g., Vercel Cron, GitHub Actions, or external service)
 // Recommended: Call daily at 8:00 AM
@@ -8,7 +9,11 @@ import { Resend } from "resend";
 // Validate required environment variables at module load
 const CRON_SECRET = process.env['CRON_SECRET'];
 if (!CRON_SECRET) {
-  console.error("[CRON] CRITICAL: CRON_SECRET not configured");
+  emitStructuredError({
+    error_type: "config",
+    error_message: "CRON_SECRET not configured",
+    endpoint: "/api/cron/send-reminders",
+  });
 }
 
 const getSupabaseAdmin = () => {
@@ -79,7 +84,11 @@ interface ExpiringDocument {
 export async function GET(request: Request) {
   // Fail-closed: CRON_SECRET must be set
   if (!CRON_SECRET) {
-    console.error("[CRON] Request rejected: CRON_SECRET is not configured");
+    emitStructuredError({
+      error_type: "auth",
+      error_message: "Request rejected: CRON_SECRET is not configured",
+      endpoint: "/api/cron/send-reminders",
+    });
     return NextResponse.json(
       { error: "Cron endpoint not configured" },
       { status: 500 },
@@ -435,7 +444,13 @@ export async function GET(request: Request) {
       ...results,
     });
   } catch (error: any) {
-    console.error("Cron job error:", error);
+    emitStructuredError({
+      error_type: "worker",
+      error_message: `Cron job error: ${error?.message ?? String(error)}`,
+      endpoint: "/api/cron/send-reminders",
+      queue: "reminders",
+      stack: error?.stack,
+    });
     return NextResponse.json(
       {
         success: false,

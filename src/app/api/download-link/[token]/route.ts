@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import JSZip from 'jszip'
 import { logSecurityEvent, EVENT_DOWNLOAD_LINK_VIEWED } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -67,7 +68,11 @@ export async function GET(
       .limit(1)
 
     if (wrappedDekError) {
-      console.error('Error checking wrapped DEKs:', wrappedDekError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error checking wrapped DEKs: ${wrappedDekError.message}`,
+        endpoint: '/api/download-link/[token]',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden der Dokumente' },
         { status: 500 }
@@ -93,7 +98,11 @@ export async function GET(
       .eq('download_token_id', downloadToken.id)
 
     if (snapshotError) {
-      console.error('Error fetching download link documents:', snapshotError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error fetching download link documents: ${snapshotError.message}`,
+        endpoint: '/api/download-link/[token]',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden der Dokumente' },
         { status: 500 }
@@ -121,7 +130,11 @@ export async function GET(
         .maybeSingle()
 
       if (encryptedDocumentError) {
-        console.error('Error checking encrypted documents:', encryptedDocumentError)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Error checking encrypted documents: ${encryptedDocumentError.message}`,
+          endpoint: '/api/download-link/[token]',
+        })
         return NextResponse.json(
           { error: 'Fehler beim Laden der Dokumente' },
           { status: 500 }
@@ -141,7 +154,11 @@ export async function GET(
     const { data: documents, error: docsError } = await documentsQuery
 
     if (docsError) {
-      console.error('Error fetching documents:', docsError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error fetching documents: ${docsError.message}`,
+        endpoint: '/api/download-link/[token]',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden der Dokumente' },
         { status: 500 }
@@ -193,7 +210,11 @@ export async function GET(
           .download(doc.file_path)
 
         if (fileError || !fileData) {
-          console.error(`Error downloading file ${doc.file_path}:`, fileError)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `Error downloading file ${doc.file_path}: ${fileError?.message ?? 'unknown error'}`,
+            endpoint: '/api/download-link/[token]',
+          })
           continue
         }
 
@@ -205,7 +226,12 @@ export async function GET(
         const arrayBuffer = await fileData.arrayBuffer()
         zip.file(filePath, arrayBuffer)
       } catch (err) {
-        console.error(`Error processing document ${doc.id}:`, err)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Error processing document ${doc.id}: ${err instanceof Error ? err.message : String(err)}`,
+          endpoint: '/api/download-link/[token]',
+          stack: err instanceof Error ? err.stack : undefined,
+        })
         continue
       }
     }
@@ -247,7 +273,12 @@ export async function GET(
       },
     })
   } catch (error: any) {
-    console.error('Download error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Download error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/download-link/[token]',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Serverfehler' },
       { status: 500 }

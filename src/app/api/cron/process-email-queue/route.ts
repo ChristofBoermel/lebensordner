@@ -8,6 +8,7 @@ import {
   DEFAULT_EMAIL_TIMEOUT_MS,
 } from '@/lib/email/resend-service'
 import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscription-tiers'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // This endpoint should be called by a cron job
 // Recommended: Call every 5 minutes
@@ -15,7 +16,11 @@ import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscripti
 // Validate required environment variables at module load
 const CRON_SECRET = process.env.CRON_SECRET
 if (!CRON_SECRET) {
-  console.error('[CRON] CRITICAL: CRON_SECRET environment variable is not set. Cron endpoint will reject all requests.')
+  emitStructuredError({
+    error_type: 'config',
+    error_message: 'CRON_SECRET environment variable is not set. Cron endpoint will reject all requests.',
+    endpoint: '/api/cron/process-email-queue',
+  })
 }
 
 const sanitizeEnv = (value: string | undefined) => value?.trim().replace(/^['"]|['"]$/g, '')
@@ -63,7 +68,11 @@ export async function GET(request: Request) {
 
   // CRON_SECRET must be set - reject all requests if not configured
   if (!CRON_SECRET) {
-    console.error('[CRON] Request rejected: CRON_SECRET is not configured')
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: 'Request rejected: CRON_SECRET is not configured',
+      endpoint: '/api/cron/process-email-queue',
+    })
     return NextResponse.json(
       { error: 'Cron endpoint not configured' },
       { status: 500 }
@@ -273,7 +282,13 @@ export async function GET(request: Request) {
           }
         }
       } catch (itemError: any) {
-        console.error(`Error processing queue item ${item.id}:`, itemError)
+        emitStructuredError({
+          error_type: 'worker',
+          error_message: `Error processing queue item ${item.id}: ${itemError?.message ?? String(itemError)}`,
+          endpoint: '/api/cron/process-email-queue',
+          queue: 'emails',
+          stack: itemError?.stack,
+        })
         
         // Mark queue item for retry on unexpected errors, but increment retry count and push next_retry_at
         // to avoid infinite immediate loops of failing items
@@ -301,7 +316,13 @@ export async function GET(request: Request) {
       ...results,
     })
   } catch (error: any) {
-    console.error('Email queue processing error:', error)
+    emitStructuredError({
+      error_type: 'worker',
+      error_message: `Email queue processing error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/cron/process-email-queue',
+      queue: 'emails',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       {
         success: false,

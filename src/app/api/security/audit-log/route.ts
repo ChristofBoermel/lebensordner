@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/auth/guards'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +27,11 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
-      console.error('Audit log query error:', error)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Audit log query error: ${error.message}`,
+        endpoint: '/api/security/audit-log',
+      })
       return NextResponse.json({ error: 'Fehler beim Laden der Aktivitäten' }, { status: 500 })
     }
 
@@ -35,7 +40,12 @@ export async function GET(request: NextRequest) {
     if (error.statusCode === 401) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
     }
-    console.error('Audit log GET error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Audit log GET error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/security/audit-log',
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 })
   }
 }

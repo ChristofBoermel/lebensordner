@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import JSZip from 'jszip'
 import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscription-tiers'
 import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -54,7 +55,11 @@ export async function GET(request: Request) {
       .single()
 
     if (profileError) {
-      console.error('Error fetching owner profile:', profileError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error fetching owner profile: ${profileError.message}`,
+        endpoint: '/api/family/download',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden des Benutzerprofils' },
         { status: 500 }
@@ -92,7 +97,11 @@ export async function GET(request: Request) {
       .order('title')
 
     if (docsError) {
-      console.error('Error fetching documents:', docsError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error fetching documents: ${docsError.message}`,
+        endpoint: '/api/family/download',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden der Dokumente' },
         { status: 500 }
@@ -107,7 +116,11 @@ export async function GET(request: Request) {
         .eq('user_id', ownerId)
 
       if (tpIdsError) {
-        console.error('Error fetching trusted person ids:', tpIdsError)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Error fetching trusted person ids: ${tpIdsError.message}`,
+          endpoint: '/api/family/download',
+        })
         return NextResponse.json(
           { error: 'Fehler beim Laden der Dokumente' },
           { status: 500 }
@@ -123,7 +136,11 @@ export async function GET(request: Request) {
         .in('trusted_person_id', trustedPersonIds)
 
       if (shareTokensError) {
-        console.error('Error fetching share tokens:', shareTokensError)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Error fetching share tokens: ${shareTokensError.message}`,
+          endpoint: '/api/family/download',
+        })
         return NextResponse.json(
           { error: 'Fehler beim Laden der Dokumente' },
           { status: 500 }
@@ -153,7 +170,11 @@ export async function GET(request: Request) {
           .createSignedUrl(doc.file_path, 3600)
 
         if (signedUrlError || !signedUrlData?.signedUrl) {
-          console.error('Error creating signed URL:', signedUrlError)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `Error creating signed URL: ${signedUrlError?.message ?? 'unknown error'}`,
+            endpoint: '/api/family/download',
+          })
           return NextResponse.json(
             { error: 'Fehler beim Laden der Dokumente' },
             { status: 500 }
@@ -226,7 +247,11 @@ export async function GET(request: Request) {
           .download(doc.file_path)
 
         if (fileError || !fileData) {
-          console.error(`Error downloading file ${doc.file_path}:`, fileError)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `Error downloading file ${doc.file_path}: ${fileError?.message ?? 'unknown error'}`,
+            endpoint: '/api/family/download',
+          })
           continue
         }
 
@@ -235,7 +260,12 @@ export async function GET(request: Request) {
         const arrayBuffer = await fileData.arrayBuffer()
         zip.file(filePath, arrayBuffer)
       } catch (err) {
-        console.error(`Error processing document ${doc.id}:`, err)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Error processing document ${doc.id}: ${err instanceof Error ? err.message : String(err)}`,
+          endpoint: '/api/family/download',
+          stack: err instanceof Error ? err.stack : undefined,
+        })
         continue
       }
     }
@@ -272,7 +302,12 @@ export async function GET(request: Request) {
     })
     }
   } catch (error: any) {
-    console.error('Family download error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Family download error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/family/download',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Serverfehler' },
       { status: 500 }

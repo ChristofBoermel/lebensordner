@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // Use service role to bypass RLS for public invitation pages
 const getSupabaseAdmin = () => {
@@ -38,7 +39,11 @@ export async function GET(request: Request) {
       .single()
 
     if (error || !data) {
-      console.error('Invitation lookup error:', error)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Invitation lookup error: ${error?.message ?? 'not found'}`,
+        endpoint: '/api/invitation',
+      })
       return NextResponse.json({ error: 'Einladung nicht gefunden' }, { status: 404 })
     }
 
@@ -52,7 +57,12 @@ export async function GET(request: Request) {
       owner_name: (data.profiles as any)?.full_name || 'Unbekannt',
     })
   } catch (error: any) {
-    console.error('Invitation API error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Invitation API error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/invitation',
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Serverfehler' }, { status: 500 })
   }
 }
@@ -96,7 +106,11 @@ export async function POST(request: Request) {
         .single()
 
       if (fetchError || !invitation) {
-        console.error('Invitation fetch error:', fetchError)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Invitation fetch error: ${fetchError?.message ?? 'not found'}`,
+          endpoint: '/api/invitation',
+        })
         return NextResponse.json({ error: 'Einladung nicht gefunden' }, { status: 404 })
       }
 
@@ -126,13 +140,22 @@ export async function POST(request: Request) {
       .eq('invitation_token', token)
 
     if (error) {
-      console.error('Invitation update error:', error)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Invitation update error: ${error.message}`,
+        endpoint: '/api/invitation',
+      })
       return NextResponse.json({ error: 'Fehler beim Aktualisieren' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('Invitation POST error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Invitation POST error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/invitation',
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Serverfehler' }, { status: 500 })
   }
 }

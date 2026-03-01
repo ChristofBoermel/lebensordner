@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { stripe } from '@/lib/stripe'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // Force dynamic to prevent any caching/redirect issues
 export const dynamic = 'force-dynamic'
@@ -84,7 +85,12 @@ export async function POST(request: Request) {
   try {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
   } catch (err: any) {
-    console.error('Webhook signature verification failed:', err.message)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Webhook signature verification failed: ${err?.message ?? String(err)}`,
+      endpoint: '/api/stripe/webhook',
+      stack: err?.stack,
+    })
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
@@ -107,8 +113,11 @@ export async function POST(request: Request) {
           // Extract price ID with validation
           const priceId = subscription.items.data[0]?.price?.id || null
           if (!priceId) {
-            console.error('[Webhook] WARNING: No price ID found in subscription items. Items data:',
-              JSON.stringify(subscription.items.data, null, 2))
+            emitStructuredError({
+              error_type: 'api',
+              error_message: `[Webhook] No price ID found in subscription items for checkout.session.completed (session=${session.id})`,
+              endpoint: '/api/stripe/webhook',
+            })
           }
 
           const periodEnd = safeTimestampToISO((subscription as any).current_period_end)
@@ -149,12 +158,20 @@ export async function POST(request: Request) {
               .eq('id', userId)
 
             if (error) {
-              console.error('[Webhook] Failed to update profile:', error.message, error.details, error.code)
+              emitStructuredError({
+                error_type: 'api',
+                error_message: `[Webhook] Failed to update profile: ${error.message}`,
+                endpoint: '/api/stripe/webhook',
+              })
             } else {
               console.log('[Webhook] Profile updated successfully for user:', userId, 'with price ID:', priceId)
             }
           } else {
-            console.error('[Webhook] Could not find user for checkout session. Customer:', session.customer)
+            emitStructuredError({
+              error_type: 'api',
+              error_message: `[Webhook] Could not find user for checkout session. Customer: ${String(session.customer)}`,
+              endpoint: '/api/stripe/webhook',
+            })
           }
         }
         break
@@ -167,9 +184,11 @@ export async function POST(request: Request) {
         // Extract price ID with validation
         const priceId = subscription.items.data[0]?.price?.id || null
         if (!priceId) {
-          console.error('[Webhook] WARNING: No price ID found in subscription items for event:', event.type,
-            'Subscription ID:', subscription.id,
-            'Items data:', JSON.stringify(subscription.items.data, null, 2))
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `[Webhook] No price ID found in subscription items for event=${event.type}, subscription=${subscription.id}`,
+            endpoint: '/api/stripe/webhook',
+          })
         }
 
         const periodEnd = safeTimestampToISO((subscription as any).current_period_end)
@@ -211,12 +230,20 @@ export async function POST(request: Request) {
             .eq('id', userId)
 
           if (error) {
-            console.error('[Webhook] Failed to update subscription:', error.message, error.details, error.code)
+            emitStructuredError({
+              error_type: 'api',
+              error_message: `[Webhook] Failed to update subscription: ${error.message}`,
+              endpoint: '/api/stripe/webhook',
+            })
           } else {
             console.log('[Webhook] Subscription updated successfully for user:', userId, 'with price ID:', priceId)
           }
         } else {
-          console.error('[Webhook] Could not find user for subscription:', subscription.id, 'Customer:', subscription.customer)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `[Webhook] Could not find user for subscription=${subscription.id}, customer=${String(subscription.customer)}`,
+            endpoint: '/api/stripe/webhook',
+          })
         }
         break
       }
@@ -251,12 +278,20 @@ export async function POST(request: Request) {
             .eq('id', userId)
 
           if (error) {
-            console.error('[Webhook] Failed to cancel subscription:', error.message, error.details, error.code)
+            emitStructuredError({
+              error_type: 'api',
+              error_message: `[Webhook] Failed to cancel subscription: ${error.message}`,
+              endpoint: '/api/stripe/webhook',
+            })
           } else {
             console.log('[Webhook] Subscription canceled successfully for user:', userId)
           }
         } else {
-          console.error('[Webhook] Could not find user for subscription deletion:', subscription.id)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `[Webhook] Could not find user for subscription deletion: ${subscription.id}`,
+            endpoint: '/api/stripe/webhook',
+          })
         }
         break
       }
@@ -309,7 +344,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ received: true })
   } catch (error: any) {
-    console.error('Webhook handler error:', error.message || error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Webhook handler error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/stripe/webhook',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: 'Webhook handler failed' },
       { status: 500 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdmin } from '@/lib/auth/guards'
 import { logSecurityEvent, EVENT_ADMIN_USERS_VIEWED } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 function createServiceClient() {
   return createClient(
@@ -10,7 +11,7 @@ function createServiceClient() {
   )
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { user } = await requireAdmin()
     const supabase = createServiceClient()
@@ -56,7 +57,12 @@ export async function GET() {
     if (error.statusCode === 403) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
-    console.error('Admin users error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Admin users error: ${error?.message ?? String(error)}`,
+      endpoint: new URL(request.url).pathname,
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getTierFromSubscription } from '@/lib/subscription-tiers'
 import { generateStreamToken } from './stream/route'
 import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -122,7 +123,11 @@ export async function GET(request: Request) {
       .single()
 
     if (tpError || !trustedPerson) {
-      console.error('[Family View API] Unexpected error fetching trusted person:', tpError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `[Family View API] Unexpected error fetching trusted person: ${tpError?.message ?? 'unknown error'}`,
+        endpoint: '/api/family/view',
+      })
       return NextResponse.json(
         {
           error: 'Keine Berechtigung für diese Ansicht',
@@ -141,7 +146,11 @@ export async function GET(request: Request) {
       .single()
 
     if (ownerError || !ownerProfile) {
-      console.error('[Family View API] Error fetching owner profile:', ownerError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `[Family View API] Error fetching owner profile: ${ownerError?.message ?? 'not found'}`,
+        endpoint: '/api/family/view',
+      })
       return NextResponse.json(
         {
           error: 'Besitzer nicht gefunden',
@@ -185,12 +194,10 @@ export async function GET(request: Request) {
       .order('title')
 
     if (docsError) {
-      console.error('[Family View API] Error fetching documents:', {
-        error: docsError.message,
-        code: docsError.code,
-        details: docsError.details,
-        ownerId,
-        userId: user.id
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `[Family View API] Error fetching documents: ${docsError.message}`,
+        endpoint: '/api/family/view',
       })
       return NextResponse.json(
         {
@@ -268,7 +275,12 @@ export async function GET(request: Request) {
       categories: categoryNames,
     })
   } catch (error: any) {
-    console.error('Family view error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Family view error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/family/view',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Serverfehler' },
       { status: 500 }

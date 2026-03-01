@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { getCurrentConsent, hasHealthDataConsent } from '@/lib/consent/manager'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function GET() {
   try {
@@ -56,7 +57,12 @@ export async function GET() {
       timestamp: latestHealthConsent?.timestamp ?? null,
     })
   } catch (error) {
-    console.error('[CONSENT] Health consent check error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Health consent check error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/consent/check-health-consent',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { granted: false, timestamp: null },
       { status: 200 }

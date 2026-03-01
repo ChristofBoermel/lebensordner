@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { stripe, SUBSCRIPTION_PRICE_ID } from '@/lib/stripe'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST(request: Request) {
   try {
@@ -68,7 +69,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ sessionId: session.id, url: session.url })
   } catch (error: any) {
-    console.error('Stripe checkout error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Stripe checkout error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/stripe/create-checkout',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Fehler beim Erstellen der Checkout-Session' },
       { status: 500 }

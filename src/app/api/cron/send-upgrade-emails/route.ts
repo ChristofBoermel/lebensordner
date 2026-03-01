@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // This endpoint should be called by a cron job daily
 // Sends upgrade emails to FREE users who:
@@ -12,7 +13,11 @@ import { Resend } from 'resend'
 // Validate required environment variables at module load
 const CRON_SECRET = process.env['CRON_SECRET']
 if (!CRON_SECRET) {
-  console.error('[CRON] CRITICAL: CRON_SECRET not configured')
+  emitStructuredError({
+    error_type: 'config',
+    error_message: 'CRON_SECRET not configured',
+    endpoint: '/api/cron/send-upgrade-emails',
+  })
 }
 
 const getSupabaseAdmin = () => {
@@ -193,7 +198,11 @@ function generateUpgradeEmailHtml(name: string, documentCount: number): string {
 export async function GET(request: Request) {
   // Fail-closed: CRON_SECRET must be set
   if (!CRON_SECRET) {
-    console.error('[CRON] Request rejected: CRON_SECRET is not configured')
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: 'Request rejected: CRON_SECRET is not configured',
+      endpoint: '/api/cron/send-upgrade-emails',
+    })
     return NextResponse.json(
       { error: 'Cron endpoint not configured' },
       { status: 500 }
@@ -308,7 +317,13 @@ export async function GET(request: Request) {
     })
 
   } catch (error: any) {
-    console.error('Upgrade email cron error:', error)
+    emitStructuredError({
+      error_type: 'worker',
+      error_message: `Upgrade email cron error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/cron/send-upgrade-emails',
+      queue: 'emails',
+      stack: error?.stack,
+    })
     return NextResponse.json({
       success: false,
       error: error.message,

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth/guards'
 import { reminderQueue, emailQueue, cleanupQueue } from '@/lib/queue/queues'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await requireAdmin()
 
@@ -33,7 +34,12 @@ export async function GET() {
     if (error.statusCode === 403) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
-    console.error('Admin queues error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Admin queues error: ${error?.message ?? String(error)}`,
+      endpoint: new URL(request.url).pathname,
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

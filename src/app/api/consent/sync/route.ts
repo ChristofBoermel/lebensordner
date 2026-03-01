@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import { recordConsent } from '@/lib/consent/manager'
 import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST() {
   try {
@@ -48,7 +49,12 @@ export async function POST() {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('[CONSENT] Sync error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Consent sync error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/consent/sync',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }

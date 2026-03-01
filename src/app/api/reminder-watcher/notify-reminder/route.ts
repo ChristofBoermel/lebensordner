@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getResend = () => new Resend(process.env.RESEND_API_KEY)
 
@@ -114,7 +115,12 @@ export async function POST(request: Request) {
         `,
       })
     } catch (emailError) {
-      console.error('Error sending watcher notification email:', emailError)
+      emitStructuredError({
+        error_type: 'notification',
+        error_message: `Error sending watcher notification email: ${emailError instanceof Error ? emailError.message : String(emailError)}`,
+        endpoint: '/api/reminder-watcher/notify-reminder',
+        stack: emailError instanceof Error ? emailError.stack : undefined,
+      })
       // Continue anyway
     }
 
@@ -123,7 +129,12 @@ export async function POST(request: Request) {
       message: 'Benachrichtigung wurde gesendet',
     })
   } catch (error: any) {
-    console.error('Notify reminder watcher error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Notify reminder watcher error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/reminder-watcher/notify-reminder',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Serverfehler' },
       { status: 500 }

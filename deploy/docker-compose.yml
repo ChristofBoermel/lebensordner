@@ -1,3 +1,8 @@
+x-default-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
   # ============================================
@@ -24,6 +29,7 @@ services:
       retries: 5
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   kong:
     image: kong:2.8.1
@@ -48,6 +54,7 @@ services:
         condition: service_healthy
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   auth:
     image: supabase/gotrue:v2.158.1
@@ -93,6 +100,7 @@ services:
         condition: service_healthy
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   rest:
     image: postgrest/postgrest:v12.2.3
@@ -111,6 +119,7 @@ services:
         condition: service_healthy
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   storage:
     image: supabase/storage-api:v1.11.13
@@ -139,6 +148,7 @@ services:
         condition: service_started
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   imgproxy:
     image: darthsim/imgproxy:v3.8.0
@@ -153,6 +163,7 @@ services:
       - /mnt/storage-data:/var/lib/storage
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   studio:
     image: supabase/studio:20240422-5cf8f30
@@ -175,6 +186,7 @@ services:
         condition: service_started
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   meta:
     image: supabase/postgres-meta:v0.83.2
@@ -192,6 +204,7 @@ services:
         condition: service_healthy
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   # ============================================
   # Application
@@ -256,6 +269,7 @@ services:
       start_period: 40s
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   worker:
     image: ghcr.io/christofboermel/lebensordner/worker:latest
@@ -276,6 +290,7 @@ services:
         condition: service_healthy
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   # ============================================
   # Redis (Rate Limiting + BullMQ)
@@ -295,6 +310,7 @@ services:
       retries: 5
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   # ============================================
   # Reverse Proxy (Caddy)
@@ -322,6 +338,7 @@ services:
       - studio
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   # ============================================
   # Monitoring Stack
@@ -344,6 +361,7 @@ services:
       - metrics-secret
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   loki:
     image: grafana/loki:3.1.0
@@ -355,6 +373,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   promtail:
     image: grafana/promtail:3.1.0
@@ -369,6 +388,7 @@ services:
       - loki
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   redis-exporter:
     image: oliver006/redis_exporter:v1.62.0
@@ -382,6 +402,7 @@ services:
         condition: service_healthy
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
@@ -394,6 +415,7 @@ services:
         condition: service_healthy
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   node-exporter:
     image: prom/node-exporter:v1.8.1
@@ -411,6 +433,7 @@ services:
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
     networks:
       - lebensordner-net
+    logging: *default-logging
 
   grafana:
     image: grafana/grafana:11.1.0
@@ -432,6 +455,7 @@ services:
       - loki
     networks:
       - lebensordner-net
+    logging: *default-logging
 
 # ============================================
 # Volumes & Networks

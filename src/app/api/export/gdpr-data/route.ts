@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth/guards'
 import { decrypt, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
 import { logSecurityEvent, EVENT_GDPR_EXPORT_REQUESTED } from '@/lib/security/audit-log'
 import { CATEGORY_METADATA_FIELDS } from '@/types/database'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,7 +58,11 @@ export async function POST(request: NextRequest) {
           const parsed: EncryptedData = JSON.parse(profileData.phone)
           profileData.phone = decrypt(parsed, key)
         } catch (e) {
-          console.error('GDPR export: Failed to decrypt phone:', e)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `GDPR export: Failed to decrypt phone: ${e instanceof Error ? e.message : String(e)}`,
+            endpoint: '/api/export/gdpr-data',
+          })
           profileData.phone = null
         }
       }
@@ -68,7 +73,11 @@ export async function POST(request: NextRequest) {
           const parsed: EncryptedData = JSON.parse(profileData.address)
           profileData.address = decrypt(parsed, key)
         } catch (e) {
-          console.error('GDPR export: Failed to decrypt address:', e)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `GDPR export: Failed to decrypt address: ${e instanceof Error ? e.message : String(e)}`,
+            endpoint: '/api/export/gdpr-data',
+          })
           profileData.address = null
         }
       }
@@ -79,7 +88,11 @@ export async function POST(request: NextRequest) {
           const parsed: EncryptedData = JSON.parse(profileData.date_of_birth)
           profileData.date_of_birth = decrypt(parsed, key)
         } catch (e) {
-          console.error('GDPR export: Failed to decrypt date_of_birth:', e)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `GDPR export: Failed to decrypt date_of_birth: ${e instanceof Error ? e.message : String(e)}`,
+            endpoint: '/api/export/gdpr-data',
+          })
           profileData.date_of_birth = null
         }
       }
@@ -142,7 +155,12 @@ export async function POST(request: NextRequest) {
     if (error.statusCode === 401) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
     }
-    console.error('GDPR export error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `GDPR export error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/export/gdpr-data',
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Fehler beim Exportieren der Daten' }, { status: 500 })
   }
 }

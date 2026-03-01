@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { recordConsent } from '@/lib/consent/manager'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,7 +43,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('[CONSENT] Record error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Consent record error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/consent/record',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -43,7 +44,11 @@ export async function POST(request: Request) {
       .single()
 
     if (dbError) {
-      console.error('Database error:', dbError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Feedback database error: ${dbError.message}`,
+        endpoint: '/api/feedback',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Speichern des Feedbacks' },
         { status: 500 }
@@ -130,7 +135,12 @@ export async function POST(request: Request) {
         `
       })
     } catch (emailError) {
-      console.error('Email send error:', emailError)
+      emitStructuredError({
+        error_type: 'notification',
+        error_message: `Feedback email send error: ${emailError instanceof Error ? emailError.message : String(emailError)}`,
+        endpoint: '/api/feedback',
+        stack: emailError instanceof Error ? emailError.stack : undefined,
+      })
       // Don't fail the request if email fails - feedback is already saved
     }
 
@@ -140,7 +150,12 @@ export async function POST(request: Request) {
       message: 'Feedback erfolgreich gesendet'
     })
   } catch (error: any) {
-    console.error('Feedback error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Feedback error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/feedback',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: 'Interner Serverfehler' },
       { status: 500 }

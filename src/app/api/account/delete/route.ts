@@ -7,6 +7,7 @@ import {
   sendTrustedPersonDeletionNotification,
 } from '@/lib/email/security-notifications'
 import { getStripe } from '@/lib/stripe'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // --- Helper ---
 
@@ -85,7 +86,12 @@ export async function DELETE(request: NextRequest) {
         )
       }
     } catch (error) {
-      console.error('Error notifying trusted persons:', error)
+      emitStructuredError({
+        error_type: 'notification',
+        error_message: `Error notifying trusted persons: ${error instanceof Error ? error.message : String(error)}`,
+        endpoint: '/api/account/delete',
+        stack: error instanceof Error ? error.stack : undefined,
+      })
       // Don't block deletion
     }
 
@@ -125,7 +131,12 @@ export async function DELETE(request: NextRequest) {
             await serviceClient.storage.from('avatars').remove([`${user.id}/${avatarPath}`])
           }
         } catch (error) {
-          console.error('Storage cleanup failed:', error)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `Storage cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
+            endpoint: '/api/account/delete',
+            stack: error instanceof Error ? error.stack : undefined,
+          })
           // Don't block account deletion
         }
       })(),
@@ -173,7 +184,12 @@ export async function DELETE(request: NextRequest) {
             )
           }
         } catch (error) {
-          console.error('PostHog deletion request failed:', error)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `PostHog deletion request failed: ${error instanceof Error ? error.message : String(error)}`,
+            endpoint: '/api/account/delete',
+            stack: error instanceof Error ? error.stack : undefined,
+          })
           // Don't block account deletion
         }
       })(),
@@ -199,7 +215,12 @@ export async function DELETE(request: NextRequest) {
             )
           }
         } catch (error) {
-          console.error('Stripe metadata update failed:', error)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `Stripe metadata update failed: ${error instanceof Error ? error.message : String(error)}`,
+            endpoint: '/api/account/delete',
+            stack: error instanceof Error ? error.stack : undefined,
+          })
           // Don't block account deletion
         }
       })(),
@@ -209,7 +230,11 @@ export async function DELETE(request: NextRequest) {
     const { error: deleteUserError } = await serviceClient.auth.admin.deleteUser(user.id)
 
     if (deleteUserError) {
-      console.error('Failed to delete auth user:', deleteUserError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Failed to delete auth user: ${deleteUserError.message}`,
+        endpoint: '/api/account/delete',
+      })
       // User data is already gone, log but continue
     }
 
@@ -220,7 +245,12 @@ export async function DELETE(request: NextRequest) {
         timestamp: new Date().toISOString(),
       })
     } catch (error) {
-      console.error('Failed to send deletion confirmation email:', error)
+      emitStructuredError({
+        error_type: 'notification',
+        error_message: `Failed to send deletion confirmation email: ${error instanceof Error ? error.message : String(error)}`,
+        endpoint: '/api/account/delete',
+        stack: error instanceof Error ? error.stack : undefined,
+      })
       // Don't fail the deletion if email fails
     }
 
@@ -237,7 +267,12 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Account deletion error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Account deletion error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/account/delete',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'Fehler beim L\u00f6schen des Kontos' },
       { status: 500 }

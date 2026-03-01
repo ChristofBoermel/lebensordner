@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -55,7 +56,11 @@ export async function GET(
       .eq('download_token_id', downloadToken.id)
 
     if (snapshotError) {
-      console.error('Error fetching download link documents:', snapshotError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error fetching download link documents: ${snapshotError.message}`,
+        endpoint: '/api/download-link/[token]/metadata',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden der Dokumente' },
         { status: 500 }
@@ -76,7 +81,11 @@ export async function GET(
         .maybeSingle()
 
       if (encryptedDocumentError) {
-        console.error('Error checking encrypted documents:', encryptedDocumentError)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Error checking encrypted documents: ${encryptedDocumentError.message}`,
+          endpoint: '/api/download-link/[token]/metadata',
+        })
         return NextResponse.json(
           { error: 'Fehler beim Laden der Dokumente' },
           { status: 500 }
@@ -101,7 +110,11 @@ export async function GET(
     const { data: documents, error: documentsError } = await documentsQuery
 
     if (documentsError) {
-      console.error('Error fetching documents:', documentsError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error fetching documents: ${documentsError.message}`,
+        endpoint: '/api/download-link/[token]/metadata',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden der Dokumente' },
         { status: 500 }
@@ -121,7 +134,11 @@ export async function GET(
       .eq('download_token_id', downloadToken.id)
 
     if (wrappedDeksError) {
-      console.error('Error fetching wrapped DEKs:', wrappedDeksError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error fetching wrapped DEKs: ${wrappedDeksError.message}`,
+        endpoint: '/api/download-link/[token]/metadata',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden der Dokumente' },
         { status: 500 }
@@ -148,7 +165,11 @@ export async function GET(
           .createSignedUrl(doc.file_path, 300)
 
         if (signedError || !signedData?.signedUrl) {
-          console.error('Error creating signed URL:', signedError)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `Error creating signed URL: ${signedError?.message ?? 'unknown error'}`,
+            endpoint: '/api/download-link/[token]/metadata',
+          })
           return null
         }
 
@@ -196,7 +217,12 @@ export async function GET(
       documents: documentsResult,
     })
   } catch (error: any) {
-    console.error('Download metadata error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Download metadata error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/download-link/[token]/metadata',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Serverfehler' },
       { status: 500 }

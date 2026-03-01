@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createHmac } from 'crypto'
 import { logSecurityEvent, EVENT_DOWNLOAD_LINK_VIEWED } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -143,7 +144,11 @@ export async function GET(
       .order('title')
 
     if (docsError) {
-      console.error('Error fetching documents:', docsError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error fetching documents: ${docsError.message}`,
+        endpoint: '/api/download-link/[token]/view',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden der Dokumente' },
         { status: 500 }
@@ -188,7 +193,12 @@ export async function GET(
       expiresAt: downloadToken.expires_at,
     })
   } catch (error: any) {
-    console.error('Download link view error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Download link view error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/download-link/[token]/view',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Serverfehler' },
       { status: 500 }

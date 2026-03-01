@@ -9,6 +9,7 @@ import {
   logSecurityEvent,
   EVENT_PASSWORD_RESET_REQUESTED,
 } from "@/lib/security/audit-log";
+import { emitStructuredError } from "@/lib/errors/structured-logger";
 
 // --- Constants ---
 
@@ -19,7 +20,11 @@ const CAPTCHA_THRESHOLD = 2;
 async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) {
-    console.error("[AUTH] TURNSTILE_SECRET_KEY not configured");
+    emitStructuredError({
+      error_type: "config",
+      error_message: "TURNSTILE_SECRET_KEY not configured",
+      endpoint: "/api/auth/password-reset/request",
+    });
     return false;
   }
 
@@ -40,7 +45,12 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
     const data = await response.json();
     return data.success === true;
   } catch (error) {
-    console.error("[AUTH] Turnstile verification failed:", error);
+    emitStructuredError({
+      error_type: "auth",
+      error_message: `Turnstile verification failed: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: "/api/auth/password-reset/request",
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return false;
   }
 }
@@ -238,7 +248,12 @@ export async function POST(request: NextRequest) {
     // Always return success to prevent email enumeration
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[AUTH] Password reset request error:", error);
+    emitStructuredError({
+      error_type: "auth",
+      error_message: `Password reset request error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: "/api/auth/password-reset/request",
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
       { error: "An unexpected error occurred" },
       { status: 500 },

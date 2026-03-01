@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST(request: Request) {
   try {
@@ -31,7 +32,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ url: session.url })
   } catch (error: any) {
-    console.error('Stripe portal error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Stripe portal error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/stripe/portal',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Fehler beim Öffnen des Kundenportals' },
       { status: 500 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/auth/guards'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const parseMonth = (value: unknown) => {
   if (value === null || value === undefined || value === '') return null
@@ -71,7 +72,12 @@ export async function PUT(
     if (error.statusCode === 401) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
     }
-    console.error('Vaccinations PUT error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Vaccinations PUT error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/vaccinations/[id]',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: 'Fehler beim Aktualisieren der Impfung' },
       { status: 500 }
@@ -112,7 +118,12 @@ export async function DELETE(
     if (error.statusCode === 401) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
     }
-    console.error('Vaccinations DELETE error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Vaccinations DELETE error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/vaccinations/[id]',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: 'Fehler beim Löschen der Impfung' },
       { status: 500 }

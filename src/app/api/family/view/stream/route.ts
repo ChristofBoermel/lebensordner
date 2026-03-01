@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getTierFromSubscription } from '@/lib/subscription-tiers'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -153,7 +154,11 @@ export async function GET(request: Request) {
       .download(document.file_path)
 
     if (fileError || !fileData) {
-      console.error('Error downloading file:', fileError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error downloading file: ${fileError?.message ?? 'unknown error'}`,
+        endpoint: '/api/family/view/stream',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden der Datei' },
         { status: 500 }
@@ -194,7 +199,12 @@ export async function GET(request: Request) {
       },
     })
   } catch (error: any) {
-    console.error('Stream error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Stream error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/family/view/stream',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Serverfehler' },
       { status: 500 }

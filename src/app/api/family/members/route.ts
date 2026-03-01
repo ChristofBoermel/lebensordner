@@ -6,6 +6,7 @@ import {
   allowsFamilyDownloads,
   getTierDisplayInfo,
 } from "@/lib/subscription-tiers";
+import { emitStructuredError } from "@/lib/errors/structured-logger";
 
 const getSupabaseAdmin = () =>
   createClient(
@@ -61,7 +62,11 @@ export async function GET() {
       .eq("is_active", true);
 
     if (inError) {
-      console.error("Error fetching incoming links:", inError);
+      emitStructuredError({
+        error_type: "api",
+        error_message: `Error fetching incoming links: ${inError.message}`,
+        endpoint: "/api/family/members",
+      });
     }
 
     // Get profiles and document counts for incoming links in batch
@@ -143,7 +148,11 @@ export async function GET() {
       .not("linked_user_id", "is", null);
 
     if (outError) {
-      console.error("Error fetching outgoing links:", outError);
+      emitStructuredError({
+        error_type: "api",
+        error_message: `Error fetching outgoing links: ${outError.message}`,
+        endpoint: "/api/family/members",
+      });
     }
 
     const outgoingMembers: FamilyMember[] = (outgoingLinks || []).map(
@@ -179,7 +188,12 @@ export async function GET() {
 
     return NextResponse.json({ members });
   } catch (error: any) {
-    console.error("Family members error:", error);
+    emitStructuredError({
+      error_type: "api",
+      error_message: `Family members error: ${error?.message ?? String(error)}`,
+      endpoint: "/api/family/members",
+      stack: error?.stack,
+    });
     return NextResponse.json(
       { error: error.message || "Serverfehler" },
       { status: 500 },

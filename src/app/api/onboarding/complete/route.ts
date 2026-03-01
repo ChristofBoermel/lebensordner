@@ -5,6 +5,7 @@ import { createServerClient } from '@supabase/ssr'
 import { sendEmailWithTimeout } from '@/lib/email/resend-service'
 import { readFile } from 'fs/promises'
 import path from 'path'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST() {
   console.log('=== ONBOARDING COMPLETE API CALLED ===')
@@ -103,7 +104,11 @@ export async function POST() {
         .single()
 
       if (insertError) {
-        console.error('Insert error:', insertError)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Onboarding complete insert error: ${insertError.message}`,
+          endpoint: '/api/onboarding/complete',
+        })
         return NextResponse.json({ 
           error: 'Failed to create profile',
           details: insertError.message,
@@ -119,11 +124,21 @@ export async function POST() {
         const userName = newProfile?.full_name || 'Nutzer'
         if (userEmail) {
           sendWelcomeEmail(userEmail, userName).catch((err) => {
-            console.error('Welcome email failed (background):', err)
+            emitStructuredError({
+              error_type: 'notification',
+              error_message: `Welcome email failed (background): ${err instanceof Error ? err.message : String(err)}`,
+              endpoint: '/api/onboarding/complete',
+              stack: err instanceof Error ? err.stack : undefined,
+            })
           })
         }
       } catch (emailErr) {
-        console.error('Welcome email setup error:', emailErr)
+        emitStructuredError({
+          error_type: 'notification',
+          error_message: `Welcome email setup error: ${emailErr instanceof Error ? emailErr.message : String(emailErr)}`,
+          endpoint: '/api/onboarding/complete',
+          stack: emailErr instanceof Error ? emailErr.stack : undefined,
+        })
       }
 
       return NextResponse.json({
@@ -144,7 +159,11 @@ export async function POST() {
       .single()
 
     if (updateError) {
-      console.error('Update error:', updateError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Onboarding complete update error: ${updateError.message}`,
+        endpoint: '/api/onboarding/complete',
+      })
       return NextResponse.json({ 
         error: 'Failed to update profile',
         details: updateError.message,
@@ -160,11 +179,21 @@ export async function POST() {
       const userName = updatedProfile?.full_name || currentProfile?.full_name || 'Nutzer'
       if (userEmail) {
         sendWelcomeEmail(userEmail, userName).catch((err) => {
-          console.error('Welcome email failed (background):', err)
+          emitStructuredError({
+            error_type: 'notification',
+            error_message: `Welcome email failed (background): ${err instanceof Error ? err.message : String(err)}`,
+            endpoint: '/api/onboarding/complete',
+            stack: err instanceof Error ? err.stack : undefined,
+          })
         })
       }
     } catch (emailErr) {
-      console.error('Welcome email setup error:', emailErr)
+      emitStructuredError({
+        error_type: 'notification',
+        error_message: `Welcome email setup error: ${emailErr instanceof Error ? emailErr.message : String(emailErr)}`,
+        endpoint: '/api/onboarding/complete',
+        stack: emailErr instanceof Error ? emailErr.stack : undefined,
+      })
     }
 
     return NextResponse.json({
@@ -174,7 +203,12 @@ export async function POST() {
     })
 
   } catch (error: any) {
-    console.error('Unexpected error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Onboarding complete unexpected error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/onboarding/complete',
+      stack: error?.stack,
+    })
     return NextResponse.json({
       error: 'Unexpected server error',
       details: error.message
@@ -186,7 +220,12 @@ async function sendWelcomeEmail(email: string, userName: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.lebensordner.org'
   const guidePath = path.join(process.cwd(), 'public', 'guides', 'onboarding-guide.pdf')
   const guideBuffer = await readFile(guidePath).catch((error) => {
-    console.error('Onboarding guide attachment missing or unreadable:', guidePath, error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Onboarding guide attachment missing or unreadable: ${guidePath}: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/onboarding/complete',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     throw error
   })
   const html = `

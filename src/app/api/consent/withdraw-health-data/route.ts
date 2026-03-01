@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { withdrawHealthDataConsent } from '@/lib/consent/manager'
 import { CONSENT_VERSION } from '@/lib/consent/constants'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_API } from '@/lib/security/rate-limit'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,7 +60,11 @@ export async function POST(request: NextRequest) {
         })
 
       if (ledgerError) {
-        console.error('[CONSENT] Fallback withdrawal insert failed:', ledgerError)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Fallback withdrawal insert failed: ${ledgerError.message}`,
+          endpoint: '/api/consent/withdraw-health-data',
+        })
         return NextResponse.json(
           { error: result.error },
           { status: 500 }
@@ -75,7 +80,11 @@ export async function POST(request: NextRequest) {
         .eq('id', user.id)
 
       if (profileError) {
-        console.error('[CONSENT] Fallback withdrawal profile update failed (continuing):', profileError)
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `Fallback withdrawal profile update failed (continuing): ${profileError.message}`,
+          endpoint: '/api/consent/withdraw-health-data',
+        })
       }
     }
 
@@ -90,7 +99,12 @@ export async function POST(request: NextRequest) {
       message: 'Health data consent withdrawn and data deleted',
     })
   } catch (error) {
-    console.error('[CONSENT] Withdraw health data error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Withdraw health data error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/consent/withdraw-health-data',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }

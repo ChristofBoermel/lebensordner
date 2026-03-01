@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -71,7 +72,11 @@ export async function POST(request: Request) {
       .single()
 
     if (dbError) {
-      console.error('Database error:', dbError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Onboarding feedback database error: ${dbError.message}`,
+        endpoint: '/api/onboarding/feedback',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Speichern des Feedbacks' },
         { status: 500 }
@@ -83,7 +88,12 @@ export async function POST(request: Request) {
       feedbackId: feedback.id,
     })
   } catch (error) {
-    console.error('Onboarding feedback error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Onboarding feedback error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/onboarding/feedback',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'Interner Serverfehler' },
       { status: 500 }
@@ -109,7 +119,11 @@ export async function GET() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Database error:', error)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Onboarding feedback query error: ${error.message}`,
+        endpoint: '/api/onboarding/feedback',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden des Feedbacks' },
         { status: 500 }
@@ -118,7 +132,12 @@ export async function GET() {
 
     return NextResponse.json({ feedback })
   } catch (error) {
-    console.error('Onboarding feedback GET error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Onboarding feedback GET error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/onboarding/feedback',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'Interner Serverfehler' },
       { status: 500 }

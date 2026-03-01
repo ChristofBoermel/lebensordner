@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { sendSecurityNotification } from '@/lib/email/security-notifications'
 import { logSecurityEvent } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,7 +46,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Security notify error:', error)
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: `Security notify error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/auth/security-notify',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json({ error: 'Interner Fehler' }, { status: 500 })
   }
 }

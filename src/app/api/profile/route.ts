@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/auth/guards'
 import { encrypt, decrypt, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function GET() {
   try {
@@ -33,7 +34,11 @@ export async function GET() {
           const parsed: EncryptedData = JSON.parse(data.phone)
           profile.phone = decrypt(parsed, key)
         } catch (e) {
-          console.error('Failed to decrypt phone:', e)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `Failed to decrypt phone: ${e instanceof Error ? e.message : String(e)}`,
+            endpoint: '/api/profile',
+          })
           profile.phone = null
         }
       } else {
@@ -48,7 +53,11 @@ export async function GET() {
           const parsed: EncryptedData = JSON.parse(data.address)
           profile.address = decrypt(parsed, key)
         } catch (e) {
-          console.error('Failed to decrypt address:', e)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `Failed to decrypt address: ${e instanceof Error ? e.message : String(e)}`,
+            endpoint: '/api/profile',
+          })
           profile.address = null
         }
       } else {
@@ -63,7 +72,11 @@ export async function GET() {
           const parsed: EncryptedData = JSON.parse(data.date_of_birth)
           profile.date_of_birth = decrypt(parsed, key)
         } catch (e) {
-          console.error('Failed to decrypt date_of_birth:', e)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `Failed to decrypt date_of_birth: ${e instanceof Error ? e.message : String(e)}`,
+            endpoint: '/api/profile',
+          })
           profile.date_of_birth = null
         }
       } else {
@@ -78,7 +91,11 @@ export async function GET() {
           const parsed: EncryptedData = JSON.parse(data.two_factor_secret)
           profile.two_factor_secret = decrypt(parsed, key)
         } catch (e) {
-          console.error('Failed to decrypt two_factor_secret:', e)
+          emitStructuredError({
+            error_type: 'api',
+            error_message: `Failed to decrypt two_factor_secret: ${e instanceof Error ? e.message : String(e)}`,
+            endpoint: '/api/profile',
+          })
           profile.two_factor_secret = null
         }
       } else {
@@ -91,7 +108,12 @@ export async function GET() {
     if (error.statusCode === 401) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
     }
-    console.error('Profile GET error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Profile GET error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/profile',
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Fehler beim Laden des Profils' }, { status: 500 })
   }
 }
@@ -183,7 +205,11 @@ export async function PUT(request: Request) {
       .eq('id', user.id)
 
     if (error) {
-      console.error('Profile update error:', error)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Profile update error: ${error.message}`,
+        endpoint: '/api/profile',
+      })
       return NextResponse.json({ error: 'Fehler beim Speichern' }, { status: 500 })
     }
 
@@ -192,7 +218,12 @@ export async function PUT(request: Request) {
     if (error.statusCode === 401) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
     }
-    console.error('Profile PUT error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Profile PUT error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/profile',
+      stack: error?.stack,
+    })
     return NextResponse.json({ error: 'Fehler beim Speichern des Profils' }, { status: 500 })
   }
 }

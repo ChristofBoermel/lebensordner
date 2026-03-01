@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { getTierFromSubscription } from '@/lib/subscription-tiers'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function GET(request: Request) {
   try {
@@ -81,7 +82,11 @@ export async function GET(request: Request) {
       .download(document.file_path)
 
     if (fileError || !fileData) {
-      console.error('Error downloading file:', fileError)
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Error downloading file: ${fileError?.message ?? 'unknown error'}`,
+        endpoint: '/api/family/view/bytes',
+      })
       return NextResponse.json(
         { error: 'Fehler beim Laden der Datei' },
         { status: 500 }
@@ -96,7 +101,12 @@ export async function GET(request: Request) {
       },
     })
   } catch (error: any) {
-    console.error('Bytes error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Bytes error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/family/view/bytes',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Serverfehler' },
       { status: 500 }

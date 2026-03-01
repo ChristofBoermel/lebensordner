@@ -8,6 +8,7 @@ import {
   DEFAULT_EMAIL_TIMEOUT_MS,
 } from '@/lib/email/resend-service'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_INVITE } from '@/lib/security/rate-limit'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST(request: Request) {
   try {
@@ -333,7 +334,12 @@ export async function POST(request: Request) {
       })
     }
   } catch (error: any) {
-    console.error('Invitation error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Invitation error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/trusted-person/invite',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Fehler beim Senden der Einladung' },
       { status: 500 }

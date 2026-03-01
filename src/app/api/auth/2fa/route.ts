@@ -4,6 +4,7 @@ import * as OTPAuth from 'otpauth'
 import { encrypt, decrypt, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_2FA } from '@/lib/security/rate-limit'
 import { logSecurityEvent, EVENT_TWO_FACTOR_ENABLED, EVENT_TWO_FACTOR_DISABLED } from '@/lib/security/audit-log'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 export async function POST(request: Request) {
   try {
@@ -111,7 +112,12 @@ export async function POST(request: Request) {
           const parsed: EncryptedData = JSON.parse(profile.two_factor_secret)
           secretBase32 = decrypt(parsed, key)
         } catch (e) {
-          console.error('Failed to decrypt two_factor_secret:', e)
+          emitStructuredError({
+            error_type: 'auth',
+            error_message: `Failed to decrypt two_factor_secret: ${e instanceof Error ? e.message : String(e)}`,
+            endpoint: '/api/auth/2fa',
+            stack: e instanceof Error ? e.stack : undefined,
+          })
           return NextResponse.json({ error: 'Fehler beim Entschlüsseln des 2FA-Secrets' }, { status: 500 })
         }
       } else {
@@ -173,7 +179,12 @@ export async function POST(request: Request) {
           const parsed: EncryptedData = JSON.parse(profile.two_factor_secret)
           secretBase32 = decrypt(parsed, key)
         } catch (e) {
-          console.error('Failed to decrypt two_factor_secret:', e)
+          emitStructuredError({
+            error_type: 'auth',
+            error_message: `Failed to decrypt two_factor_secret: ${e instanceof Error ? e.message : String(e)}`,
+            endpoint: '/api/auth/2fa',
+            stack: e instanceof Error ? e.stack : undefined,
+          })
           return NextResponse.json({ error: 'Fehler beim Entschlüsseln des 2FA-Secrets' }, { status: 500 })
         }
       } else {
@@ -222,7 +233,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: 'Ungültige Aktion' }, { status: 400 })
   } catch (error: any) {
-    console.error('2FA error:', error)
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: `2FA error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/auth/2fa',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: error.message || 'Ein Fehler ist aufgetreten' },
       { status: 500 }

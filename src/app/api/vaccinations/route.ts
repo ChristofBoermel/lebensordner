@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/auth/guards'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 const STANDARD_VACCINATIONS = [
   'Tetanus',
@@ -81,7 +82,12 @@ export async function GET() {
     if (error.statusCode === 401) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
     }
-    console.error('Vaccinations GET error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Vaccinations GET error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/vaccinations',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: 'Fehler beim Laden der Impfungen' },
       { status: 500 }
@@ -132,7 +138,12 @@ export async function POST(request: Request) {
     if (error.statusCode === 401) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
     }
-    console.error('Vaccinations POST error:', error)
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Vaccinations POST error: ${error?.message ?? String(error)}`,
+      endpoint: '/api/vaccinations',
+      stack: error?.stack,
+    })
     return NextResponse.json(
       { error: 'Fehler beim Speichern der Impfung' },
       { status: 500 }

@@ -10,6 +10,7 @@ import {
 import type { DocumentCategory } from "@/types/database";
 import { CATEGORY_METADATA_FIELDS } from "@/types/database";
 import { inspect } from "util";
+import { emitStructuredError } from "@/lib/errors/structured-logger";
 
 // New endpoint for secure server-side uploads
 export async function POST(req: NextRequest) {
@@ -245,7 +246,11 @@ export async function POST(req: NextRequest) {
       });
 
     if (uploadError) {
-      console.error("Upload Error:", uploadError);
+      emitStructuredError({
+        error_type: "api",
+        error_message: `Upload Error: ${uploadError.message}`,
+        endpoint: "/api/documents/upload",
+      });
       return NextResponse.json(
         { error: "Fehler beim Upload zu Supabase" },
         { status: 500 },
@@ -362,12 +367,11 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (documentError) {
-        console.error("Document Insert Error:", {
-          message: documentError.message,
-          details: documentError.details,
-          hint: documentError.hint,
-          code: documentError.code,
-          raw: inspect(documentError, { depth: 6 }),
+        emitStructuredError({
+          error_type: "api",
+          error_message: `Document Insert Error: ${documentError.message} (${documentError.code ?? "unknown_code"})`,
+          endpoint: "/api/documents/upload",
+          stack: inspect(documentError, { depth: 2 }),
         });
         return NextResponse.json(
           { error: "Fehler beim Speichern des Dokuments" },
@@ -388,12 +392,11 @@ export async function POST(req: NextRequest) {
           .maybeSingle();
 
         if (fallbackError) {
-          console.error("Document Fallback Select Error:", {
-            message: fallbackError.message,
-            details: fallbackError.details,
-            hint: fallbackError.hint,
-            code: fallbackError.code,
-            raw: inspect(fallbackError, { depth: 6 }),
+          emitStructuredError({
+            error_type: "api",
+            error_message: `Document Fallback Select Error: ${fallbackError.message} (${fallbackError.code ?? "unknown_code"})`,
+            endpoint: "/api/documents/upload",
+            stack: inspect(fallbackError, { depth: 2 }),
           });
         }
 
@@ -413,7 +416,12 @@ export async function POST(req: NextRequest) {
       message: "Upload erfolgreich",
     });
   } catch (error: any) {
-    console.error("Server Upload Error:", error);
+    emitStructuredError({
+      error_type: "api",
+      error_message: `Server Upload Error: ${error?.message ?? String(error)}`,
+      endpoint: "/api/documents/upload",
+      stack: error?.stack,
+    });
     return NextResponse.json(
       { error: "Interner Serverfehler" },
       { status: 500 },

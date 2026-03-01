@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { emitStructuredError } from "@/lib/errors/structured-logger";
 
 // Twilio SMS sending
 
@@ -95,14 +96,24 @@ export async function POST(request: Request) {
         status: result.status,
       });
     } catch (twilioError: any) {
-      console.error("Twilio error:", twilioError);
+      emitStructuredError({
+        error_type: "notification",
+        error_message: `Twilio error: ${twilioError?.message ?? String(twilioError)}`,
+        endpoint: "/api/sms/send",
+        stack: twilioError?.stack,
+      });
       return NextResponse.json(
         { error: "Fehler beim Senden der SMS: " + twilioError.message },
         { status: 500 },
       );
     }
   } catch (error: any) {
-    console.error("SMS send error:", error);
+    emitStructuredError({
+      error_type: "api",
+      error_message: `SMS send error: ${error?.message ?? String(error)}`,
+      endpoint: "/api/sms/send",
+      stack: error?.stack,
+    });
     return NextResponse.json(
       { error: "Interner Serverfehler" },
       { status: 500 },
