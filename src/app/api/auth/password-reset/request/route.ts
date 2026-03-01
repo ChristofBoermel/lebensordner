@@ -9,7 +9,7 @@ import {
   logSecurityEvent,
   EVENT_PASSWORD_RESET_REQUESTED,
 } from "@/lib/security/audit-log";
-import { emitStructuredError } from "@/lib/errors/structured-logger";
+import { emitStructuredError, emitStructuredInfo, emitStructuredWarn } from "@/lib/errors/structured-logger";
 
 // --- Constants ---
 
@@ -113,6 +113,12 @@ export async function POST(request: NextRequest) {
       const retryAfterSeconds = Math.ceil(
         (ipRateLimit.resetAt.getTime() - Date.now()) / 1000,
       );
+      emitStructuredWarn({
+        event_type: "security",
+        event_message: "Password reset blocked by IP rate limit",
+        endpoint: "/api/auth/password-reset/request",
+        metadata: { clientIp, retryAfterSeconds },
+      });
       await logSecurityEvent({
         event_type: EVENT_PASSWORD_RESET_REQUESTED,
         event_data: { reason: "rate_limited_ip", email: normalizedEmail },
@@ -137,6 +143,12 @@ export async function POST(request: NextRequest) {
       const retryAfterSeconds = Math.ceil(
         (emailRateLimit.resetAt.getTime() - Date.now()) / 1000,
       );
+      emitStructuredWarn({
+        event_type: "security",
+        event_message: "Password reset blocked by email rate limit",
+        endpoint: "/api/auth/password-reset/request",
+        metadata: { retryAfterSeconds },
+      });
       await logSecurityEvent({
         event_type: EVENT_PASSWORD_RESET_REQUESTED,
         event_data: { reason: "rate_limited_email", email: normalizedEmail },
@@ -157,6 +169,12 @@ export async function POST(request: NextRequest) {
       RATE_LIMIT_PASSWORD_RESET.maxRequests - emailRateLimit.remaining - 1;
 
     if (attemptCount >= CAPTCHA_THRESHOLD && !turnstileToken) {
+      emitStructuredInfo({
+        event_type: "security",
+        event_message: "CAPTCHA required for password reset attempt",
+        endpoint: "/api/auth/password-reset/request",
+        metadata: { clientIp, attemptCount },
+      });
       await Promise.all([
         incrementRateLimit({
           identifier: `password_reset_ip:${clientIp}`,
@@ -185,6 +203,12 @@ export async function POST(request: NextRequest) {
     if (turnstileToken) {
       const captchaValid = await verifyTurnstile(turnstileToken, clientIp);
       if (!captchaValid) {
+        emitStructuredWarn({
+          event_type: "security",
+          event_message: "Password reset CAPTCHA validation failed",
+          endpoint: "/api/auth/password-reset/request",
+          metadata: { clientIp },
+        });
         await Promise.all([
           incrementRateLimit({
             identifier: `password_reset_ip:${clientIp}`,

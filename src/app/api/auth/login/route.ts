@@ -11,7 +11,7 @@ import {
 } from '@/lib/security/auth-lockout'
 import { isNewDevice } from '@/lib/security/device-detection'
 import { sendSecurityNotification } from '@/lib/email/security-notifications'
-import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { emitStructuredError, emitStructuredWarn, emitStructuredInfo } from '@/lib/errors/structured-logger'
 
 // --- Constants ---
 
@@ -92,6 +92,12 @@ export async function POST(request: NextRequest) {
       const retryAfterSeconds = Math.ceil(
         (ipRateLimit.resetAt.getTime() - Date.now()) / 1000
       )
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: 'Login blocked by IP rate limit',
+        endpoint: '/api/auth/login',
+        metadata: { clientIp, retryAfterSeconds },
+      })
       return NextResponse.json(
         { error: 'Too many requests. Please try again later.', retryAfterSeconds },
         { status: 429 }
@@ -109,6 +115,12 @@ export async function POST(request: NextRequest) {
       const retryAfterSeconds = Math.ceil(
         (emailRateLimit.resetAt.getTime() - Date.now()) / 1000
       )
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: 'Login blocked by email rate limit',
+        endpoint: '/api/auth/login',
+        metadata: { retryAfterSeconds },
+      })
       return NextResponse.json(
         { error: 'Too many attempts for this email. Please try again later.', retryAfterSeconds },
         { status: 429 }
@@ -119,6 +131,12 @@ export async function POST(request: NextRequest) {
 
     const locked = await isAccountLocked(email)
     if (locked) {
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: 'Login blocked for locked account',
+        endpoint: '/api/auth/login',
+        metadata: { clientIp },
+      })
       await logSecurityEvent({
         event_type: 'login_failure',
         event_data: { email, reason: 'account_locked' },
@@ -135,6 +153,12 @@ export async function POST(request: NextRequest) {
     const failureCount = await getFailureCount(email)
 
     if (failureCount >= CAPTCHA_THRESHOLD && !turnstileToken) {
+      emitStructuredInfo({
+        event_type: 'security',
+        event_message: 'CAPTCHA required for login attempt',
+        endpoint: '/api/auth/login',
+        metadata: { clientIp, failureCount },
+      })
       await logSecurityEvent({
         event_type: 'captcha_required',
         event_data: { email, failureCount },
@@ -151,6 +175,12 @@ export async function POST(request: NextRequest) {
     if (turnstileToken) {
       const captchaValid = await verifyTurnstile(turnstileToken, clientIp)
       if (!captchaValid) {
+        emitStructuredWarn({
+          event_type: 'security',
+          event_message: 'Login CAPTCHA validation failed',
+          endpoint: '/api/auth/login',
+          metadata: { clientIp },
+        })
         await logSecurityEvent({
           event_type: 'captcha_failed',
           event_data: { email },
@@ -216,6 +246,12 @@ export async function POST(request: NextRequest) {
       ])
 
       const newFailureCount = failureCount + 1
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: 'Login failed: invalid credentials',
+        endpoint: '/api/auth/login',
+        metadata: { clientIp, failureCount: newFailureCount },
+      })
 
       await logSecurityEvent({
         event_type: 'login_failure',
@@ -225,6 +261,12 @@ export async function POST(request: NextRequest) {
 
       // Check if account should be locked
       if (newFailureCount >= LOCKOUT_THRESHOLD) {
+        emitStructuredWarn({
+          event_type: 'security',
+          event_message: 'Account locked due to repeated login failures',
+          endpoint: '/api/auth/login',
+          metadata: { clientIp, failureCount: newFailureCount },
+        })
         await lockAccount(email)
         await logSecurityEvent({
           event_type: 'account_locked',
