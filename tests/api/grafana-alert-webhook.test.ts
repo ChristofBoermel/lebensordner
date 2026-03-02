@@ -137,15 +137,15 @@ describe('Grafana Alert Webhook Handler', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(redisSetMock).toHaveBeenCalledWith(
-      'alert:context:alert-id-123',
-      expect.stringContaining('"count":0'),
-      'EX',
-      86400
-    )
+    expect(redisSetMock).not.toHaveBeenCalled()
 
     const telegramBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body))
     expect(telegramBody.text).toContain('Fallback summary')
+    expect(telegramBody.text).toContain('No concrete error context was found for issue creation.')
+    expect(telegramBody.reply_markup.inline_keyboard[0]).toHaveLength(1)
+    expect(telegramBody.reply_markup.inline_keyboard[0][0].url).toBe(
+      'https://grafana.lebensordner.org/d/errors-dashboard'
+    )
   })
 
   it('uses a 5-minute Loki query range for context logs', async () => {
