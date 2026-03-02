@@ -36,7 +36,23 @@ export function VaultSetupRecoveryKey() {
       </div>
       <div className="mt-4 rounded-md border border-warmgray-200 bg-warmgray-50 px-4 py-3">
         {recoveryKeyHex ? (
-          <code className="font-mono text-sm break-all">{formattedRecoveryKey}</code>
+          <code
+            tabIndex={0}
+            className="font-mono text-sm break-all focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 rounded"
+            onKeyDown={(event) => {
+              if (
+                event.key === 'Enter' &&
+                !isGeneratingRecoveryKey &&
+                savedChecked &&
+                /^[0-9a-f]{64}$/i.test(recoveryKeyHex)
+              ) {
+                event.preventDefault()
+                void startSetup()
+              }
+            }}
+          >
+            {formattedRecoveryKey}
+          </code>
         ) : (
           <div className="flex items-center">
             <Loader2 className="h-4 w-4 animate-spin" />

@@ -100,6 +100,24 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     }
   }, [unlock])
 
+  useEffect(() => {
+    const clearCachedPassphrase = () => {
+      try {
+        sessionStorage.removeItem(SESSION_PASSPHRASE_KEY)
+      } catch {
+        // ignore sessionStorage failures on unload
+      }
+    }
+
+    window.addEventListener('beforeunload', clearCachedPassphrase)
+    window.addEventListener('pagehide', clearCachedPassphrase)
+
+    return () => {
+      window.removeEventListener('beforeunload', clearCachedPassphrase)
+      window.removeEventListener('pagehide', clearCachedPassphrase)
+    }
+  }, [])
+
   const setup = useCallback(async (passphrase: string, recoveryKeyHex: string, signal?: AbortSignal) => {
     const salt = globalThis.crypto.getRandomValues(new Uint8Array(32))
     const kdf_params = { iterations: 600000, hash: 'SHA-256' }

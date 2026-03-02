@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
@@ -74,15 +74,16 @@ import {
   X,
   Pencil,
   PlusCircle,
-  Tag,
   Info,
   FileSignature,
   ScrollText,
   Share2,
   Lock,
   ShieldCheck,
+  ShieldOff,
   Clock,
 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import { useVault } from "@/lib/vault/VaultContext";
 import {
   DOCUMENT_CATEGORIES,
@@ -106,6 +107,7 @@ import Link from "next/link";
 import { decryptField, unwrapKey } from "@/lib/security/document-e2ee";
 import { ShareDocumentDialog } from "@/components/sharing/ShareDocumentDialog";
 import { BulkShareDialog } from "@/components/sharing/BulkShareDialog";
+import { useThemeSafe } from "@/components/theme/theme-provider";
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   user: User,
@@ -139,7 +141,48 @@ const categoryColorMap: Record<string, string> = {
   testament: "bg-amber-100 text-amber-700",
 };
 
+const LUCIDE_ICON_KEYS = Object.keys(LucideIcons).filter(
+  (key) =>
+    /^[A-Z]/.test(key) &&
+    typeof (LucideIcons as Record<string, unknown>)[key] === "function" &&
+    key !== "createLucideIcon" &&
+    key !== "Icon",
+);
+
+const CUSTOM_CATEGORY_ICON_OPTIONS = LUCIDE_ICON_KEYS.map((name) => ({
+  value: name,
+  label: name.replace(/([A-Z])/g, " $1").trim(),
+}));
+
+function toPascalCase(input: string) {
+  return input
+    .split(/[-_ ]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+}
+
+function resolveCategoryIcon(iconName: string | null | undefined) {
+  if (!iconName) return Folder;
+  const raw = iconName.trim();
+  const fromStaticMap = iconMap[raw];
+  if (fromStaticMap) return fromStaticMap;
+
+  const icons = LucideIcons as unknown as Record<string, unknown>;
+  const rawIcon = icons[raw];
+  if (typeof rawIcon === "function") {
+    return rawIcon as React.ComponentType<{ className?: string }>;
+  }
+  const pascal = toPascalCase(raw);
+  const pascalIcon = icons[pascal];
+  if (typeof pascalIcon === "function") {
+    return pascalIcon as React.ComponentType<{ className?: string }>;
+  }
+  return Folder;
+}
+
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+const RECENT_UNLOCK_WINDOW_MS = 3 * 60 * 1000;
 
 const UploadDialog = dynamic(() => import("./UploadDialog"), {
   loading: () => <div className="text-warmgray-600">Laden...</div>,
@@ -196,12 +239,18 @@ export default function DocumentsPage() {
   const [categoryForm, setCategoryForm] = useState({
     name: "",
     description: "",
+    icon: "Folder",
   });
   const [isSavingCategory, setIsSavingCategory] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
 
   // Category Locking state
   const [securedCategories, setSecuredCategories] = useState<string[]>([]);
+  const [pendingUnlockCategory, setPendingUnlockCategory] = useState<string | null>(null);
+  const [pendingUnlockDocumentId, setPendingUnlockDocumentId] = useState<string | null>(null);
+  const [requiresRecentUnlock, setRequiresRecentUnlock] = useState(false);
+  const [privacyModeEnabled, setPrivacyModeEnabled] = useState(false);
+  const lastVaultUnlockRef = useRef<number>(0);
 
   // Upgrade Modal state
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
@@ -263,9 +312,11 @@ export default function DocumentsPage() {
     linked_user_id: string | null;
   }
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const [categoryIconSearch, setCategoryIconSearch] = useState("");
 
   const supabase = createClient();
   const vaultContext = useVault();
+  const { seniorMode } = useThemeSafe();
   const { capture } = usePostHog();
 
   // Load profile settings including secured categories
@@ -275,11 +326,31 @@ export default function DocumentsPage() {
       if (!user) return;
       setUserId(user.id);
 
-      const { data: profile } = await supabase
+      let profile: { subscription_status: string | null; secured_categories?: string[] | null } | null = null
+
+      const profileWithSecured = await supabase
         .from("profiles")
         .select("subscription_status, secured_categories")
         .eq("id", user.id)
         .single();
+
+      if (
+        profileWithSecured.error &&
+        (profileWithSecured.error.code === "42703" ||
+          String(profileWithSecured.error.message).includes("secured_categories"))
+      ) {
+        const fallbackProfile = await supabase
+          .from("profiles")
+          .select("subscription_status")
+          .eq("id", user.id)
+          .single();
+        profile = fallbackProfile.data as { subscription_status: string | null } | null;
+      } else {
+        profile = profileWithSecured.data as {
+          subscription_status: string | null;
+          secured_categories?: string[] | null;
+        } | null;
+      }
 
       if (profile) {
         const tier = getTierFromSubscription(profile.subscription_status, null);
@@ -292,44 +363,164 @@ export default function DocumentsPage() {
     loadProfileData();
   }, [supabase]);
 
+  useEffect(() => {
+    const stored = window.localStorage.getItem("docs_privacy_mode");
+    setPrivacyModeEnabled(stored === "enabled");
+  }, []);
+
+  const filteredCategoryIconOptions = useMemo(() => {
+    const query = categoryIconSearch.trim().toLowerCase();
+    if (!query) return CUSTOM_CATEGORY_ICON_OPTIONS;
+    return CUSTOM_CATEGORY_ICON_OPTIONS.filter(
+      (option) =>
+        option.label.toLowerCase().includes(query) ||
+        option.value.toLowerCase().includes(query),
+    );
+  }, [categoryIconSearch]);
+
+  useEffect(() => {
+    if (vaultContext.isUnlocked) {
+      lastVaultUnlockRef.current = Date.now();
+      setRequiresRecentUnlock(false);
+      if (pendingUnlockCategory) {
+        if (pendingUnlockCategory.startsWith("custom:")) {
+          const customId = pendingUnlockCategory.replace("custom:", "");
+          setActiveTab(`custom:${customId}`);
+          setSelectedCustomCategory(customId);
+          setSelectedCategory(null);
+        } else {
+          setActiveTab(pendingUnlockCategory);
+          setSelectedCategory(pendingUnlockCategory as DocumentCategory);
+          setSelectedCustomCategory(null);
+        }
+        setCurrentFolder(null);
+        setPendingUnlockCategory(null);
+      }
+      if (pendingUnlockDocumentId) {
+        setHighlightedDoc(pendingUnlockDocumentId);
+        const target = documents.find((doc) => doc.id === pendingUnlockDocumentId);
+        if (target) {
+          void handleOpenDocument(target);
+        }
+        setPendingUnlockDocumentId(null);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    vaultContext.isUnlocked,
+    pendingUnlockCategory,
+    pendingUnlockDocumentId,
+    documents,
+  ]);
+
+  const hasRecentUnlock = useCallback(() => {
+    return (
+      vaultContext.isUnlocked &&
+      Date.now() - lastVaultUnlockRef.current <= RECENT_UNLOCK_WINDOW_MS
+    );
+  }, [vaultContext.isUnlocked]);
+
+  const isDocumentLocked = useCallback(
+    (doc: Document) => Boolean(doc.extra_security_enabled) && !vaultContext.isUnlocked,
+    [vaultContext.isUnlocked],
+  );
+
   const handleToggleCategoryLock = async (e: React.MouseEvent, categoryKey: string) => {
     e.stopPropagation();
-    
-    // If turning ON lock, we need vault setup
-    if (!securedCategories.includes(categoryKey) && !vaultContext.isUnlocked && !vaultContext.masterKey) {
+
+    if (!hasRecentUnlock()) {
+      setRequiresRecentUnlock(true);
       vaultContext.requestUnlock();
       return;
     }
 
     const newSecured = securedCategories.includes(categoryKey)
-      ? securedCategories.filter(k => k !== categoryKey)
+      ? securedCategories.filter((key) => key !== categoryKey)
       : [...securedCategories, categoryKey];
-    
+
     setSecuredCategories(newSecured);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user) {
-        await supabase
-          .from('profiles')
+        const { error: updateError } = await supabase
+          .from("profiles")
           .update({ secured_categories: newSecured })
-          .eq('id', user.id);
+          .eq("id", user.id);
+
+        if (
+          updateError &&
+          (updateError.code === "42703" ||
+            String(updateError.message).includes("secured_categories"))
+        ) {
+          console.warn("secured_categories column is unavailable in this environment");
+        }
       }
     } catch (err) {
-      console.warn('Could not save secured_categories to profile', err);
+      console.warn("Could not save secured_categories to profile", err);
     }
   };
 
-  const isCategoryLocked = (categoryKey: string) => {
-    return securedCategories.includes(categoryKey) && !vaultContext.isUnlocked;
-  };
+  const handleToggleDocumentSecurity = async (
+    event: { stopPropagation: () => void },
+    documentId: string,
+    enabled: boolean,
+  ) => {
+    event.stopPropagation();
 
-  const handleCategoryClick = (categoryKey: DocumentCategory) => {
-    if (isCategoryLocked(categoryKey)) {
+    if (!hasRecentUnlock()) {
+      setRequiresRecentUnlock(true);
+      setPendingUnlockDocumentId(documentId);
       vaultContext.requestUnlock();
       return;
     }
-    setSelectedCategory(categoryKey);
+
+    setDocuments((prev) =>
+      prev.map((doc) =>
+        doc.id === documentId ? { ...doc, extra_security_enabled: enabled } : doc,
+      ),
+    );
+
+    const { error } = await supabase
+      .from("documents")
+      .update({ extra_security_enabled: enabled })
+      .eq("id", documentId);
+
+    if (error) {
+      setDocuments((prev) =>
+        prev.map((doc) =>
+          doc.id === documentId ? { ...doc, extra_security_enabled: !enabled } : doc,
+        ),
+      );
+    }
+  };
+
+  const isCategoryLocked = useCallback(
+    (categoryKey: string) =>
+      securedCategories.includes(categoryKey) && !vaultContext.isUnlocked,
+    [securedCategories, vaultContext.isUnlocked],
+  );
+
+  const handleCategoryClick = (categoryKey: string) => {
+    if (isCategoryLocked(categoryKey)) {
+      setPendingUnlockCategory(categoryKey);
+      vaultContext.requestUnlock();
+      return;
+    }
+
+    if (categoryKey.startsWith("custom:")) {
+      const customId = categoryKey.replace("custom:", "");
+      setActiveTab(`custom:${customId}`);
+      setSelectedCustomCategory(customId);
+      setSelectedCategory(null);
+    } else {
+      setActiveTab(categoryKey);
+      setSelectedCategory(categoryKey as DocumentCategory);
+      setSelectedCustomCategory(null);
+    }
+
     setCurrentFolder(null);
   };
 
@@ -442,6 +633,19 @@ export default function DocumentsPage() {
   // Handle document highlighting from search
   useEffect(() => {
     if (highlightedDoc && documents.length > 0) {
+      const targetDoc = documents.find((doc) => doc.id === highlightedDoc);
+      if (targetDoc) {
+        const targetCategoryKey = targetDoc.custom_category_id
+          ? `custom:${targetDoc.custom_category_id}`
+          : targetDoc.category;
+        if (isCategoryLocked(targetCategoryKey) || isDocumentLocked(targetDoc)) {
+          setPendingUnlockCategory(targetCategoryKey);
+          setPendingUnlockDocumentId(targetDoc.id);
+          vaultContext.requestUnlock();
+          return;
+        }
+      }
+
       // Scroll to the highlighted document after a short delay
       const timer = setTimeout(() => {
         const element = document.getElementById(`document-${highlightedDoc}`);
@@ -460,7 +664,7 @@ export default function DocumentsPage() {
         clearTimeout(clearTimer);
       };
     }
-  }, [highlightedDoc, documents]);
+  }, [highlightedDoc, documents, vaultContext, isCategoryLocked, isDocumentLocked]);
 
   const [decryptedTitles, setDecryptedTitles] = useState<
     Record<string, string>
@@ -697,8 +901,9 @@ export default function DocumentsPage() {
           new Blob([ciphertext], { type: "application/octet-stream" }),
           "encrypted",
         );
-        formData.append("title", "[Verschlüsselt]");
-        formData.append("file_name", "encrypted");
+        // Keep human-readable fields for list/search UX while payload stays encrypted.
+        formData.append("title", uploadTitle.trim() || uploadFile.name);
+        formData.append("file_name", uploadFile.name);
         formData.append("is_encrypted", "true");
         formData.append("encryption_version", "e2ee-v1");
         formData.append("wrapped_dek", wrapped_dek);
@@ -931,9 +1136,25 @@ export default function DocumentsPage() {
     }
   };
 
+  const assertEncryptionVersionSupported = (doc: Document) => {
+    if (!doc.is_encrypted) return;
+    const version = doc.encryption_version || "e2ee-v1";
+    if (version !== "e2ee-v1") {
+      throw new Error("Nicht unterstützte Verschlüsselungsversion");
+    }
+  };
+
   const handleDownload = async (doc: Document) => {
+    if (isDocumentLocked(doc)) {
+      setPendingUnlockDocumentId(doc.id);
+      vaultContext.requestUnlock();
+      return;
+    }
+
     if (doc.is_encrypted) {
+      assertEncryptionVersionSupported(doc);
       if (!vaultContext.masterKey) {
+        setPendingUnlockDocumentId(doc.id);
         vaultContext.requestUnlock();
         return;
       }
@@ -985,13 +1206,21 @@ export default function DocumentsPage() {
   };
 
   const handleOpenDocument = async (doc: Document) => {
+    if (isDocumentLocked(doc)) {
+      setPendingUnlockDocumentId(doc.id);
+      vaultContext.requestUnlock();
+      return;
+    }
+
     if (!doc.is_encrypted) {
       setPreviewBlob(null);
       setPreviewNotes(null);
       setPreviewDocument(doc);
       return;
     }
+    assertEncryptionVersionSupported(doc);
     if (!vaultContext.masterKey) {
+      setPendingUnlockDocumentId(doc.id);
       vaultContext.requestUnlock();
       return;
     }
@@ -1048,6 +1277,17 @@ export default function DocumentsPage() {
 
   // Navigate to document logic
   const navigateToDocument = (doc: Document) => {
+    const targetCategoryKey = doc.custom_category_id
+      ? `custom:${doc.custom_category_id}`
+      : doc.category;
+
+    if (isCategoryLocked(targetCategoryKey) || isDocumentLocked(doc)) {
+      setPendingUnlockCategory(targetCategoryKey);
+      setPendingUnlockDocumentId(doc.id);
+      vaultContext.requestUnlock();
+      return;
+    }
+
     // 1. Determine tab and category
     if (doc.custom_category_id) {
       setActiveTab(`custom:${doc.custom_category_id}`);
@@ -1072,7 +1312,7 @@ export default function DocumentsPage() {
     // 3. Highlight and scroll
     setHighlightedDoc(doc.id);
     setTimeout(() => {
-      const element = document.getElementById(`doc-${doc.id}`);
+      const element = document.getElementById(`document-${doc.id}`);
       if (element) {
         element.scrollIntoView({ behavior: "smooth", block: "center" });
       }
@@ -1246,16 +1486,27 @@ export default function DocumentsPage() {
 
   // Custom category handlers
   const openCategoryDialog = (category?: CustomCategory) => {
+    if (
+      !category &&
+      !canPerformAction(userTier, "addCustomCategory", customCategories.length)
+    ) {
+      setUpgradeModalFeature("custom_category");
+      setUpgradeModalOpen(true);
+      return;
+    }
+
     if (category) {
       setEditingCategory(category);
       setCategoryForm({
         name: category.name,
         description: category.description || "",
+        icon: category.icon ? toPascalCase(category.icon) : "Folder",
       });
     } else {
       setEditingCategory(null);
-      setCategoryForm({ name: "", description: "" });
+      setCategoryForm({ name: "", description: "", icon: "Folder" });
     }
+    setCategoryIconSearch("");
     setCategoryError(null);
     setIsCategoryDialogOpen(true);
   };
@@ -1282,6 +1533,7 @@ export default function DocumentsPage() {
           .update({
             name: categoryForm.name.trim(),
             description: categoryForm.description.trim() || null,
+            icon: categoryForm.icon || "Folder",
           })
           .eq("id", editingCategory.id);
 
@@ -1307,7 +1559,7 @@ export default function DocumentsPage() {
           user_id: user.id,
           name: categoryForm.name.trim(),
           description: categoryForm.description.trim() || null,
-          icon: "tag",
+          icon: categoryForm.icon || "Folder",
         });
 
         if (error) {
@@ -1470,6 +1722,13 @@ export default function DocumentsPage() {
     );
   };
 
+  const getDisplayTitle = (doc: Document) => {
+    if (privacyModeEnabled && (isCategoryLocked(doc.custom_category_id ? `custom:${doc.custom_category_id}` : doc.category) || isDocumentLocked(doc))) {
+      return "Titel verborgen";
+    }
+    return decryptedTitles[doc.id] ?? doc.title;
+  };
+
   const getCategorySubcategoriesForUpload = () => {
     if (!uploadCategory) return [];
     return subcategories.filter((s) => s.parent_category === uploadCategory);
@@ -1484,6 +1743,8 @@ export default function DocumentsPage() {
       : null;
     const isSelected = selectedDocuments.has(doc.id);
     const isHighlighted = highlightedDoc === doc.id;
+    const isExtraSecured = Boolean(doc.extra_security_enabled);
+    const isLocked = isDocumentLocked(doc);
 
     return (
       <div
@@ -1519,7 +1780,7 @@ export default function DocumentsPage() {
           </div>
           <div className="flex-1 min-w-0 overflow-hidden">
             <p className="font-medium text-warmgray-900 truncate leading-tight">
-              {decryptedTitles[doc.id] ?? doc.title}
+              {getDisplayTitle(doc)}
             </p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-warmgray-500 mt-0.5">
               <span className="truncate">{category.name}</span>
@@ -1545,6 +1806,12 @@ export default function DocumentsPage() {
               <span className="flex-shrink-0 hidden xs:inline" suppressHydrationWarning>
                 {formatDate(doc.created_at)}
               </span>
+              {isExtraSecured ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
+                  <ShieldCheck className="h-3 w-3" />
+                  {isLocked ? "Gesperrt" : "Gesichert"}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1591,6 +1858,21 @@ export default function DocumentsPage() {
                 <Share2 className="w-4 h-4 mr-2" />
                 Teilen
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(event) =>
+                  void handleToggleDocumentSecurity(event, doc.id, !isExtraSecured)
+                }
+                className="py-3"
+              >
+                {isExtraSecured ? (
+                  <ShieldOff className="w-4 h-4 mr-2" />
+                ) : (
+                  <Shield className="w-4 h-4 mr-2" />
+                )}
+                {isExtraSecured
+                  ? "Extra-Sicherheit entfernen"
+                  : "Extra-Sicherheit aktivieren"}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => handleDelete(doc)}
@@ -1611,23 +1893,61 @@ export default function DocumentsPage() {
     const categorySubcategories = getSubcategoriesForCategory(category);
     const uncategorizedDocs = getUncategorizedDocuments(category);
     const categoryInfo = DOCUMENT_CATEGORIES[category];
-    const Icon = iconMap[categoryInfo.icon] || FileText;
+    const categoryKey = category;
+    const isSecured = securedCategories.includes(categoryKey);
 
     return (
       <div className="space-y-6">
         {/* Action bar */}
-        <div className="flex justify-end">
-          <Button onClick={() => openUploadDialog(category)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Dokument hinzufügen
-          </Button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-sm font-medium text-warmgray-600">Unterordner</h3>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            {seniorMode ? (
+              <Button
+                variant={isSecured ? "default" : "outline"}
+                className="w-full sm:w-auto"
+                onClick={(event) => void handleToggleCategoryLock(event, categoryKey)}
+              >
+                {isSecured ? (
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                ) : (
+                  <Shield className="mr-2 h-4 w-4" />
+                )}
+                {isSecured
+                  ? "Extra-Sicherheit aktiv"
+                  : "Extra-Sicherheit aktivieren"}
+              </Button>
+            ) : (
+              <Button
+                variant={isSecured ? "default" : "outline"}
+                size="icon"
+                className="h-10 w-10 self-end sm:self-auto"
+                onClick={(event) => void handleToggleCategoryLock(event, categoryKey)}
+                title={
+                  isSecured
+                    ? "Extra-Sicherheit aktiv"
+                    : "Extra-Sicherheit aktivieren"
+                }
+              >
+                {isSecured ? (
+                  <ShieldCheck className="h-4 w-4" />
+                ) : (
+                  <Shield className="h-4 w-4" />
+                )}
+              </Button>
+            )}
+            <Button
+              onClick={() => openUploadDialog(category)}
+              className="w-full sm:w-auto"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Dokument hinzufügen
+            </Button>
+          </div>
         </div>
 
         {/* Folder Grid - Always show to allow creating folders */}
         <div>
-          <h3 className="text-sm font-medium text-warmgray-600 mb-3">
-            Unterordner
-          </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {categorySubcategories.map((subcategory) => {
               const docCount = getDocumentsForSubcategory(
@@ -1954,6 +2274,22 @@ export default function DocumentsPage() {
           />
         </div>
         <Button
+          type="button"
+          variant={privacyModeEnabled ? "default" : "outline"}
+          onClick={() => {
+            const next = !privacyModeEnabled;
+            setPrivacyModeEnabled(next);
+            window.localStorage.setItem(
+              "docs_privacy_mode",
+              next ? "enabled" : "disabled",
+            );
+          }}
+          className="w-full sm:w-auto"
+        >
+          <Shield className="mr-2 h-4 w-4" />
+          {privacyModeEnabled ? "Privatmodus aktiv" : "Privatmodus"}
+        </Button>
+        <Button
           onClick={() => openUploadDialog(selectedCategory || "identitaet")}
           className="w-full sm:w-auto"
         >
@@ -2003,13 +2339,14 @@ export default function DocumentsPage() {
           {/* Custom Categories */}
           {customCategories.map((cat) => {
             const count = getDocumentCountForCustomCategory(cat.id);
+            const CustomIcon = resolveCategoryIcon(cat.icon);
             return (
               <TabsTrigger
                 key={cat.id}
                 value={`custom:${cat.id}`}
                 className="data-[state=active]:bg-sage-100 data-[state=active]:text-sage-700 group relative"
               >
-                <Tag className="w-3 h-3 mr-1" />
+                <CustomIcon className="w-3 h-3 mr-1" />
                 {cat.name} ({count})
               </TabsTrigger>
             );
@@ -2068,7 +2405,7 @@ export default function DocumentsPage() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-warmgray-900 truncate">
-                              {decryptedTitles[doc.id] ?? doc.title}
+                              {getDisplayTitle(doc)}
                             </p>
                             <p className="text-xs text-warmgray-500">
                               {formatDate(doc.created_at)}
@@ -2190,68 +2527,107 @@ export default function DocumentsPage() {
                     const count = getDocumentCountForCustomCategory(cat.id);
                     const locked = isCategoryLocked(`custom:${cat.id}`);
                     const secured = securedCategories.includes(`custom:${cat.id}`);
+                    const CustomIcon = resolveCategoryIcon(cat.icon);
 
                     return (
                       <Card
                         key={cat.id}
-                        className={`group relative overflow-hidden cursor-pointer transition-all border-2 ${
+                        className={`group relative overflow-hidden cursor-pointer transition-all duration-300 border-2 ${
                           locked 
-                            ? 'bg-warmgray-50 border-warmgray-200' 
-                            : 'hover:border-sage-300 hover:shadow-md border-warmgray-200'
+                            ? 'bg-warmgray-50/50 border-warmgray-200 grayscale-[0.3]' 
+                            : 'hover:border-sage-400 hover:shadow-xl border-warmgray-200 bg-white'
                         }`}
-                        onClick={() => handleCategoryClick(`custom:${cat.id}` as any)}
+                        onClick={() => handleCategoryClick(`custom:${cat.id}`)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleCategoryClick(`custom:${cat.id}`);
+                          }
+                        }}
                       >
-                        <CardHeader className="pb-3">
+                        {locked && (
+                          <div className="absolute inset-0 bg-warmgray-900/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
+                            <div className="bg-white/90 px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
+                              <Lock className="w-4 h-4 text-amber-600" />
+                              <span className="text-xs font-bold text-warmgray-900 uppercase tracking-tight">
+                                Klicken zum Entsperren
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        <CardHeader className="pb-3 relative z-0">
                           <div className="flex items-start justify-between">
-                            <div className={`w-14 h-14 rounded-xl flex items-center justify-center transition-colors ${
-                              locked ? 'bg-warmgray-200' : 'bg-warmgray-100 group-hover:bg-warmgray-200'
-                            }`}>
-                              <Tag className={`w-7 h-7 ${locked ? 'text-warmgray-500' : 'text-warmgray-600'}`} />
+                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                              locked 
+                                ? "bg-warmgray-200 text-warmgray-500 group-hover:scale-95"
+                                : "bg-sage-100 text-sage-600 group-hover:bg-sage-600 group-hover:text-white group-hover:rotate-3"
+                            } senior-mode:w-20 senior-mode:h-20`}>
+                              {locked ? (
+                                <Lock className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
+                              ) : (
+                                <CustomIcon className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
+                              )}
                             </div>
                             <div className="flex gap-1">
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className={`h-10 w-10 rounded-full transition-colors ${
-                                  secured ? 'text-amber-600 bg-amber-50' : 'text-warmgray-400 hover:text-sage-600'
+                                className={`h-11 w-11 rounded-full transition-all ${
+                                  secured
+                                    ? "text-amber-600 bg-amber-50 border border-amber-100"
+                                    : "text-warmgray-300 hover:text-sage-600 hover:bg-sage-50"
                                 }`}
                                 onClick={(e) => handleToggleCategoryLock(e, `custom:${cat.id}`)}
+                                title={secured ? "Extra-Sicherheit aktiviert" : "Extra-Sicherheit aktivieren"}
                               >
-                                {secured ? <ShieldCheck className="w-5 h-5" /> : <Shield className="w-5 h-5" />}
+                                {secured ? <ShieldCheck className="w-6 h-6" /> : <Shield className="w-6 h-6" />}
                               </Button>
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-10 w-10 rounded-full text-warmgray-400 hover:text-sage-600"
+                                className="h-11 w-11 rounded-full text-warmgray-300 hover:text-sage-600 hover:bg-sage-50 transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  openCategoryDialog(cat);
+                                  openUploadDialog(null, cat.id);
                                 }}
+                                title="Dokument hinzufügen"
                               >
-                                <Pencil className="w-4 h-4" />
+                                <Plus className="w-6 h-6" />
                               </Button>
                             </div>
                           </div>
-                          <div className="pt-2">
-                            <CardTitle className="text-xl font-serif">{cat.name}</CardTitle>
+                          <div className="pt-4">
+                            <CardTitle className="text-xl font-serif senior-mode:text-3xl">{cat.name}</CardTitle>
                             {cat.description && (
-                              <CardDescription className="line-clamp-2 mt-1 leading-relaxed">
+                              <CardDescription className="line-clamp-2 mt-1.5 leading-relaxed senior-mode:text-xl senior-mode:mt-2">
                                 {cat.description}
                               </CardDescription>
                             )}
                           </div>
                         </CardHeader>
-                        <CardContent>
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm text-warmgray-600 font-medium">
-                              <span className="text-warmgray-900 font-bold">{locked ? '??' : count}</span>{" "}
-                              Dokument{count !== 1 ? "e" : ""}
-                            </p>
-                            {secured && !locked && (
-                              <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                                <Lock className="w-2.5 h-2.5" />
-                                Gesperrt
-                              </span>
+                        <CardContent className="relative z-0">
+                          <div className="flex items-center justify-between border-t border-warmgray-100 pt-4 mt-2">
+                            <div className="flex flex-col">
+                              <p className="text-sm text-warmgray-500 senior-mode:text-lg">Inhalt</p>
+                              <p className="text-base font-semibold text-warmgray-900 senior-mode:text-2xl">
+                                <span className={locked ? "text-warmgray-400" : "text-sage-700"}>
+                                  {locked ? "--" : count}
+                                </span>{" "}
+                                Dokument{count !== 1 ? "e" : ""}
+                              </p>
+                            </div>
+                            {secured && (
+                              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${
+                                locked ? "bg-warmgray-100 border-warmgray-200 text-warmgray-600" : "bg-amber-50 border-amber-200 text-amber-700"
+                              }`}>
+                                <Lock className="w-3 h-3" />
+                                <span className="text-[11px] font-bold uppercase tracking-wider">
+                                  {locked ? "Gesperrt" : "Gesichert"}
+                                </span>
+                              </div>
                             )}
                           </div>
                         </CardContent>
@@ -2261,7 +2637,14 @@ export default function DocumentsPage() {
 
                   {/* Add Custom Category Card */}
                   <button
-                    onClick={() => openCategoryDialog()}
+                    onClick={() => {
+                      if (!canPerformAction(userTier, "addCustomCategory", customCategories.length)) {
+                        setUpgradeModalFeature("custom_category");
+                        setUpgradeModalOpen(true);
+                        return;
+                      }
+                      openCategoryDialog();
+                    }}
                     className="group p-6 rounded-xl border-2 border-dashed border-warmgray-200 hover:border-sage-400 hover:bg-sage-50 transition-all flex flex-col items-center justify-center gap-3 text-warmgray-500 hover:text-sage-700"
                   >
                     <div className="w-14 h-14 rounded-full bg-warmgray-50 flex items-center justify-center group-hover:bg-sage-100 transition-colors">
@@ -2337,21 +2720,72 @@ export default function DocumentsPage() {
             ) : (
               <div className="space-y-6">
                 {/* Header with actions */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Tag className="w-5 h-5 text-sage-600" />
-                    <div>
-                      <h2 className="text-lg font-semibold text-warmgray-900">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {(() => {
+                      const CustomIcon = resolveCategoryIcon(cat.icon);
+                      return (
+                        <div className="w-11 h-11 rounded-xl bg-sage-100 text-sage-700 flex items-center justify-center flex-shrink-0">
+                          <CustomIcon className="w-6 h-6" />
+                        </div>
+                      );
+                    })()}
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold text-warmgray-900 truncate">
                         {cat.name}
                       </h2>
                       {cat.description && (
-                        <p className="text-sm text-warmgray-500">
+                        <p className="text-sm text-warmgray-500 line-clamp-2">
                           {cat.description}
                         </p>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {seniorMode ? (
+                      <Button
+                        variant={
+                          securedCategories.includes(`custom:${cat.id}`)
+                            ? "default"
+                            : "outline"
+                        }
+                        onClick={(event) =>
+                          void handleToggleCategoryLock(event, `custom:${cat.id}`)
+                        }
+                      >
+                        {securedCategories.includes(`custom:${cat.id}`) ? (
+                          <ShieldCheck className="mr-2 h-4 w-4" />
+                        ) : (
+                          <Shield className="mr-2 h-4 w-4" />
+                        )}
+                        {securedCategories.includes(`custom:${cat.id}`)
+                          ? "Extra-Sicherheit aktiv"
+                          : "Extra-Sicherheit aktivieren"}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant={
+                          securedCategories.includes(`custom:${cat.id}`)
+                            ? "default"
+                            : "outline"
+                        }
+                        size="icon"
+                        onClick={(event) =>
+                          void handleToggleCategoryLock(event, `custom:${cat.id}`)
+                        }
+                        title={
+                          securedCategories.includes(`custom:${cat.id}`)
+                            ? "Extra-Sicherheit aktiv"
+                            : "Extra-Sicherheit aktivieren"
+                        }
+                      >
+                        {securedCategories.includes(`custom:${cat.id}`) ? (
+                          <ShieldCheck className="h-4 w-4" />
+                        ) : (
+                          <Shield className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -2385,7 +2819,12 @@ export default function DocumentsPage() {
                   </div>
                 ) : (
                   <div className="text-center py-12 border-2 border-dashed border-warmgray-200 rounded-lg">
-                    <Tag className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
+                    {(() => {
+                      const CustomIcon = resolveCategoryIcon(cat.icon);
+                      return (
+                        <CustomIcon className="w-12 h-12 text-warmgray-300 mx-auto mb-3" />
+                      );
+                    })()}
                     <h3 className="text-warmgray-700 font-medium mb-2">
                       Keine Dokumente in dieser Kategorie
                     </h3>
@@ -2403,168 +2842,6 @@ export default function DocumentsPage() {
           </TabsContent>
         ))}
       </Tabs>
-      {/* Category Cards (when no category is selected) */}
-      {!selectedCategory && !searchQuery && !selectedCustomCategory && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
-            const Icon = iconMap[category.icon] || FileText;
-            const count = getDocumentCountForCategory(key as DocumentCategory);
-            const categorySubcats = getSubcategoriesForCategory(
-              key as DocumentCategory,
-            );
-            return (
-              <Card
-                key={key}
-                className="cursor-pointer hover:border-sage-300 hover:shadow-md transition-all"
-                onClick={() => {
-                  setSelectedCategory(key as DocumentCategory);
-                  setCurrentFolder(null);
-                }}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center">
-                      <Icon className="w-6 h-6 text-sage-600" />
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openUploadDialog(key as DocumentCategory);
-                      }}
-                    >
-                      <Upload className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <CardTitle className="text-lg">{category.name}</CardTitle>
-                  <CardDescription>{category.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-warmgray-600">
-                    <span className="font-semibold text-sage-600">{count}</span>{" "}
-                    Dokument{count !== 1 ? "e" : ""}
-                    {categorySubcats.length > 0 && (
-                      <span className="text-warmgray-500">
-                        {" "}
-                        in {categorySubcats.length} Unterordner
-                        {categorySubcats.length !== 1 ? "n" : ""}
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-warmgray-500 mt-2">
-                    z.B. {category.examples.slice(0, 3).join(", ")}
-                  </p>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-      {!selectedCategory && !searchQuery && !selectedCustomCategory && (
-        <div className="mt-8 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-warmgray-900">
-              Eigene Kategorien
-            </h3>
-            {userTier.limits.maxCustomCategories !== 0 &&
-              (userTier.limits.maxCustomCategories === -1 ||
-                customCategories.length <
-                  userTier.limits.maxCustomCategories) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => openCategoryDialog()}
-                  className="h-8 text-sage-600 hover:text-sage-700 hover:bg-sage-50"
-                >
-                  <PlusCircle className="w-4 h-4 mr-1" />
-                  Neue Kategorie
-                </Button>
-              )}
-          </div>
-          {customCategories.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {customCategories.map((cat) => {
-                const count = getDocumentCountForCustomCategory(cat.id);
-                return (
-                  <Card
-                    key={cat.id}
-                    className="cursor-pointer hover:border-sage-300 hover:shadow-md transition-all"
-                    onClick={() => {
-                      setActiveTab(`custom:${cat.id}`);
-                      setSelectedCustomCategory(cat.id);
-                      setSelectedCategory(null);
-                    }}
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="w-12 h-12 rounded-lg bg-sage-100 flex items-center justify-center">
-                          <Tag className="w-6 h-6 text-sage-600" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openCategoryDialog(cat);
-                            }}
-                            title="Bearbeiten"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleDeleteCategory(cat.id);
-                            }}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            title="Löschen"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <CardTitle className="text-lg">{cat.name}</CardTitle>
-                      {cat.description && (
-                        <CardDescription>{cat.description}</CardDescription>
-                      )}
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-warmgray-600">
-                        <span className="font-semibold text-sage-600">
-                          {count}
-                        </span>{" "}
-                        Dokument{count !== 1 ? "e" : ""}
-                      </p>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          ) : userTier.limits.maxCustomCategories !== 0 &&
-            (userTier.limits.maxCustomCategories === -1 ||
-              customCategories.length <
-                userTier.limits.maxCustomCategories) ? (
-            <Card
-              className="border-2 border-dashed border-warmgray-200 hover:border-sage-300 cursor-pointer transition-colors"
-              onClick={() => openCategoryDialog()}
-            >
-              <CardContent className="flex flex-col items-center justify-center text-center py-10">
-                <PlusCircle className="w-8 h-8 text-sage-500 mb-3" />
-                <p className="text-sm font-medium text-warmgray-700">
-                  Neue Kategorie erstellen
-                </p>
-                <p className="text-xs text-warmgray-500 mt-1">
-                  Fügen Sie eine eigene Kategorie hinzu
-                </p>
-              </CardContent>
-            </Card>
-          ) : null}
-        </div>
-      )}
       {/* Upload Dialog */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
         {isUploadOpen ? (
@@ -2630,7 +2907,7 @@ export default function DocumentsPage() {
           previewDocument
             ? {
                 ...previewDocument,
-                title: decryptedTitles[previewDocument.id] ?? previewDocument.title,
+                title: getDisplayTitle(previewDocument),
                 notes:
                   previewNotes ??
                   (previewDocument.is_encrypted
@@ -2784,6 +3061,21 @@ export default function DocumentsPage() {
               variant="ghost"
               className="text-white hover:bg-warmgray-800 h-9 px-2 sm:px-3 flex-shrink-0"
               onClick={() => {
+                const selectedDocs = documents.filter((doc) =>
+                  selectedDocuments.has(doc.id),
+                );
+                const hasSecuredSelection = selectedDocs.some((doc) => {
+                  const categoryKey = doc.custom_category_id
+                    ? `custom:${doc.custom_category_id}`
+                    : doc.category;
+                  return isDocumentLocked(doc) || isCategoryLocked(categoryKey);
+                });
+                if (hasSecuredSelection && !hasRecentUnlock()) {
+                  setRequiresRecentUnlock(true);
+                  vaultContext.requestUnlock();
+                  return;
+                }
+
                 const docs = documents
                   .filter((doc) => selectedDocuments.has(doc.id))
                   .map((doc) => ({
@@ -2840,7 +3132,13 @@ export default function DocumentsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSaveCategory();
+            }}
+          >
             {categoryError && (
               <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                 {categoryError}
@@ -2875,29 +3173,69 @@ export default function DocumentsPage() {
                 placeholder="Kurze Beschreibung der Kategorie"
               />
             </div>
-          </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsCategoryDialogOpen(false)}
-            >
-              Abbrechen
-            </Button>
-            <Button
-              onClick={handleSaveCategory}
-              disabled={isSavingCategory || !categoryForm.name.trim()}
-            >
-              {isSavingCategory ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Speichern...
-                </>
-              ) : (
-                "Speichern"
-              )}
-            </Button>
-          </DialogFooter>
+            <div className="space-y-2">
+              <Label htmlFor="category-icon-search">Icon auswählen</Label>
+              <Input
+                id="category-icon-search"
+                value={categoryIconSearch}
+                onChange={(event) => setCategoryIconSearch(event.target.value)}
+                placeholder="Icon suchen (z.B. Car, Paw, Plane)"
+              />
+              <div className="max-h-44 overflow-y-auto rounded-lg border border-warmgray-200 p-2">
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {filteredCategoryIconOptions.slice(0, 84).map((iconOption) => {
+                    const IconComponent = resolveCategoryIcon(iconOption.value);
+                    const selected = categoryForm.icon === iconOption.value;
+                    return (
+                      <button
+                        key={iconOption.value}
+                        type="button"
+                        className={`h-10 w-10 rounded-md border transition-colors flex items-center justify-center ${
+                          selected
+                            ? "border-sage-500 bg-sage-50 text-sage-700"
+                            : "border-warmgray-200 text-warmgray-600 hover:border-sage-300 hover:text-sage-700"
+                        }`}
+                        onClick={() =>
+                          setCategoryForm((prev) => ({
+                            ...prev,
+                            icon: iconOption.value,
+                          }))
+                        }
+                        title={iconOption.label}
+                        aria-label={iconOption.label}
+                      >
+                        <IconComponent className="h-4 w-4" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCategoryDialogOpen(false)}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSavingCategory || !categoryForm.name.trim()}
+              >
+                {isSavingCategory ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Speichern...
+                  </>
+                ) : (
+                  "Speichern"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
       {/* Upgrade Modal - friendly limit notification */}

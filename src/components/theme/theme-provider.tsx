@@ -16,6 +16,15 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
+const DEFAULT_THEME_CONTEXT: ThemeContextType = {
+  theme: 'light',
+  setTheme: () => {},
+  resolvedTheme: 'light',
+  fontSize: 'normal',
+  setFontSize: () => {},
+  seniorMode: false,
+  setSeniorMode: () => {},
+}
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light')
@@ -84,4 +93,8 @@ export function useTheme() {
     throw new Error('useTheme must be used within a ThemeProvider')
   }
   return context
+}
+
+export function useThemeSafe() {
+  return useContext(ThemeContext) ?? DEFAULT_THEME_CONTEXT
 }

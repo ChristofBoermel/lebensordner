@@ -58,6 +58,7 @@ import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
 import Link from 'next/link'
 import { SecurityActivityLog } from '@/components/settings/security-activity-log'
 import { useVault } from '@/lib/vault/VaultContext'
+import { extractAvatarStoragePath, resolveAvatarUrl } from '@/lib/avatar'
 
 const GDPRExportDialog = dynamic(
   () => import('@/components/settings/gdpr-export-dialog').then((mod) => ({ default: mod.GDPRExportDialog })),
@@ -113,6 +114,7 @@ export default function EinstellungenPage() {
 
   // Profile picture state
   const [isUploadingPicture, setIsUploadingPicture] = useState(false)
+  const [resolvedProfilePictureUrl, setResolvedProfilePictureUrl] = useState<string | null>(null)
 
   // Account deletion state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -292,6 +294,27 @@ export default function EinstellungenPage() {
     fetchProfile()
   }, [fetchProfile, profileVersion])
 
+  useEffect(() => {
+    let isMounted = true
+
+    const resolvePicture = async () => {
+      if (!profile.profile_picture_url) {
+        if (isMounted) setResolvedProfilePictureUrl(null)
+        return
+      }
+
+      const signedUrl = await resolveAvatarUrl(supabase, profile.profile_picture_url)
+      if (isMounted) {
+        setResolvedProfilePictureUrl(signedUrl)
+      }
+    }
+
+    resolvePicture()
+    return () => {
+      isMounted = false
+    }
+  }, [profile.profile_picture_url, supabase])
+
   const handleSave = async () => {
     setIsSaving(true)
     setError(null)
@@ -403,9 +426,6 @@ export default function EinstellungenPage() {
     setIsUploadingPicture(true)
     setError(null)
 
-    setIsUploadingPicture(true)
-    setError(null)
-
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
@@ -429,20 +449,15 @@ export default function EinstellungenPage() {
       const uploadData = await uploadRes.json()
       const { path: filePath } = uploadData
 
-      // Get public URL from the returned path
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath)
-
       // Update profile
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ profile_picture_url: publicUrl })
+        .update({ profile_picture_url: filePath })
         .eq('id', user.id)
 
       if (updateError) throw updateError
 
-      setProfile({ ...profile, profile_picture_url: publicUrl })
+      setProfile({ ...profile, profile_picture_url: filePath })
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err: any) {
@@ -463,9 +478,10 @@ export default function EinstellungenPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
 
-      // Delete from storage
-      const filePath = profile.profile_picture_url.split('/').slice(-2).join('/')
-      await supabase.storage.from('avatars').remove([filePath])
+      const filePath = extractAvatarStoragePath(profile.profile_picture_url)
+      if (filePath) {
+        await supabase.storage.from('avatars').remove([filePath])
+      }
 
       // Update profile
       const { error: updateError } = await supabase
@@ -738,8 +754,8 @@ export default function EinstellungenPage() {
                   <Label>Profilbild</Label>
                   <div className="flex flex-col sm:flex-row items-center gap-4">
                     <div className="relative">
-                      {profile.profile_picture_url ? (
-                        <img src={profile.profile_picture_url} alt="Profilbild" className="w-20 h-20 rounded-full object-cover border-2 border-warmgray-200" />
+                      {resolvedProfilePictureUrl ? (
+                        <img src={resolvedProfilePictureUrl} alt="Profilbild" className="w-20 h-20 rounded-full object-cover border-2 border-warmgray-200" />
                       ) : (
                         <div className="w-20 h-20 rounded-full bg-sage-100 flex items-center justify-center border-2 border-warmgray-200">
                           <User className="w-8 h-8 text-sage-600" />
@@ -759,7 +775,7 @@ export default function EinstellungenPage() {
                         </Button>
                       </label>
                       {profile.profile_picture_url && (
-                        <Button variant="ghost" size="sm" onClick={handleRemoveProfilePicture} disabled={isUploadingPicture} className="text-red-600 hover:bg-red-50">
+                        <Button variant="outline" size="sm" onClick={handleRemoveProfilePicture} disabled={isUploadingPicture} className="text-red-600 border-red-200 hover:bg-red-50">
                           <X className="w-4 h-4 mr-2" />Entfernen
                         </Button>
                       )}
@@ -1031,9 +1047,9 @@ export default function EinstellungenPage() {
             <Label>Profilbild</Label>
             <div className="flex flex-col sm:flex-row items-center gap-4">
               <div className="relative">
-                {profile.profile_picture_url ? (
+                {resolvedProfilePictureUrl ? (
                   <img
-                    src={profile.profile_picture_url}
+                    src={resolvedProfilePictureUrl}
                     alt="Profilbild"
                     className="w-20 h-20 rounded-full object-cover border-2 border-warmgray-200"
                   />
@@ -1066,11 +1082,11 @@ export default function EinstellungenPage() {
                 </label>
                 {profile.profile_picture_url && (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     onClick={handleRemoveProfilePicture}
                     disabled={isUploadingPicture}
-                    className="text-red-600 hover:bg-red-50"
+                    className="text-red-600 border-red-200 hover:bg-red-50"
                   >
                     <X className="w-4 h-4 mr-2" />
                     Entfernen

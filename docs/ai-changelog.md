@@ -23,6 +23,60 @@ Rollback:
 
 Open Issues:
 - none
+
+## 2026-03-02 06:46 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Fixed senior-mode dialog close affordance by hardening global `Dialog` close button styling/placement and adding bordered close icon treatment.
+- Added bordered X-close treatment in onboarding custom close controls.
+- Changed encrypted upload persistence to keep plaintext `title`/`file_name` (while still storing encrypted payload/fields) so the documents list/search no longer degrades to `[Verschlüsselt]`.
+- Improved upload-dialog scroll UX with explicit scroll container, persistent gradient cue, and a floating down-arrow quick-scroll button.
+
+Why:
+- User reported missing dialog close controls in senior mode, poor X-button affordance consistency, degraded documents search/list UX due placeholder titles, and hard-to-discover scrollable content in upload dialog.
+
+Risk / Regression Watch:
+- Keeping plaintext title/file name for encrypted docs improves usability but reduces metadata confidentiality versus prior placeholder-only behavior.
+- Upload dialog now includes a floating scroll affordance; verify no overlap with keyboard on small touch devices.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `npm run test -- --run tests/components/dialog.test.tsx tests/pages/onboarding-category-cards.test.tsx tests/pages/dokumente.test.tsx`
+
+Rollback:
+- Revert dialog/onboarding/documents/upload-dialog changes in this patch and remove this changelog entry.
+
+Open Issues:
+- none
+
+## 2026-03-02 06:20 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Improved dialog UX consistency via shared `DialogContent` defaults (mobile width, safer max-height, built-in scroll, footer spacing).
+- Fixed onboarding documents card text wrapping/alignment and standardized onboarding step button alignment/order for mobile + desktop.
+- Reworked notfall form dialogs to be responsive and scroll-safe (including medication/BMP edit grid behavior on small screens).
+- Fixed profile loading 400 fallback in documents page when `secured_categories` column is unavailable.
+- Fixed avatar loading/removal by moving to signed URL resolution (`avatars` bucket) and robust storage-path extraction across old/new stored formats.
+- Added automatic inactivity logout after 10 minutes for authenticated dashboard sessions.
+- Updated dialog regression test for new max-height class.
+
+Why:
+- User reported multiple dialog layout breakages, onboarding card text/button misalignment, profile query/storage image errors, and requested enforced idle logout.
+
+Risk / Regression Watch:
+- Shared dialog primitive changes affect all dialogs; spot-check high-traffic flows on small screens.
+- Avatar URLs now use signed links; if storage policies change, image rendering/removal should be re-validated.
+- Inactivity logout currently applies to dashboard-wrapped routes.
+
+Verification:
+- `npm run type-check`
+- `npm run test -- --run tests/pages/onboarding-category-cards.test.tsx tests/pages/notfall-consent.test.tsx tests/pages/einstellungen-name-fields.test.tsx tests/components/dialog.test.tsx`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/components/ui/dialog.tsx`, onboarding/notfall/settings/documents/dashboard-nav/account-delete/avatar helper/inactivity files, and this changelog entry.
+
+Open Issues:
+- none
 ```
 
 ---
@@ -154,6 +208,37 @@ Verification:
 
 Rollback:
 - Remove the two docs files and the AGENTS.md section.
+
+Open Issues:
+- none
+
+## 2026-03-02 07:32 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Completed documents/security flow hardening in `src/app/(dashboard)/dokumente/page.tsx`:
+- Removed duplicate legacy category overview sections and kept the new card system only.
+- Added category-level extra-security controls in standard/custom category detail headers with senior-mode text CTA and normal icon CTA.
+- Added per-category privacy mode toggle (`docs_privacy_mode`) for masked titles when locked.
+- Added custom-category icon picker/search in category dialog and Enter-to-save form submission.
+- Unified free-tier gating for custom category creation via `openCategoryDialog`.
+- Added custom category icon rendering in tabs/detail/empty states and retained add-action card behavior.
+- Added migration/type support for document-level `extra_security_enabled`.
+- Added unload/session hardening and idle-logout warning UX (`src/lib/vault/VaultContext.tsx`, `src/components/auth/inactivity-logout.tsx`).
+- Added safe optional theme hook for isolated renders/tests (`useThemeSafe`) and switched documents page to use it.
+
+Why:
+- User requested full implementation of the agreed documents/security plan, including senior/mobile-safe UI behavior and stronger unlock/security ergonomics.
+
+Risk / Regression Watch:
+- Documents page now contains additional security controls and icon-search UI; verify interaction density on very small mobile screens.
+- Idle warning banner introduces a fixed overlay; verify it does not conflict with other fixed dialogs on dashboard pages.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/pages/dokumente.test.tsx tests/components/vault-unlock-modal.test.tsx tests/lib/vault-context.test.tsx`
+
+Rollback:
+- Revert `src/app/(dashboard)/dokumente/page.tsx`, `src/components/theme/theme-provider.tsx`, `src/components/auth/inactivity-logout.tsx`, `src/lib/vault/VaultContext.tsx`, `src/types/database.ts`, and `supabase/migrations/20260302000100_documents_extra_security.sql`.
 
 Open Issues:
 - none

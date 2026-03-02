@@ -298,6 +298,7 @@ export interface Database {
           title_encrypted: string | null
           notes_encrypted: string | null
           file_name_encrypted: string | null
+          extra_security_enabled: boolean
         }
         Insert: {
           id?: string
@@ -326,6 +327,7 @@ export interface Database {
           title_encrypted?: string | null
           notes_encrypted?: string | null
           file_name_encrypted?: string | null
+          extra_security_enabled?: boolean
         }
         Update: {
           id?: string
@@ -354,6 +356,7 @@ export interface Database {
           title_encrypted?: string | null
           notes_encrypted?: string | null
           file_name_encrypted?: string | null
+          extra_security_enabled?: boolean
         }
       }
       subcategories: {

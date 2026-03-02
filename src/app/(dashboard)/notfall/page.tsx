@@ -349,7 +349,7 @@ function MedikamentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:hidden">
+      <DialogContent className="w-[calc(100%-1rem)] sm:max-w-lg max-h-[95dvh] overflow-y-auto print:hidden">
         <DialogHeader>
           <DialogTitle>
             {medication ? "Medikament bearbeiten" : "Medikament hinzufügen"}
@@ -382,7 +382,7 @@ function MedikamentDialog({
               placeholder="z.B. Glucophage"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="field-staerke">Stärke</Label>
               <Input
@@ -406,7 +406,7 @@ function MedikamentDialog({
           </div>
           <div>
             <p className="text-sm font-medium text-warmgray-700 mb-2">Dosierung</p>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div className="space-y-1">
                 <Label htmlFor="field-morgens" className="text-xs text-center block">morgens</Label>
                 <Input
@@ -453,7 +453,7 @@ function MedikamentDialog({
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="field-einheit">Einheit</Label>
               <Input
@@ -486,7 +486,7 @@ function MedikamentDialog({
             />
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="pt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Abbrechen
           </Button>
@@ -2487,7 +2487,7 @@ export default function NotfallPage() {
             open={isContactDialogOpen}
             onOpenChange={setIsContactDialogOpen}
           >
-            <DialogContent className="print:hidden">
+            <DialogContent className="w-[calc(100%-1rem)] sm:max-w-lg max-h-[95dvh] overflow-y-auto print:hidden">
               <DialogHeader>
                 <DialogTitle>
                   {editingContact
@@ -2563,7 +2563,7 @@ export default function NotfallPage() {
                   <Label htmlFor="is_primary">Hauptkontakt</Label>
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="pt-2">
                 <Button
                   variant="outline"
                   onClick={() => setIsContactDialogOpen(false)}
@@ -2584,7 +2584,7 @@ export default function NotfallPage() {
             open={isMedicalDialogOpen}
             onOpenChange={setIsMedicalDialogOpen}
           >
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:hidden">
+            <DialogContent className="w-[calc(100%-1rem)] sm:max-w-lg max-h-[95dvh] overflow-y-auto print:hidden">
               <DialogHeader>
                 <DialogTitle>Medizinische Informationen</DialogTitle>
               </DialogHeader>
@@ -2703,7 +2703,7 @@ export default function NotfallPage() {
                   />
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="pt-2">
                 <Button
                   variant="outline"
                   onClick={() => setIsMedicalDialogOpen(false)}
@@ -2724,7 +2724,7 @@ export default function NotfallPage() {
             open={isVaccinationDialogOpen}
             onOpenChange={setIsVaccinationDialogOpen}
           >
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:hidden">
+            <DialogContent className="w-[calc(100%-1rem)] sm:max-w-lg max-h-[95dvh] overflow-y-auto print:hidden">
               <DialogHeader>
                 <DialogTitle>
                   {editingVaccination
@@ -2787,7 +2787,7 @@ export default function NotfallPage() {
                   />
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="pt-2">
                 <Button
                   variant="outline"
                   onClick={() => setIsVaccinationDialogOpen(false)}
@@ -2825,7 +2825,7 @@ export default function NotfallPage() {
             open={isDirectivesDialogOpen}
             onOpenChange={setIsDirectivesDialogOpen}
           >
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:hidden">
+            <DialogContent className="w-[calc(100%-1rem)] sm:max-w-lg max-h-[95dvh] overflow-y-auto print:hidden">
               <DialogHeader>
                 <DialogTitle>Vorsorgedokumente</DialogTitle>
               </DialogHeader>
@@ -2926,7 +2926,7 @@ export default function NotfallPage() {
                   </div>
                 ))}
               </div>
-              <DialogFooter>
+              <DialogFooter className="pt-2">
                 <Button
                   variant="outline"
                   onClick={() => setIsDirectivesDialogOpen(false)}
@@ -2947,7 +2947,7 @@ export default function NotfallPage() {
             open={isFuneralDialogOpen}
             onOpenChange={setIsFuneralDialogOpen}
           >
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:hidden">
+            <DialogContent className="w-[calc(100%-1rem)] sm:max-w-lg max-h-[95dvh] overflow-y-auto print:hidden">
               <DialogHeader>
                 <DialogTitle>Bestattungswünsche</DialogTitle>
               </DialogHeader>
@@ -3072,7 +3072,7 @@ export default function NotfallPage() {
                   </div>
                 )}
               </div>
-              <DialogFooter>
+              <DialogFooter className="pt-2">
                 <Button
                   variant="outline"
                   onClick={() => setIsFuneralDialogOpen(false)}

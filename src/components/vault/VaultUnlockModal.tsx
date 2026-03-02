@@ -41,7 +41,12 @@ function VaultUnlockPassphrase() {
   const { passphrase, setPassphrase, setMode, isLoading, error, handleUnlock } = useVaultUnlockContext()
 
   return (
-    <>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        void handleUnlock()
+      }}
+    >
       <div className="space-y-4 mt-4">
         <div className="space-y-2">
           <Label htmlFor="vault-unlock-passphrase">Passwort</Label>
@@ -60,12 +65,12 @@ function VaultUnlockPassphrase() {
       {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
 
       <DialogFooter className="mt-6">
-        <Button onClick={handleUnlock} disabled={isLoading || !passphrase}>
+        <Button type="submit" disabled={isLoading || !passphrase}>
           {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
           Entsperren
         </Button>
       </DialogFooter>
-    </>
+    </form>
   )
 }
 
@@ -73,7 +78,12 @@ function VaultUnlockRecovery() {
   const { recoveryKey, setRecoveryKey, setMode, isLoading, error, handleUnlock } = useVaultUnlockContext()
 
   return (
-    <>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        void handleUnlock()
+      }}
+    >
       <div className="space-y-4 mt-4">
         <div className="space-y-2">
           <Label htmlFor="vault-unlock-recovery">Wiederherstellungsschlussel</Label>
@@ -93,12 +103,12 @@ function VaultUnlockRecovery() {
       {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
 
       <DialogFooter className="mt-6">
-        <Button onClick={handleUnlock} disabled={isLoading || !recoveryKey}>
+        <Button type="submit" disabled={isLoading || !recoveryKey}>
           {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
           Entsperren
         </Button>
       </DialogFooter>
-    </>
+    </form>
   )
 }
 

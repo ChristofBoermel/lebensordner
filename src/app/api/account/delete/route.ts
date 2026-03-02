@@ -8,6 +8,7 @@ import {
 } from '@/lib/email/security-notifications'
 import { getStripe } from '@/lib/stripe'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { extractAvatarStoragePath } from '@/lib/avatar'
 
 // --- Helper ---
 
@@ -111,9 +112,7 @@ export async function DELETE(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    const avatarPath = profileData?.profile_picture_url
-      ? profileData.profile_picture_url.split('/').pop()
-      : null
+    const avatarPath = extractAvatarStoragePath(profileData?.profile_picture_url)
 
     // Step 5a: Delete DB data (must succeed before external cleanup)
     const { error: rpcError } = await serviceClient.rpc('delete_user_account', { p_user_id: user.id, p_email: user.email! })
@@ -128,7 +127,7 @@ export async function DELETE(request: NextRequest) {
             await serviceClient.storage.from('documents').remove(filePaths)
           }
           if (avatarPath) {
-            await serviceClient.storage.from('avatars').remove([`${user.id}/${avatarPath}`])
+            await serviceClient.storage.from('avatars').remove([avatarPath])
           }
         } catch (error) {
           emitStructuredError({

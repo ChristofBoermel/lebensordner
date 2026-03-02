@@ -43,7 +43,7 @@ function PreviewEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100%-1rem)] sm:max-w-lg max-h-[95dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Medikament bearbeiten</DialogTitle>
           <DialogDescription>Felder mit * sind Pflichtfelder</DialogDescription>
@@ -67,7 +67,7 @@ function PreviewEditDialog({
               placeholder="z.B. Glucophage"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="preview-field-staerke">Stärke</Label>
               <Input
@@ -89,7 +89,7 @@ function PreviewEditDialog({
           </div>
           <div>
             <p className="text-sm font-medium text-warmgray-700 mb-2">Dosierung</p>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div className="space-y-1">
                 <Label htmlFor="preview-field-morgens" className="text-xs text-center block">morgens</Label>
                 <Input
@@ -401,7 +401,7 @@ export function BmpScanDialog({
         })}
       </div>
 
-      <DialogFooter>
+      <DialogFooter className="pt-2">
         <Button variant="outline" onClick={resetToIdle}>
           Abbrechen
         </Button>
@@ -421,7 +421,7 @@ export function BmpScanDialog({
         <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
         <p className="text-sm text-red-700">{errorMessage}</p>
       </div>
-      <DialogFooter>
+      <DialogFooter className="pt-2">
         <Button variant="outline" onClick={resetToIdle}>
           Erneut versuchen
         </Button>
@@ -499,7 +499,7 @@ export function BmpScanDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100%-1rem)] sm:max-w-lg max-h-[95dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Camera className="w-5 h-5" />

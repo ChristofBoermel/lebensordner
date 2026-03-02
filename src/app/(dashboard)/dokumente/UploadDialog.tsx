@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DialogContent,
   DialogDescription,
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FileUpload } from "@/components/ui/file-upload";
-import { Loader2, Plus, Tag, Info } from "lucide-react";
+import { Loader2, Plus, Tag, Info, ChevronDown } from "lucide-react";
 import {
   DOCUMENT_CATEGORIES,
   CATEGORY_METADATA_FIELDS,
@@ -100,10 +100,44 @@ export default function UploadDialog({
   userTier,
   validateAndSetFile,
 }: UploadDialogProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollDown, setCanScrollDown] = useState(false);
+
   const subcategories = useMemo(
     () => getCategorySubcategoriesForUpload(),
     [getCategorySubcategoriesForUpload],
   );
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const updateScrollState = () => {
+      const remaining =
+        container.scrollHeight - container.clientHeight - container.scrollTop;
+      setCanScrollDown(remaining > 8);
+    };
+
+    updateScrollState();
+    container.addEventListener("scroll", updateScrollState, { passive: true });
+    window.addEventListener("resize", updateScrollState);
+
+    return () => {
+      container.removeEventListener("scroll", updateScrollState);
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [
+    uploadCategory,
+    uploadCustomCategory,
+    uploadExpiryDate,
+    uploadFile,
+    uploadTitle,
+    uploadNotes,
+    uploadSubcategory,
+    isCreatingSubcategory,
+    customCategories.length,
+    familyMembers.length,
+  ]);
 
   return (
     <DialogContent className="w-full max-h-[95dvh] sm:max-h-[90vh] sm:max-w-lg p-0 overflow-hidden flex flex-col">
@@ -115,7 +149,10 @@ export default function UploadDialog({
       </DialogHeader>
 
       <div className="relative flex-1 min-h-0 overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto overflow-y-scroll p-6 pr-4 space-y-6 min-h-0"
+        >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => (
               <button
@@ -456,6 +493,22 @@ export default function UploadDialog({
             )}
         </div>
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent" />
+        {canScrollDown ? (
+          <button
+            type="button"
+            onClick={() =>
+              scrollContainerRef.current?.scrollBy({
+                top: 260,
+                behavior: "smooth",
+              })
+            }
+            className="absolute bottom-3 right-3 z-10 h-9 w-9 rounded-full border border-warmgray-300 bg-white text-warmgray-700 shadow-sm transition-colors hover:bg-warmgray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-500"
+            aria-label="Nach unten scrollen"
+            title="Mehr Felder anzeigen"
+          >
+            <ChevronDown className="mx-auto h-5 w-5" />
+          </button>
+        ) : null}
       </div>
 
       <DialogFooter>

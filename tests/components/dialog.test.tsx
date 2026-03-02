@@ -27,7 +27,7 @@ describe('DialogContent', () => {
     expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('DialogContent has max-h-[85vh] class by default (regression guard)', () => {
+  it('DialogContent has max-h-[95dvh] class by default (regression guard)', () => {
     render(
       <Dialog open>
         <DialogContent>Content</DialogContent>
@@ -35,6 +35,6 @@ describe('DialogContent', () => {
     )
 
     const dialog = screen.getByRole('dialog')
-    expect(dialog).toHaveClass('max-h-[85vh]')
+    expect(dialog).toHaveClass('max-h-[95dvh]')
   })
 })

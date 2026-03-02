@@ -145,24 +145,24 @@ export function ProgressiveField({
       </div>
 
       {/* Navigation buttons */}
-      <div className="flex justify-between pt-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-4">
         {fieldIndex > 0 ? (
           <Button
             variant="ghost"
             onClick={onPrevious}
             size="onboarding"
-            className="text-warmgray-700"
+            className="w-full sm:w-auto text-warmgray-700"
           >
             <ArrowLeft className="mr-2 w-5 h-5" />
             Zurück
           </Button>
         ) : (
-          <div />
+          <div className="hidden sm:block" />
         )}
         <Button
           onClick={onNext}
           size="onboarding"
-          className="min-w-[180px]"
+          className="w-full sm:w-auto sm:min-w-[180px]"
         >
           {isLastField ? 'Abschließen' : 'Nächstes Feld'}
           <ArrowRight className="ml-2 w-5 h-5" />

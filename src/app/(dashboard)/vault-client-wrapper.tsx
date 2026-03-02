@@ -2,6 +2,7 @@
 
 import { VaultSetup, VaultSetupModal } from '@/components/vault/VaultSetupModal'
 import { VaultProvider, useVault } from '@/lib/vault/VaultContext'
+import { InactivityLogout } from '@/components/auth/inactivity-logout'
 
 function VaultSetupModalHost() {
   const { isSetupRequested, closeSetup } = useVault()
@@ -24,6 +25,7 @@ function VaultSetupModalHost() {
 export function VaultClientWrapper({ children }: { children: React.ReactNode }) {
   return (
     <VaultProvider>
+      <InactivityLogout />
       {children}
       <VaultSetupModalHost />
     </VaultProvider>

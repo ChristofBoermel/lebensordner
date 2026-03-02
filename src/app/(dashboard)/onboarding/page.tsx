@@ -1307,7 +1307,7 @@ export default function OnboardingPage() {
               />
             )}
 
-            <div className="flex justify-between max-w-md mx-auto pt-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between max-w-md mx-auto pt-2">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -1318,7 +1318,7 @@ export default function OnboardingPage() {
                   }
                 }}
                 size="onboarding"
-                className="min-w-[140px]"
+                className="w-full sm:w-auto sm:min-w-[140px]"
               >
                 <ArrowLeft className="mr-2 w-5 h-5" />
                 Zurück
@@ -1327,7 +1327,7 @@ export default function OnboardingPage() {
                 variant="ghost"
                 onClick={() => handleSkipRequest('profile')}
                 size="onboarding"
-                className="text-warmgray-700 focus-visible:ring-sage-500"
+                className="w-full sm:w-auto text-warmgray-700 focus-visible:ring-sage-500"
               >
                 Überspringen
               </Button>
@@ -1382,12 +1382,15 @@ export default function OnboardingPage() {
                       <div className="bg-sage-50 rounded-full p-3 mb-2">
                         <IconComponent className="w-8 h-8 text-sage-700" />
                       </div>
-                      <p className="w-full text-sm font-medium text-warmgray-900 line-clamp-2 text-left">
+                      <p className="w-full text-sm font-medium text-warmgray-900 line-clamp-2 text-center">
                         {cat.name}
                       </p>
-                      <ul className="w-full text-xs text-warmgray-700 mt-1 space-y-0.5 text-left">
+                      <ul className="w-full text-xs text-warmgray-700 mt-1 space-y-1 text-left">
                         {cat.examples.slice(0, 2).map((example, i) => (
-                          <li key={i}>• {example}</li>
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="mt-0.5 text-warmgray-600" aria-hidden="true">•</span>
+                            <span className="min-w-0">{example}</span>
+                          </li>
                         ))}
                       </ul>
                     </div>
@@ -1430,7 +1433,7 @@ export default function OnboardingPage() {
                       </p>
                       <button
                         onClick={() => setShowQrCode(false)}
-                        className="text-warmgray-600 hover:text-warmgray-800 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-4"
+                        className="rounded-md border border-warmgray-300 bg-white p-1 text-warmgray-700 shadow-sm transition-colors hover:bg-warmgray-50 hover:text-warmgray-900 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-4"
                       >
                         <X className="w-5 h-5" />
                       </button>
@@ -1460,28 +1463,28 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            <div className="flex justify-between max-w-md mx-auto pt-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between max-w-md mx-auto pt-4">
               <Button
                 variant="outline"
                 onClick={goToPrevStep}
                 size="onboarding"
-                className="min-w-[160px]"
+                className="w-full sm:w-auto sm:min-w-[160px]"
               >
                 <ArrowLeft className="mr-2 w-5 h-5" />
                 Zurück
               </Button>
-              <div className="flex gap-2">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                <Button onClick={goToNextStep} size="onboarding" className="w-full sm:w-auto sm:min-w-[160px]">
+                  Weiter
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Button>
                 <Button
                   variant="ghost"
                   onClick={() => goToNextStep()}
                   size="onboarding"
-                  className="text-warmgray-700 focus-visible:ring-sage-500"
+                  className="w-full sm:w-auto text-warmgray-700 focus-visible:ring-sage-500"
                 >
                   Überspringen
-                </Button>
-                <Button onClick={goToNextStep} size="onboarding" className="min-w-[160px]">
-                  Weiter
-                  <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
               </div>
             </div>
@@ -1531,7 +1534,7 @@ export default function OnboardingPage() {
                   inputId={EMERGENCY_FIELDS[emergencyFieldIndex].inputId}
                 />
 
-                <div className="flex justify-between max-w-md mx-auto pt-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between max-w-md mx-auto pt-2">
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -1542,7 +1545,7 @@ export default function OnboardingPage() {
                       }
                     }}
                     size="onboarding"
-                    className="min-w-[140px]"
+                    className="w-full sm:w-auto sm:min-w-[140px]"
                   >
                     <ArrowLeft className="mr-2 w-5 h-5" />
                     Zurück
@@ -1551,7 +1554,7 @@ export default function OnboardingPage() {
                     variant="ghost"
                     onClick={() => handleSkipRequest('emergency')}
                     size="onboarding"
-                    className="text-warmgray-700 focus-visible:ring-sage-500"
+                    className="w-full sm:w-auto text-warmgray-700 focus-visible:ring-sage-500"
                   >
                     Überspringen
                   </Button>

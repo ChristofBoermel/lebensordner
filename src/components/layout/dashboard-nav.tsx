@@ -38,8 +38,9 @@ import {
   Eye,
   Lock
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTheme } from '@/components/theme/theme-provider'
+import { resolveAvatarUrl } from '@/lib/avatar'
 
 import { TierConfig, hasFeatureAccess } from '@/lib/subscription-tiers'
 
@@ -86,11 +87,12 @@ const GlobalSearch = dynamic(
 export function DashboardNav({ user, tier }: DashboardNavProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchOpenCycle, setSearchOpenCycle] = useState(0)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [healthConsentGranted, setHealthConsentGranted] = useState<boolean | null>(null)
+  const [resolvedAvatarUrl, setResolvedAvatarUrl] = useState<string | null>(null)
   const { theme, setTheme, resolvedTheme, fontSize, setFontSize, seniorMode, setSeniorMode } = useTheme()
 
   const openGlobalSearch = () => {
@@ -133,6 +135,25 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
     checkHealthConsent()
     return () => { isMounted = false }
   }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const resolveAvatar = async () => {
+      if (!user.profile_picture_url) {
+        if (isMounted) setResolvedAvatarUrl(null)
+        return
+      }
+
+      const signedUrl = await resolveAvatarUrl(supabase, user.profile_picture_url)
+      if (isMounted) setResolvedAvatarUrl(signedUrl)
+    }
+
+    resolveAvatar()
+    return () => {
+      isMounted = false
+    }
+  }, [supabase, user.profile_picture_url])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -326,7 +347,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
               <DropdownMenuTrigger asChild>
                 <button className="flex w-full items-center gap-3 rounded-lg px-3 py-3 hover:bg-warmgray-50 dark:hover:bg-warmgray-800 transition-colors">
                   <Avatar className="h-10 w-10 flex-shrink-0">
-                    {user.profile_picture_url && <AvatarImage src={user.profile_picture_url} alt={user.full_name || 'Profilbild'} />}
+                    {resolvedAvatarUrl && <AvatarImage src={resolvedAvatarUrl} alt={user.full_name || 'Profilbild'} />}
                     <AvatarFallback>{initials}</AvatarFallback>
                   </Avatar>
                   <span className="flex-1 min-w-0 text-left block">
@@ -406,7 +427,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
           <DropdownMenuTrigger asChild>
             <button className="p-1 flex-shrink-0">
               <Avatar className="h-8 w-8">
-                {user.profile_picture_url && <AvatarImage src={user.profile_picture_url} alt={user.full_name || 'Profilbild'} />}
+                {resolvedAvatarUrl && <AvatarImage src={resolvedAvatarUrl} alt={user.full_name || 'Profilbild'} />}
                 <AvatarFallback className="text-sm">{initials}</AvatarFallback>
               </Avatar>
             </button>
