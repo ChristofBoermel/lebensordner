@@ -807,71 +807,53 @@ export default function EinstellungenPage() {
             {renderSeniorSectionHeader('Sicherheit')}
             <Card>
               <CardContent className="pt-6 space-y-4">
-                <div className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="font-medium text-warmgray-900">Passwort ändern</p>
-                    <p className="text-sm text-warmgray-500">Ändern Sie Ihr Anmeldepasswort</p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-4 border-b border-warmgray-100 last:border-0">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-lg text-warmgray-900">Passwort ändern</p>
+                    <p className="text-base text-warmgray-500">Ändern Sie Ihr Anmeldepasswort</p>
                   </div>
-                  <Button variant="outline" size="lg" onClick={() => setIsPasswordDialogOpen(true)}>
-                    <Key className="mr-2 h-4 w-4" />Ändern
+                  <Button variant="outline" size="lg" onClick={() => setIsPasswordDialogOpen(true)} className="w-full sm:w-auto h-14 senior-mode:h-16">
+                    <Key className="mr-2 h-5 w-5" />Ändern
                   </Button>
                 </div>
-                <Separator />
-                <div className="flex items-center justify-between py-3">
-                  <div>
+                
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-4 border-b border-warmgray-100 last:border-0">
+                  <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-warmgray-900">Zwei-Faktor-Authentifizierung</p>
-                      {is2FAEnabled && <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">Aktiv</span>}
+                      <p className="font-semibold text-lg text-warmgray-900">Zwei-Faktor-Authentifizierung</p>
+                      {is2FAEnabled && <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-green-100 text-green-700 uppercase">Aktiv</span>}
                     </div>
-                    <p className="text-sm text-warmgray-500">{is2FAEnabled ? 'Ihr Konto ist durch 2FA geschützt' : 'Zusätzliche Sicherheit'}</p>
+                    <p className="text-base text-warmgray-500">{is2FAEnabled ? 'Ihr Konto ist durch 2FA geschützt' : 'Zusätzliche Sicherheit aktivieren'}</p>
                   </div>
-                  <Button variant={is2FAEnabled ? "outline" : "default"} size="lg" onClick={() => setIs2FADialogOpen(true)}>
-                    <Smartphone className="mr-2 h-4 w-4" />{is2FAEnabled ? 'Verwalten' : 'Aktivieren'}
+                  <Button variant={is2FAEnabled ? "outline" : "default"} size="lg" onClick={() => setIs2FADialogOpen(true)} className="w-full sm:w-auto h-14 senior-mode:h-16">
+                    <Smartphone className="mr-2 h-5 w-5" />{is2FAEnabled ? 'Verwalten' : 'Aktivieren'}
                   </Button>
                 </div>
-                <Separator />
-                <div className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="font-medium text-warmgray-900">Dokument-Tresor</p>
-                    <p className="text-sm text-warmgray-500">
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-4 border-b border-warmgray-100 last:border-0">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-lg text-warmgray-900">Dokument-Tresor</p>
+                    <p className="text-base text-warmgray-500">
                       {!vault.isSetUp && 'Noch nicht eingerichtet'}
                       {vault.isSetUp && !vault.isUnlocked && 'Eingerichtet, aber aktuell gesperrt'}
-                      {vault.isSetUp && vault.isUnlocked && 'Aktiv — Dokumente können verschlüsselt werden'}
+                      {vault.isSetUp && vault.isUnlocked && 'Aktiv — Ihre Dokumente sind sicher'}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-2 w-full sm:w-auto">
                     {!vault.isSetUp && (
-                      <>
-                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-warmgray-100 text-warmgray-600">
-                          Nicht eingerichtet
-                        </span>
-                        <Button size="lg" onClick={() => vault.requestSetup()}>
-                          Tresor einrichten
-                        </Button>
-                      </>
+                      <Button size="lg" onClick={() => vault.requestSetup()} className="w-full h-14 senior-mode:h-16">
+                        Tresor einrichten
+                      </Button>
                     )}
                     {vault.isSetUp && !vault.isUnlocked && (
-                      <>
-                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                          Eingerichtet ✓
-                        </span>
-                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
-                          Gesperrt 🔒
-                        </span>
-                        <Button size="lg" onClick={() => vault.requestUnlock()}>
-                          Entsperren
-                        </Button>
-                      </>
+                      <Button size="lg" onClick={() => vault.requestUnlock()} className="w-full h-14 senior-mode:h-16">
+                        Tresor entsperren
+                      </Button>
                     )}
                     {vault.isSetUp && vault.isUnlocked && (
-                      <>
-                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                          Entsperrt 🔓
-                        </span>
-                        <Button variant="outline" size="lg" onClick={() => vault.lock()}>
-                          Sperren
-                        </Button>
-                      </>
+                      <Button variant="outline" size="lg" onClick={() => vault.lock()} className="w-full h-14 senior-mode:h-16">
+                        <Lock className="mr-2 h-5 w-5" />Tresor sperren
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -884,89 +866,88 @@ export default function EinstellungenPage() {
           <>
             {renderSeniorSectionHeader('Weitere Einstellungen')}
             {/* Notifications */}
-            <Card>
+            <Card className="mb-6">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Bell className="w-5 h-5 text-sage-600" />Benachrichtigungen</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-xl"><Bell className="w-6 h-6 text-sage-600" />Benachrichtigungen</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between py-3">
+                <div className="flex items-center justify-between py-4 border-b border-warmgray-100 last:border-0">
                   <div>
-                    <p className="font-medium text-warmgray-900">Erinnerungs-E-Mails</p>
-                    <p className="text-sm text-warmgray-500">E-Mails vor Fälligkeitsdaten</p>
+                    <p className="font-semibold text-lg text-warmgray-900">Erinnerungs-E-Mails</p>
+                    <p className="text-base text-warmgray-500">E-Mails vor Fälligkeitsdaten</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" checked={profile.email_reminders_enabled ?? true} onChange={(e) => setProfile({ ...profile, email_reminders_enabled: e.target.checked })} className="sr-only peer" />
-                    <div className="w-11 h-6 bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sage-600"></div>
+                    <div className="w-14 h-8 bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-sage-600"></div>
                   </label>
                 </div>
               </CardContent>
             </Card>
             {/* Appearance */}
-            <Card>
+            <Card className="mb-6">
               <CardHeader>
-                <CardTitle>Erscheinungsbild</CardTitle>
+                <CardTitle className="text-xl">Erscheinungsbild</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between py-3">
+                <div className="flex items-center justify-between py-4 border-b border-warmgray-100 last:border-0">
                   <div>
-                    <p className="font-medium text-warmgray-900">Design</p>
-                    <p className="text-sm text-warmgray-500">Hell, Dunkel oder System</p>
+                    <p className="font-semibold text-lg text-warmgray-900">Design</p>
+                    <p className="text-base text-warmgray-500">Hell, Dunkel oder System</p>
                   </div>
                   <ThemeToggle />
                 </div>
-                <Separator />
-                <div className="flex items-center justify-between py-3">
+                <div className="flex items-center justify-between py-4 border-b border-warmgray-100 last:border-0">
                   <div>
-                    <p className="font-medium text-warmgray-900">Einfache Ansicht</p>
-                    <p className="text-sm text-warmgray-500">Größere Schrift und Bedienelemente</p>
+                    <p className="font-semibold text-lg text-warmgray-900">Einfache Ansicht</p>
+                    <p className="text-base text-warmgray-500">Größere Schrift und Bedienelemente</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" checked={seniorMode} onChange={(e) => setSeniorMode(e.target.checked)} className="sr-only peer" />
-                    <div className="w-11 h-6 bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sage-600"></div>
+                    <div className="w-14 h-8 bg-warmgray-200 peer-focus:ring-2 peer-focus:ring-sage-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-warmgray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-sage-600"></div>
                   </label>
                 </div>
               </CardContent>
             </Card>
             {/* Account */}
-            <Card>
+            <Card className="mb-6">
               <CardHeader>
-                <CardTitle>Konto</CardTitle>
+                <CardTitle className="text-xl">Konto</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between py-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-4 border-b border-warmgray-100 last:border-0">
                   <div>
-                    <p className="font-medium text-warmgray-900">Einführung wiederholen</p>
-                    <p className="text-sm text-warmgray-500">Die Ersteinrichtung erneut durchlaufen</p>
+                    <p className="font-semibold text-lg text-warmgray-900">Einführung wiederholen</p>
+                    <p className="text-base text-warmgray-500">Die Ersteinrichtung erneut durchlaufen</p>
                   </div>
-                  <Button variant="outline" size="lg" onClick={handleRestartOnboarding}>
-                    <Sparkles className="mr-2 h-4 w-4" />Wiederholen
+                  <Button variant="outline" size="lg" onClick={handleRestartOnboarding} className="w-full sm:w-auto h-14 senior-mode:h-16">
+                    <Sparkles className="mr-2 h-5 w-5" />Wiederholen
                   </Button>
                 </div>
-                <Separator />
-                <div className="flex items-center justify-between py-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-4 border-b border-warmgray-100 last:border-0">
                   <div>
-                    <p className="font-medium text-warmgray-900">Abmelden</p>
-                    <p className="text-sm text-warmgray-500">Von diesem Gerät abmelden</p>
+                    <p className="font-semibold text-lg text-warmgray-900">Abmelden</p>
+                    <p className="text-base text-warmgray-500">Von diesem Gerät abmelden</p>
                   </div>
-                  <Button variant="outline" size="lg" onClick={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4" />Abmelden
+                  <Button variant="outline" size="lg" onClick={handleLogout} className="w-full sm:w-auto h-14 senior-mode:h-16">
+                    <LogOut className="mr-2 h-5 w-5" />Abmelden
                   </Button>
                 </div>
-                <Separator />
-                <div className="flex items-center justify-between py-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-4 border-b border-warmgray-100 last:border-0">
                   <div>
-                    <p className="font-medium text-red-600">Konto löschen</p>
-                    <p className="text-sm text-warmgray-500">Ihr Konto und alle Daten unwiderruflich löschen</p>
+                    <p className="font-semibold text-lg text-red-600">Konto löschen</p>
+                    <p className="text-base text-warmgray-500">Alle Daten unwiderruflich löschen</p>
                   </div>
-                  <Button variant="outline" size="lg" onClick={() => setIsDeleteDialogOpen(true)} className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
-                    <Trash2 className="mr-2 h-4 w-4" />Konto löschen
+                  <Button variant="outline" size="lg" onClick={() => setIsDeleteDialogOpen(true)} className="w-full sm:w-auto h-14 senior-mode:h-16 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
+                    <Trash2 className="mr-2 h-5 w-5" />Konto löschen
                   </Button>
                 </div>
               </CardContent>
             </Card>
-            <Button onClick={handleSave} disabled={isSaving} size="lg" className="w-full">
-              {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Speichern...</> : <><Save className="mr-2 h-4 w-4" />Änderungen speichern</>}
-            </Button>
+            <div className="sticky bottom-6 pt-4 bg-background/80 backdrop-blur-sm">
+              <Button onClick={handleSave} disabled={isSaving} size="lg" className="w-full h-16 text-xl shadow-lg">
+                {isSaving ? <><Loader2 className="mr-2 h-6 w-6 animate-spin" />Speichern...</> : <><Save className="mr-2 h-6 w-6" />Änderungen speichern</>}
+              </Button>
+            </div>
           </>
         )}
 

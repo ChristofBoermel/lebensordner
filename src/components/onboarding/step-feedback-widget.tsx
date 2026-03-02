@@ -56,15 +56,15 @@ export function StepFeedbackWidget({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onSkip() }}>
       <DialogContent
-        className="max-w-md"
+        className="max-w-md p-6 sm:p-8"
         onKeyDown={handleKeyDown}
         aria-label={`Feedback für Schritt: ${stepName}`}
       >
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-serif text-center">
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-2xl font-serif text-center sm:text-left">
             War dieser Schritt klar und verst&auml;ndlich?
           </DialogTitle>
-          <DialogDescription className="text-lg leading-relaxed text-warmgray-700 text-center pt-2">
+          <DialogDescription className="text-lg leading-relaxed text-warmgray-700 text-center sm:text-left pt-2">
             Ihre R&uuml;ckmeldung hilft uns, die Einrichtung zu verbessern.
           </DialogDescription>
         </DialogHeader>

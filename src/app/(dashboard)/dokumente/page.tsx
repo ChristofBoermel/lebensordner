@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
@@ -79,7 +79,11 @@ import {
   FileSignature,
   ScrollText,
   Share2,
+  Lock,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
+import { useVault } from "@/lib/vault/VaultContext";
 import {
   DOCUMENT_CATEGORIES,
   CATEGORY_METADATA_FIELDS,
@@ -100,7 +104,6 @@ import {
 import { UpgradeNudge, UpgradeModal } from "@/components/upgrade";
 import Link from "next/link";
 import { decryptField, unwrapKey } from "@/lib/security/document-e2ee";
-import { useVault } from "@/lib/vault/VaultContext";
 import { ShareDocumentDialog } from "@/components/sharing/ShareDocumentDialog";
 import { BulkShareDialog } from "@/components/sharing/BulkShareDialog";
 
@@ -197,6 +200,9 @@ export default function DocumentsPage() {
   const [isSavingCategory, setIsSavingCategory] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
 
+  // Category Locking state
+  const [securedCategories, setSecuredCategories] = useState<string[]>([]);
+
   // Upgrade Modal state
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeModalFeature, setUpgradeModalFeature] = useState<
@@ -262,28 +268,76 @@ export default function DocumentsPage() {
   const vaultContext = useVault();
   const { capture } = usePostHog();
 
-  // Fetch user tier
+  // Load profile settings including secured categories
   useEffect(() => {
-    async function fetchTier() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    const loadProfileData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setUserId(user.id);
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("subscription_status")
+        .select("subscription_status, secured_categories")
         .eq("id", user.id)
         .single();
 
       if (profile) {
         const tier = getTierFromSubscription(profile.subscription_status, null);
         setUserTier(tier);
+        if (profile.secured_categories) {
+          setSecuredCategories(profile.secured_categories as string[]);
+        }
       }
-    }
-    fetchTier();
+    };
+    loadProfileData();
   }, [supabase]);
+
+  const handleToggleCategoryLock = async (e: React.MouseEvent, categoryKey: string) => {
+    e.stopPropagation();
+    
+    // If turning ON lock, we need vault setup
+    if (!securedCategories.includes(categoryKey) && !vaultContext.isUnlocked && !vaultContext.masterKey) {
+      vaultContext.requestUnlock();
+      return;
+    }
+
+    const newSecured = securedCategories.includes(categoryKey)
+      ? securedCategories.filter(k => k !== categoryKey)
+      : [...securedCategories, categoryKey];
+    
+    setSecuredCategories(newSecured);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from('profiles')
+          .update({ secured_categories: newSecured })
+          .eq('id', user.id);
+      }
+    } catch (err) {
+      console.warn('Could not save secured_categories to profile', err);
+    }
+  };
+
+  const isCategoryLocked = (categoryKey: string) => {
+    return securedCategories.includes(categoryKey) && !vaultContext.isUnlocked;
+  };
+
+  const handleCategoryClick = (categoryKey: DocumentCategory) => {
+    if (isCategoryLocked(categoryKey)) {
+      vaultContext.requestUnlock();
+      return;
+    }
+    setSelectedCategory(categoryKey);
+    setCurrentFolder(null);
+  };
+
+  const recentDocuments = useMemo(() => {
+    return [...documents]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 3);
+  }, [documents]);
 
   const fetchDocuments = useCallback(async () => {
     setIsLoading(true);
@@ -1352,8 +1406,18 @@ export default function DocumentsPage() {
     const matchesSearchQuery = (d: Document) => {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
+
+      // Check stored title
       if (d.title.toLowerCase().includes(q)) return true;
+
+      // Check decrypted title if available
+      const decryptedTitle = decryptedTitles[d.id];
+      if (decryptedTitle && decryptedTitle.toLowerCase().includes(q)) return true;
+
+      // Check notes
       if (d.notes?.toLowerCase().includes(q)) return true;
+
+      // Check metadata
       if (d.metadata) {
         return Object.values(d.metadata).some(
           (val) => typeof val === "string" && val.toLowerCase().includes(q),
@@ -1981,49 +2045,231 @@ export default function DocumentsPage() {
               <Loader2 className="w-8 h-8 animate-spin text-sage-600" />
             </div>
           ) : (
-            <div className="space-y-8">
-              {/* Recent Documents */}
+            <div className="space-y-10 animate-fade-in">
+              {/* Recent Documents Section */}
+              {recentDocuments.length > 0 && !searchQuery && (
+                <section>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-warmgray-900 flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-sage-600" />
+                      Zuletzt hinzugefügt
+                    </h2>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {recentDocuments.map((doc) => (
+                      <Card 
+                        key={doc.id} 
+                        className="group cursor-pointer hover:border-sage-300 transition-all border-warmgray-200 hover:shadow-sm"
+                        onClick={() => navigateToDocument(doc)}
+                      >
+                        <CardContent className="p-4 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-sage-50 flex items-center justify-center flex-shrink-0 group-hover:bg-sage-100 transition-colors">
+                            <FileText className="w-5 h-5 text-sage-600" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-warmgray-900 truncate">
+                              {decryptedTitles[doc.id] ?? doc.title}
+                            </p>
+                            <p className="text-xs text-warmgray-500">
+                              {formatDate(doc.created_at)}
+                            </p>
+                          </div>
+                          {doc.is_encrypted && <Lock className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Main Category Grid */}
               <div>
-                <h2 className="text-lg font-semibold text-warmgray-900 mb-4">
-                  {searchQuery ? "Suchergebnisse" : "Zuletzt hinzugefügt"}
-                </h2>
-                {searchQuery ? (
-                  filteredDocuments.length > 0 ? (
-                    <div className="space-y-3">
-                      {filteredDocuments.map(renderDocumentItem)}
+                <h2 className="text-lg font-semibold text-warmgray-900 mb-4">Kategorien</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
+                    const Icon = iconMap[category.icon] || FileText;
+                    const count = getDocumentCountForCategory(key as DocumentCategory);
+                    const locked = isCategoryLocked(key);
+                    const secured = securedCategories.includes(key);
+
+                    return (
+                      <Card
+                        key={key}
+                        className={`group relative overflow-hidden cursor-pointer transition-all duration-300 border-2 ${
+                          locked 
+                            ? 'bg-warmgray-50/50 border-warmgray-200 grayscale-[0.3]' 
+                            : 'hover:border-sage-400 hover:shadow-xl border-warmgray-200 bg-white'
+                        } senior-mode:p-2`}
+                        onClick={() => handleCategoryClick(key as DocumentCategory)}
+                      >
+                        {/* Hover Overlay for Locked state */}
+                        {locked && (
+                          <div className="absolute inset-0 bg-warmgray-900/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
+                            <div className="bg-white/90 px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
+                              <Lock className="w-4 h-4 text-amber-600" />
+                              <span className="text-xs font-bold text-warmgray-900 uppercase tracking-tight">Klicken zum Entsperren</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <CardHeader className="pb-3 relative z-0">
+                          <div className="flex items-start justify-between">
+                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                              locked 
+                                ? 'bg-warmgray-200 text-warmgray-500 group-hover:scale-95' 
+                                : 'bg-sage-100 text-sage-600 group-hover:bg-sage-600 group-hover:text-white group-hover:rotate-3'
+                            } senior-mode:w-20 senior-mode:h-20`}>
+                              {locked ? (
+                                <Lock className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
+                              ) : (
+                                <Icon className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className={`h-11 w-11 rounded-full transition-all ${
+                                  secured ? 'text-amber-600 bg-amber-50 border-amber-100 border' : 'text-warmgray-300 hover:text-sage-600 hover:bg-sage-50'
+                                } senior-mode:h-14 senior-mode:w-14`}
+                                onClick={(e) => handleToggleCategoryLock(e, key)}
+                                title={secured ? "Extra-Sicherheit aktiviert" : "Extra-Sicherheit aktivieren"}
+                              >
+                                {secured ? <ShieldCheck className="w-6 h-6" /> : <Shield className="w-6 h-6" />}
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-11 w-11 rounded-full text-warmgray-300 hover:text-sage-600 hover:bg-sage-50 transition-colors senior-mode:h-14 senior-mode:w-14"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openUploadDialog(key as DocumentCategory);
+                                }}
+                              >
+                                <Plus className="w-6 h-6" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="pt-4">
+                            <CardTitle className="text-xl font-serif senior-mode:text-3xl">{category.name}</CardTitle>
+                            <CardDescription className="line-clamp-2 mt-1.5 leading-relaxed senior-mode:text-xl senior-mode:mt-2">
+                              {category.description}
+                            </CardDescription>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="relative z-0">
+                          <div className="flex items-center justify-between border-t border-warmgray-100 pt-4 mt-2">
+                            <div className="flex flex-col">
+                              <p className="text-sm text-warmgray-500 senior-mode:text-lg">Inhalt</p>
+                              <p className="text-base font-semibold text-warmgray-900 senior-mode:text-2xl">
+                                <span className={locked ? 'text-warmgray-400' : 'text-sage-700'}>
+                                  {locked ? '--' : count}
+                                </span>{" "}
+                                Dokument{count !== 1 ? "e" : ""}
+                              </p>
+                            </div>
+                            {secured && (
+                              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${
+                                locked ? 'bg-warmgray-100 border-warmgray-200 text-warmgray-600' : 'bg-amber-50 border-amber-200 text-amber-700'
+                              }`}>
+                                <Lock className="w-3 h-3" />
+                                <span className="text-[11px] font-bold uppercase tracking-wider">
+                                  {locked ? 'Gesperrt' : 'Gesichert'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+
+                  })}
+
+                  {/* Custom Category Cards */}
+                  {customCategories.map((cat) => {
+                    const count = getDocumentCountForCustomCategory(cat.id);
+                    const locked = isCategoryLocked(`custom:${cat.id}`);
+                    const secured = securedCategories.includes(`custom:${cat.id}`);
+
+                    return (
+                      <Card
+                        key={cat.id}
+                        className={`group relative overflow-hidden cursor-pointer transition-all border-2 ${
+                          locked 
+                            ? 'bg-warmgray-50 border-warmgray-200' 
+                            : 'hover:border-sage-300 hover:shadow-md border-warmgray-200'
+                        }`}
+                        onClick={() => handleCategoryClick(`custom:${cat.id}` as any)}
+                      >
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between">
+                            <div className={`w-14 h-14 rounded-xl flex items-center justify-center transition-colors ${
+                              locked ? 'bg-warmgray-200' : 'bg-warmgray-100 group-hover:bg-warmgray-200'
+                            }`}>
+                              <Tag className={`w-7 h-7 ${locked ? 'text-warmgray-500' : 'text-warmgray-600'}`} />
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className={`h-10 w-10 rounded-full transition-colors ${
+                                  secured ? 'text-amber-600 bg-amber-50' : 'text-warmgray-400 hover:text-sage-600'
+                                }`}
+                                onClick={(e) => handleToggleCategoryLock(e, `custom:${cat.id}`)}
+                              >
+                                {secured ? <ShieldCheck className="w-5 h-5" /> : <Shield className="w-5 h-5" />}
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-10 w-10 rounded-full text-warmgray-400 hover:text-sage-600"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openCategoryDialog(cat);
+                                }}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="pt-2">
+                            <CardTitle className="text-xl font-serif">{cat.name}</CardTitle>
+                            {cat.description && (
+                              <CardDescription className="line-clamp-2 mt-1 leading-relaxed">
+                                {cat.description}
+                              </CardDescription>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm text-warmgray-600 font-medium">
+                              <span className="text-warmgray-900 font-bold">{locked ? '??' : count}</span>{" "}
+                              Dokument{count !== 1 ? "e" : ""}
+                            </p>
+                            {secured && !locked && (
+                              <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                                <Lock className="w-2.5 h-2.5" />
+                                Gesperrt
+                              </span>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+
+                  {/* Add Custom Category Card */}
+                  <button
+                    onClick={() => openCategoryDialog()}
+                    className="group p-6 rounded-xl border-2 border-dashed border-warmgray-200 hover:border-sage-400 hover:bg-sage-50 transition-all flex flex-col items-center justify-center gap-3 text-warmgray-500 hover:text-sage-700"
+                  >
+                    <div className="w-14 h-14 rounded-full bg-warmgray-50 flex items-center justify-center group-hover:bg-sage-100 transition-colors">
+                      <Plus className="w-8 h-8" />
                     </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 rounded-full bg-warmgray-100 flex items-center justify-center mx-auto mb-4">
-                        <FileText className="w-8 h-8 text-warmgray-400" />
-                      </div>
-                      <h3 className="text-lg font-medium text-warmgray-900 mb-2">
-                        Keine Dokumente gefunden
-                      </h3>
-                      <p className="text-warmgray-500 mb-4">
-                        Versuchen Sie eine andere Suche
-                      </p>
-                    </div>
-                  )
-                ) : validatedDocuments.length > 0 ? (
-                  <div className="space-y-3">
-                    {validatedDocuments.slice(0, 3).map(renderDocumentItem)}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 border-2 border-dashed border-warmgray-200 rounded-lg">
-                    <FileText className="w-10 h-10 text-warmgray-300 mx-auto mb-3" />
-                    <p className="text-warmgray-500">
-                      Noch keine Dokumente vorhanden
-                    </p>
-                    <Button
-                      onClick={() => openUploadDialog("identitaet")}
-                      className="mt-3"
-                    >
-                      <Upload className="mr-2 h-4 w-4" />
-                      Erstes Dokument hinzufügen
-                    </Button>
-                  </div>
-                )}
+                    <span className="font-medium">Eigener Ordner</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

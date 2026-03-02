@@ -249,50 +249,54 @@ function MedikamentRow({
   const doseString = doseParts.join(" · ");
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg bg-cream-50 border border-cream-200 gap-4">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg bg-cream-50 border border-cream-200 gap-4 senior-mode:p-6">
       <div className="flex-1 min-w-0">
         {isPznOnly ? (
           <>
-            <p className="font-medium text-warmgray-900">PZN: {medication.pzn}</p>
-            <p className="text-sm text-amber-600 flex items-center gap-1 mt-1">
-              <AlertTriangle className="w-3 h-3" />
+            <p className="font-medium text-warmgray-900 senior-mode:text-xl">PZN: {medication.pzn}</p>
+            <p className="text-sm text-amber-600 flex items-center gap-1 mt-1 senior-mode:text-lg">
+              <AlertTriangle className="w-3 h-3 senior-mode:w-5 senior-mode:h-5" />
               Bitte Wirkstoff ergänzen
             </p>
           </>
         ) : (
           <>
-            <p className="font-medium text-warmgray-900">
+            <p className="font-medium text-warmgray-900 senior-mode:text-xl">
               {medication.wirkstoff}
               {(medication.staerke || medication.form) && (
-                <span className="text-warmgray-500 font-normal ml-2 text-sm">
+                <span className="text-warmgray-500 font-normal ml-2 text-sm senior-mode:text-lg">
                   {[medication.staerke, medication.form].filter(Boolean).join(" · ")}
                 </span>
               )}
             </p>
             {doseString && (
-              <p className="text-sm text-warmgray-600 mt-0.5">{doseString}</p>
+              <p className="text-sm text-warmgray-600 mt-0.5 senior-mode:text-lg">{doseString}</p>
             )}
           </>
         )}
       </div>
-      <div className="flex items-center gap-2 flex-shrink-0 print:hidden">
+      <div className="flex items-center gap-2 flex-shrink-0 print:hidden senior-mode:gap-4">
         {isConfirmingDelete ? (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-warmgray-700">Medikament wirklich löschen?</span>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => onDelete(index)}
-            >
-              Ja, löschen
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsConfirmingDelete(false)}
-            >
-              Abbrechen
-            </Button>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 senior-mode:gap-4">
+            <span className="text-sm text-warmgray-700 senior-mode:text-lg">Wirklich löschen?</span>
+            <div className="flex gap-2 senior-mode:gap-4">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => onDelete(index)}
+                className="senior-mode:h-12 senior-mode:px-6"
+              >
+                Ja, löschen
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsConfirmingDelete(false)}
+                className="senior-mode:h-12 senior-mode:px-6"
+              >
+                Nein
+              </Button>
+            </div>
           </div>
         ) : (
           <>
@@ -300,16 +304,17 @@ function MedikamentRow({
               variant="ghost"
               size="icon"
               onClick={() => onEdit(medication, index)}
+              className="senior-mode:h-12 senior-mode:w-12"
             >
-              <Edit2 className="w-4 h-4" />
+              <Edit2 className="w-4 h-4 senior-mode:w-6 senior-mode:h-6" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="text-red-600 hover:bg-red-50"
+              className="text-red-600 hover:bg-red-50 senior-mode:h-12 senior-mode:w-12"
               onClick={() => setIsConfirmingDelete(true)}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-4 h-4 senior-mode:w-6 senior-mode:h-6" />
             </Button>
           </>
         )}

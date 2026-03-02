@@ -103,3 +103,4 @@ deploy/.env.production
 
 # Migration data (database dumps, storage exports)
 migration-data/
+qa_screenshots/

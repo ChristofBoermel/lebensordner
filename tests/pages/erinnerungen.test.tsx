@@ -100,6 +100,10 @@ const openDialog = async () => {
   await userEvent.click(screen.getByRole('button', { name: /Neue Erinnerung/i }))
 }
 
+const watcherOptionMatcher = /Nur ich persönlich/i
+const upgradeHintMatcher =
+  /Upgraden Sie auf den Basis\+ oder Premium Tarif, um Vertrauenspersonen automatisch zu benachrichtigen/i
+
 describe('Erinnerungen Reminder Watcher Tier Gate', () => {
   beforeEach(() => {
     resetMockProfile()
@@ -120,8 +124,8 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     await renderPage()
     await openDialog()
 
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
-    expect(screen.queryByText(/Soll eine weitere Person den Termin im Blick haben/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: watcherOptionMatcher })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Wer soll diesen Termin zusätzlich im Blick haben\?/i)).not.toBeInTheDocument()
   })
 
   it('Free-User sieht Upgrade-Hinweis beim Erstellen einer Erinnerung', async () => {
@@ -130,9 +134,10 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     await renderPage()
     await openDialog()
 
-    expect(
-      screen.getByText(/Upgraden Sie auf Basic oder Premium, um Vertrauenspersonen zu Erinnerungen hinzuzufügen/i)
-    ).toBeInTheDocument()
+    const pricingLink = screen.getByRole('link', { name: /Tarife ansehen/i })
+    const hintBox = pricingLink.closest('div')
+    expect(hintBox).not.toBeNull()
+    expect(hintBox).toHaveTextContent(upgradeHintMatcher)
   })
 
   it('Basic-User sieht Watcher-Auswahl', async () => {
@@ -143,9 +148,9 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     await openDialog()
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: watcherOptionMatcher })).toBeInTheDocument()
     })
-    expect(screen.getByText(/Soll eine weitere Person den Termin im Blick haben/i)).toBeInTheDocument()
+    expect(screen.getByText(/Wer soll diesen Termin zusätzlich im Blick haben\?/i)).toBeInTheDocument()
   })
 
   it('Premium-User sieht Watcher-Auswahl', async () => {
@@ -156,7 +161,7 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     await openDialog()
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: watcherOptionMatcher })).toBeInTheDocument()
     })
   })
 
@@ -168,11 +173,14 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     await openDialog()
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: watcherOptionMatcher })).toBeInTheDocument()
     })
 
     await userEvent.type(screen.getByLabelText(/Titel/i), 'Test Reminder')
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'tp-1')
+    const watcherSelect = screen
+      .getByRole('option', { name: /Anna Schmidt/i })
+      .closest('select') as HTMLSelectElement
+    await userEvent.selectOptions(watcherSelect, 'tp-1')
 
     await userEvent.click(screen.getByRole('button', { name: /Speichern/i }))
 
@@ -196,11 +204,14 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     await openDialog()
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: watcherOptionMatcher })).toBeInTheDocument()
     })
 
     await userEvent.type(screen.getByLabelText(/Titel/i), 'Premium Reminder')
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'tp-2')
+    const watcherSelect = screen
+      .getByRole('option', { name: /Max Mustermann/i })
+      .closest('select') as HTMLSelectElement
+    await userEvent.selectOptions(watcherSelect, 'tp-2')
 
     await userEvent.click(screen.getByRole('button', { name: /Speichern/i }))
 
@@ -223,7 +234,7 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     await renderPage()
     await openDialog()
 
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: watcherOptionMatcher })).not.toBeInTheDocument()
   })
 
   it('Watcher-Select ist auf Mobile nutzbar', async () => {
@@ -235,10 +246,12 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     await openDialog()
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: watcherOptionMatcher })).toBeInTheDocument()
     })
 
-    const select = screen.getByRole('combobox')
+    const select = screen
+      .getByRole('option', { name: watcherOptionMatcher })
+      .closest('select') as HTMLSelectElement
     expect(select).toHaveClass('w-full')
     expect(select).toHaveClass('h-10')
   })
@@ -250,9 +263,10 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     await renderPage()
     await openDialog()
 
-    expect(
-      screen.getByText(/Upgraden Sie auf Basic oder Premium, um Vertrauenspersonen zu Erinnerungen hinzuzufügen/i)
-    ).toBeInTheDocument()
+    const pricingLink = screen.getByRole('link', { name: /Tarife ansehen/i })
+    const hintBox = pricingLink.closest('div')
+    expect(hintBox).not.toBeNull()
+    expect(hintBox).toHaveTextContent(upgradeHintMatcher)
   })
 
   it('Client-seitige Gate verhindert Watcher-Auswahl für Free-User', async () => {
@@ -261,7 +275,7 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     await renderPage()
     await openDialog()
 
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: watcherOptionMatcher })).not.toBeInTheDocument()
   })
 
   it('Free-User kann manipulierte Watcher-ID nicht speichern oder benachrichtigen', async () => {
@@ -329,7 +343,7 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
 
     await renderPage()
     await openDialog()
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: watcherOptionMatcher })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /Abbrechen/i }))
     await waitFor(() => {
@@ -363,7 +377,7 @@ describe('Erinnerungen Reminder Watcher Tier Gate', () => {
     })
     await openDialog()
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: watcherOptionMatcher })).toBeInTheDocument()
     })
 
     vi.doUnmock('@/lib/subscription-tiers')

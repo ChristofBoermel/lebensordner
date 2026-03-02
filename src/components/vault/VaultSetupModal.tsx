@@ -10,6 +10,7 @@ import {
   VaultSetupIntro,
   VaultSetupPassphrase,
   VaultSetupRecoveryKey,
+  VaultSetupSuccess,
 } from './vault-setup'
 
 export function VaultSetupModal({
@@ -95,6 +96,7 @@ export function VaultSetupModal({
 
         cleanupSetupState()
         setIsLoading(false)
+        setStep(5) // Move to success milestone
       } catch (err: any) {
         if (!isMountedRef.current) {
           return
@@ -217,7 +219,7 @@ export function VaultSetupModal({
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-xl">
           <div className="flex gap-2 mb-4">
-            {[1, 2, 3, 4].map((item) => {
+            {[1, 2, 3, 4, 5].map((item) => {
               const isDone = item < step
               const isActive = item === step
               const base = 'h-1 flex-1 rounded-full'
@@ -237,4 +239,5 @@ export const VaultSetup = {
   Passphrase: VaultSetupPassphrase,
   RecoveryKey: VaultSetupRecoveryKey,
   Confirm: VaultSetupConfirm,
+  Success: VaultSetupSuccess,
 }

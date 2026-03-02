@@ -1649,56 +1649,56 @@ export default function OnboardingPage() {
             </div>
 
             {/* Section 2: Ihre Ressourcen */}
-            <div className="max-w-lg mx-auto">
-              <h3 className="text-xl font-serif font-semibold text-warmgray-900 mb-4">
+            <div className="max-w-2xl mx-auto">
+              <h3 className="text-xl font-serif font-semibold text-warmgray-900 mb-6 text-center">
                 Ihre Ressourcen
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300 flex flex-col items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center">
-                    <Printer className="w-5 h-5 text-sage-700" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="p-6 rounded-lg bg-white border-2 border-warmgray-200 flex flex-col items-center gap-4 hover:border-sage-300 transition-colors shadow-sm">
+                  <div className="w-12 h-12 rounded-full bg-sage-50 flex items-center justify-center">
+                    <Printer className="w-6 h-6 text-sage-600" />
                   </div>
                   <PrintGuideButton
                     variant="outline"
-                    size="sm"
-                    className="w-full"
+                    size="onboarding"
+                    className="w-full text-base h-auto py-4 whitespace-normal min-h-[3.5rem]"
                     onPrint={() => capture('onboarding_step_printed', { step: 'complete', type: 'guide' })}
                   />
                 </div>
-                <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300 flex flex-col items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center">
-                    <Mail className="w-5 h-5 text-sage-700" />
+                <div className="p-6 rounded-lg bg-white border-2 border-warmgray-200 flex flex-col items-center gap-4 hover:border-sage-300 transition-colors shadow-sm">
+                  <div className="w-12 h-12 rounded-full bg-sage-50 flex items-center justify-center">
+                    <Mail className="w-6 h-6 text-sage-600" />
                   </div>
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="onboarding"
                     onClick={handleEmailInstructions}
                     disabled={emailSent || isSendingEmail}
-                    className="w-full"
+                    className="w-full text-base h-auto py-4 whitespace-normal min-h-[3.5rem]"
                   >
                     {isSendingEmail ? (
-                      <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                      <Loader2 className="mr-2 w-5 h-5 animate-spin" />
                     ) : emailSent ? (
-                      <Check className="mr-2 w-4 h-4" />
+                      <Check className="mr-2 w-5 h-5" />
                     ) : (
-                      <Mail className="mr-2 w-4 h-4" />
+                      <Mail className="mr-2 w-5 h-5" />
                     )}
                     {emailSent ? 'Gesendet' : 'Per E-Mail senden'}
                   </Button>
                   {emailSent && userEmail && (
-                    <p className="text-xs text-sage-700">An {userEmail}</p>
+                    <p className="text-sm text-sage-700 font-medium">An {userEmail}</p>
                   )}
                 </div>
-                <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300 flex flex-col items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center">
-                    <Download className="w-5 h-5 text-sage-700" />
+                <div className="p-6 rounded-lg bg-white border-2 border-warmgray-200 flex flex-col items-center gap-4 hover:border-sage-300 transition-colors shadow-sm">
+                  <div className="w-12 h-12 rounded-full bg-sage-50 flex items-center justify-center">
+                    <Download className="w-6 h-6 text-sage-600" />
                   </div>
                   <DownloadChecklistButton
                     userName={userFullName || composeFullName(profileForm)}
                     userEmail={userEmail}
                     variant="outline"
-                    size="sm"
-                    className="w-full"
+                    size="onboarding"
+                    className="w-full text-base h-auto py-4 whitespace-normal min-h-[3.5rem]"
                     onDownload={() => capture('onboarding_checklist_downloaded')}
                   />
                 </div>

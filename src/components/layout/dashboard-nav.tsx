@@ -435,7 +435,12 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden print:hidden">
-          <div className="fixed inset-0 bg-warmgray-900/50" onClick={() => setMobileMenuOpen(false)} />
+          <button
+            type="button"
+            aria-label="Mobiles Menü schließen"
+            className="fixed inset-0 bg-warmgray-900/50"
+            onClick={() => setMobileMenuOpen(false)}
+          />
           <div className="fixed inset-y-0 left-0 w-full max-w-xs bg-white">
             <div className="flex h-20 items-center justify-between px-6 border-b border-warmgray-200">
               <Link href="/dashboard" className="flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
@@ -444,8 +449,11 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
                 </div>
                 <span className="text-xl font-semibold text-warmgray-900">Lebensordner</span>
               </Link>
-              <button onClick={() => setMobileMenuOpen(false)} className="p-2">
-                <X className="w-6 h-6 text-warmgray-500" />
+              <button 
+                onClick={() => setMobileMenuOpen(false)} 
+                className="h-10 w-10 flex items-center justify-center rounded-md hover:bg-warmgray-100 senior-mode:h-14 senior-mode:w-14"
+              >
+                <X className="w-6 h-6 text-warmgray-500 senior-mode:w-10 senior-mode:h-10" />
               </button>
             </div>
             <nav className="px-4 py-6 space-y-1">

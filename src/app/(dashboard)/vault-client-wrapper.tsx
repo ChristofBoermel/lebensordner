@@ -16,6 +16,7 @@ function VaultSetupModalHost() {
       <VaultSetup.Passphrase />
       <VaultSetup.RecoveryKey />
       <VaultSetup.Confirm />
+      <VaultSetup.Success />
     </VaultSetupModal>
   )
 }

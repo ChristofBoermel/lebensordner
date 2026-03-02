@@ -26,6 +26,8 @@ interface VaultContextValue {
 
 const VaultContext = createContext<VaultContextValue | null>(null)
 
+const SESSION_PASSPHRASE_KEY = 'lo_v_p'
+
 export function VaultProvider({ children }: { children: ReactNode }) {
   const [isSetUp, setIsSetUp] = useState(false)
   const [isUnlocked, setIsUnlocked] = useState(false)
@@ -33,10 +35,34 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const [isUnlockRequested, setIsUnlockRequested] = useState(false)
   const [isSetupRequested, setIsSetupRequested] = useState(false)
 
+  const unlock = useCallback(async (passphrase: string) => {
+    const response = await fetch('/api/vault/key-material')
+    const data = await response.json()
+    const { kdf_salt, kdf_params, wrapped_mk } = data || {}
+
+    if (!kdf_salt) return; // Not set up
+
+    const pdk = await deriveMasterKey(passphrase, fromBase64(kdf_salt), kdf_params)
+
+    try {
+      const mk = await unwrapKey(wrapped_mk, pdk, 'AES-KW')
+      setMasterKey(mk)
+      setIsUnlocked(true)
+      // Save to session storage for caching
+      try {
+        sessionStorage.setItem(SESSION_PASSPHRASE_KEY, passphrase)
+      } catch (e) {
+        console.error('Failed to save to sessionStorage', e)
+      }
+    } catch {
+      throw new Error('Falsches Passwort')
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
 
-    async function checkSetup() {
+    async function checkSetupAndAutoUnlock() {
       try {
         const response = await fetch('/api/vault/key-material')
         if (!response.ok) {
@@ -49,6 +75,17 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         const data = await response.json()
         if (!cancelled) {
           setIsSetUp(data.exists === true)
+          
+          // Auto-unlock if passphrase is in session storage
+          const cachedPassphrase = sessionStorage.getItem(SESSION_PASSPHRASE_KEY)
+          if (cachedPassphrase && data.exists) {
+            try {
+              await unlock(cachedPassphrase)
+            } catch (e) {
+              console.error('Auto-unlock failed', e)
+              sessionStorage.removeItem(SESSION_PASSPHRASE_KEY)
+            }
+          }
         }
       } catch {
         if (!cancelled) {
@@ -57,11 +94,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    void checkSetup()
+    void checkSetupAndAutoUnlock()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [unlock])
 
   const setup = useCallback(async (passphrase: string, recoveryKeyHex: string, signal?: AbortSignal) => {
     const salt = globalThis.crypto.getRandomValues(new Uint8Array(32))
@@ -97,22 +134,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setIsSetUp(true)
     setIsUnlocked(true)
     setIsSetupRequested(false)
-  }, [])
-
-  const unlock = useCallback(async (passphrase: string) => {
-    const response = await fetch('/api/vault/key-material')
-    const data = await response.json()
-    const { kdf_salt, kdf_params, wrapped_mk } = data || {}
-
-    const pdk = await deriveMasterKey(passphrase, fromBase64(kdf_salt), kdf_params)
-
-    try {
-      const mk = await unwrapKey(wrapped_mk, pdk, 'AES-KW')
-      setMasterKey(mk)
-      setIsUnlocked(true)
-    } catch {
-      throw new Error('Falsches Passwort')
-    }
+    sessionStorage.setItem(SESSION_PASSPHRASE_KEY, passphrase)
   }, [])
 
   const unlockWithRecovery = useCallback(async (recoveryKeyHex: string) => {
@@ -134,6 +156,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const lock = useCallback(() => {
     setMasterKey(null)
     setIsUnlocked(false)
+    sessionStorage.removeItem(SESSION_PASSPHRASE_KEY)
   }, [])
 
   function requestUnlock() {

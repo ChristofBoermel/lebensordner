@@ -2,7 +2,7 @@
 
 import { createContext, use, type MutableRefObject } from 'react'
 
-export type Step = 1 | 2 | 3 | 4
+export type Step = 1 | 2 | 3 | 4 | 5
 
 export interface VaultSetupContextValue {
   step: Step
