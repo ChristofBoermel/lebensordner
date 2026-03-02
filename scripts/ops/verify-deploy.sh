@@ -81,6 +81,40 @@ if (missing.length > 0) {
   process.exit(1)
 }
 
+const baseUrl = process.env.SUPABASE_URL.replace(/\/+$/, '')
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+async function probe(url, label) {
+  const response = await fetch(url, {
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+    },
+  })
+  const body = await response.text()
+  if (response.status !== 200) {
+    console.error(`${label} failed: status=${response.status} body=${body.slice(0, 300)}`)
+    process.exit(1)
+  }
+  if (/JWSInvalidSignature/i.test(body)) {
+    console.error(`${label} failed: body contains JWSInvalidSignature`)
+    process.exit(1)
+  }
+}
+
+async function main() {
+  await probe(`${baseUrl}/rest/v1/profiles?select=id&limit=1`, 'internal rest probe')
+  await probe(`${baseUrl}/auth/v1/health`, 'internal auth health probe')
+  console.log('PASS: internal nextjs->supabase probes succeeded')
+}
+
+main().catch((error) => {
+  console.error(`Internal supabase probe crashed: ${error instanceof Error ? error.message : String(error)}`)
+  process.exit(1)
+})
+NODE
+}
+
 check_runtime_public_config_from_nextjs() {
   local nextjs_container_id="$1"
 
@@ -134,40 +168,6 @@ async function main() {
 
 main().catch((error) => {
   console.error(`Runtime public config probe crashed: ${error instanceof Error ? error.message : String(error)}`)
-  process.exit(1)
-})
-NODE
-}
-
-const baseUrl = process.env.SUPABASE_URL.replace(/\/+$/, '')
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-async function probe(url, label) {
-  const response = await fetch(url, {
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-    },
-  })
-  const body = await response.text()
-  if (response.status !== 200) {
-    console.error(`${label} failed: status=${response.status} body=${body.slice(0, 300)}`)
-    process.exit(1)
-  }
-  if (/JWSInvalidSignature/i.test(body)) {
-    console.error(`${label} failed: body contains JWSInvalidSignature`)
-    process.exit(1)
-  }
-}
-
-async function main() {
-  await probe(`${baseUrl}/rest/v1/profiles?select=id&limit=1`, 'internal rest probe')
-  await probe(`${baseUrl}/auth/v1/health`, 'internal auth health probe')
-  console.log('PASS: internal nextjs->supabase probes succeeded')
-}
-
-main().catch((error) => {
-  console.error(`Internal supabase probe crashed: ${error instanceof Error ? error.message : String(error)}`)
   process.exit(1)
 })
 NODE

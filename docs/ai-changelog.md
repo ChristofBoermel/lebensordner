@@ -27,6 +27,26 @@ Open Issues:
 
 ---
 
+## 2026-03-02 05:48 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Fixed `scripts/ops/verify-deploy.sh` syntax by restoring the full `check_internal_supabase_from_nextjs` heredoc/function block and removing stray Node.js lines that were outside any function.
+
+Why:
+- Deploy workflow `smoke-check` failed on server with `syntax error near unexpected token '('` at line 142.
+
+Risk / Regression Watch:
+- Internal nextjs->supabase probe logic is now scoped correctly; deployment verification should proceed to runtime checks instead of shell parse failure.
+
+Verification:
+- Reviewed fixed function boundaries and heredoc closure around lines 73-174.
+- `gh run view 22563086668 --job 65353776719 --log-failed` (confirmed prior failure signature).
+
+Rollback:
+- Revert `scripts/ops/verify-deploy.sh` and this changelog entry.
+
+Open Issues:
+- pending re-run of Deploy workflow to confirm smoke-check passes end-to-end.
+
 ## 2026-03-02 05:39 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Stabilized `tests/pages/dokumente.test.tsx` against current UI behavior:
