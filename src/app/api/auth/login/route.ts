@@ -67,8 +67,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email, password, turnstileToken, rememberMe } = body
     const persistSession = rememberMe ?? false
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     // Check email-based rate limit
     const emailRateLimit = await checkRateLimit({
-      identifier: `login_email:${email}`,
+      identifier: `login_email:${normalizedEmail}`,
       endpoint: '/api/auth/login',
       ...EMAIL_RATE_LIMIT,
     })
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
 
     // --- Account Lockout Check ---
 
-    const locked = await isAccountLocked(email)
+    const locked = await isAccountLocked(normalizedEmail)
     if (locked) {
       emitStructuredWarn({
         event_type: 'security',
@@ -139,7 +140,7 @@ export async function POST(request: NextRequest) {
       })
       await logSecurityEvent({
         event_type: 'login_failure',
-        event_data: { email, reason: 'account_locked' },
+        event_data: { email: normalizedEmail, reason: 'account_locked' },
         request,
       })
       return NextResponse.json(
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
 
     // --- Failure Count & CAPTCHA Check ---
 
-    const failureCount = await getFailureCount(email)
+    const failureCount = await getFailureCount(normalizedEmail)
 
     if (failureCount >= CAPTCHA_THRESHOLD && !turnstileToken) {
       emitStructuredInfo({
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
       })
       await logSecurityEvent({
         event_type: 'captcha_required',
-        event_data: { email, failureCount },
+        event_data: { email: normalizedEmail, failureCount },
         request,
       })
       return NextResponse.json(
@@ -183,7 +184,7 @@ export async function POST(request: NextRequest) {
         })
         await logSecurityEvent({
           event_type: 'captcha_failed',
-          event_data: { email },
+          event_data: { email: normalizedEmail },
           request,
         })
         return NextResponse.json(
@@ -226,7 +227,7 @@ export async function POST(request: NextRequest) {
       }
     )
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizedEmail,
       password,
     })
 
@@ -239,7 +240,7 @@ export async function POST(request: NextRequest) {
           ...IP_RATE_LIMIT,
         }),
         incrementRateLimit({
-          identifier: `login_email:${email}`,
+          identifier: `login_email:${normalizedEmail}`,
           endpoint: '/api/auth/login',
           ...EMAIL_RATE_LIMIT,
         }),
@@ -255,7 +256,7 @@ export async function POST(request: NextRequest) {
 
       await logSecurityEvent({
         event_type: 'login_failure',
-        event_data: { email, failureCount: newFailureCount },
+        event_data: { email: normalizedEmail, failureCount: newFailureCount },
         request,
       })
 
@@ -267,10 +268,10 @@ export async function POST(request: NextRequest) {
           endpoint: '/api/auth/login',
           metadata: { clientIp, failureCount: newFailureCount },
         })
-        await lockAccount(email)
+        await lockAccount(normalizedEmail)
         await logSecurityEvent({
           event_type: 'account_locked',
-          event_data: { email, failureCount: newFailureCount },
+          event_data: { email: normalizedEmail, failureCount: newFailureCount },
           request,
         })
         return NextResponse.json(
@@ -294,12 +295,12 @@ export async function POST(request: NextRequest) {
     // --- Success ---
 
     // Post-authentication lockout check (TOCTOU race condition defense)
-    const lockedAfterAuth = await isAccountLocked(email)
+    const lockedAfterAuth = await isAccountLocked(normalizedEmail)
     if (lockedAfterAuth) {
       await supabase.auth.signOut()
       await logSecurityEvent({
         event_type: 'login_blocked_locked_account',
-        event_data: { email, reason: 'account_locked_after_authentication' },
+        event_data: { email: normalizedEmail, reason: 'account_locked_after_authentication' },
         request,
       })
       return NextResponse.json(
@@ -309,12 +310,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Reset failure count on successful login
-    await resetFailureCount(email)
+    await resetFailureCount(normalizedEmail)
 
     await logSecurityEvent({
       event_type: 'login_success',
       user_id: data.user?.id,
-      event_data: { email, rememberMe: persistSession },
+      event_data: { email: normalizedEmail, rememberMe: persistSession },
       request,
     })
 
@@ -325,8 +326,8 @@ export async function POST(request: NextRequest) {
         const newDevice = await isNewDevice(data.user.id, userAgent, clientIp)
         if (newDevice) {
           // Fire and forget - don't block login response
-          sendSecurityNotification('new_login', email, {
-            userName: email,
+          sendSecurityNotification('new_login', normalizedEmail, {
+            userName: normalizedEmail,
             timestamp: new Date().toISOString(),
             ipAddress: clientIp,
             userAgent,

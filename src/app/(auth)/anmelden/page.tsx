@@ -63,13 +63,14 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
+    const normalizedEmail = email.trim().toLowerCase()
 
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
+          email: normalizedEmail,
           password,
           rememberMe,
           ...(turnstileToken ? { turnstileToken } : {}),
@@ -216,7 +217,7 @@ export default function LoginPage() {
     try {
       const { error } = await supabase.auth.resend({
         type: 'signup',
-        email: email,
+        email: email.trim().toLowerCase(),
       })
 
       if (error) {
@@ -266,7 +267,7 @@ export default function LoginPage() {
       const loginResponse = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, rememberMe }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password, rememberMe }),
       })
 
       const loginData = await loginResponse.json()

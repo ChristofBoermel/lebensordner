@@ -143,6 +143,8 @@ jobs:
             # Kong (db-less) only reads declarative config at startup.
             # Force recreate so updated key-auth credentials are actually loaded.
             docker compose up -d --no-deps --force-recreate kong
+            # Force recreate app/worker so runtime env changes are always applied.
+            docker compose up -d --no-deps --force-recreate nextjs worker
             docker compose up -d --remove-orphans
         env:
           GITHUB_SHA: ${{ env.TARGET_SHA }}

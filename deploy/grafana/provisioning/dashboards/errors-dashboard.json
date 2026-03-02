@@ -9,7 +9,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Server Errors (24h)",
+      "title": "Server Errors (Selected Range)",
       "datasource": "Loki",
       "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
       "options": {
@@ -21,14 +21,14 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\" | error_type=\"server\" [24h]))"
+          "expr": "sum(count_over_time({container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\" | error_type=\"server\" [$__range]))"
         }
       ]
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Client Errors (24h)",
+      "title": "Client Errors (Selected Range)",
       "datasource": "Loki",
       "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
       "options": {
@@ -40,14 +40,14 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\" | error_type=~\"client|unhandled_rejection\" [24h]))"
+          "expr": "sum(count_over_time({container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\" | error_type=~\"client|unhandled_rejection\" [$__range]))"
         }
       ]
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Worker Errors (24h)",
+      "title": "Worker Errors (Selected Range)",
       "datasource": "Loki",
       "gridPos": { "x": 16, "y": 0, "w": 8, "h": 4 },
       "options": {
@@ -59,7 +59,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\" | error_type=\"worker\" [24h]))"
+          "expr": "sum(count_over_time({container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\" | error_type=\"worker\" [$__range]))"
         }
       ]
     },

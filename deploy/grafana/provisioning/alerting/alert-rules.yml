@@ -237,4 +237,4 @@ groups:
                 - evaluator:
                     type: gt
                     params:
-                      - 30
+                      - 5
