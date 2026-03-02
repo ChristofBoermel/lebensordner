@@ -5,6 +5,7 @@ import { getTierFromSubscription } from '@/lib/subscription-tiers'
 import { generateStreamToken } from './stream/route'
 import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -44,7 +45,7 @@ const categoryNames: Record<string, string> = {
 export async function GET(request: Request) {
   try {
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await resolveAuthenticatedUser(supabase, request, '/api/family/view')
 
     if (!user) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })

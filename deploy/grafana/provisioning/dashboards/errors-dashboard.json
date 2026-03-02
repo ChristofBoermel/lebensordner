@@ -112,7 +112,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"error\" | error_type=\"client\" | error_message=~\".*HTTP (401|403).*\" [$__range]))"
+          "expr": "(sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"error\" | error_type=\"client\" | error_message=~\".*HTTP (401|403).*\" [$__range])) + sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | error_type=\"auth\" | error_message=\"Server authentication failed\" [$__range]))) or vector(0)"
         }
       ]
     }

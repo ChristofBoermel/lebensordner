@@ -589,6 +589,7 @@ def check_api_routes_have_auth() -> None:
             continue
         auth_signals = [
             "getUser(",        # matches getUser() and getUser(token) patterns
+            "resolveAuthenticatedUser(",
             "requireAdmin()", "requireAuth()", "getSession()",
             "validateCronSecret", "CRON_SECRET", "METRICS_SECRET",
             "GRAFANA_WEBHOOK_SECRET", "TELEGRAM_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET",

@@ -16,7 +16,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (endpoint) (count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | endpoint=~\"/api/auth/login|/api/auth/password-reset/request|/api/consent/sync\" [5m])) or vector(0)",
+          "expr": "sum by (endpoint) (count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | error_type=\"auth\" [5m])) or vector(0)",
           "legendFormat": "{{endpoint}}"
         }
       ]
@@ -46,7 +46,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | error_message=~\".*captcha.*failed.*\" [5m])) or vector(0)",
+          "expr": "sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | error_type=\"auth\" | error_message=~\".*captcha.*failed.*\" [5m])) or vector(0)",
           "legendFormat": "captcha_failed"
         }
       ]

@@ -5,6 +5,7 @@ import JSZip from 'jszip'
 import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscription-tiers'
 import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -14,7 +15,7 @@ const getSupabaseAdmin = () => createClient(
 export async function GET(request: Request) {
   try {
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await resolveAuthenticatedUser(supabase, request, '/api/family/download')
 
     if (!user) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })

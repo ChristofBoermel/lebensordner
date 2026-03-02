@@ -7,6 +7,7 @@ import { getTierFromSubscription, getDownloadLinkType, canCreateDownloadLinks } 
 import { logSecurityEvent, EVENT_DOWNLOAD_LINK_CREATED } from '@/lib/security/audit-log'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_DOWNLOAD_LINK } from '@/lib/security/rate-limit'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -26,7 +27,11 @@ interface CreateDownloadLinkRequest {
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await resolveAuthenticatedUser(
+      supabase,
+      request,
+      '/api/download-link/create'
+    )
 
     if (!user) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })

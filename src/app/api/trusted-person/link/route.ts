@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 
 // Service role client to update trusted_persons when RLS blocks user-scoped writes.
 const getSupabaseAdmin = () => {
@@ -18,10 +19,10 @@ const getSupabaseAdmin = () => {
   )
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await resolveAuthenticatedUser(supabase, request, '/api/trusted-person/link')
 
     if (!user) {
       return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })

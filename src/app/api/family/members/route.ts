@@ -7,6 +7,7 @@ import {
   getTierDisplayInfo,
 } from "@/lib/subscription-tiers";
 import { emitStructuredError } from "@/lib/errors/structured-logger";
+import { resolveAuthenticatedUser } from "@/lib/auth/resolve-authenticated-user";
 
 const getSupabaseAdmin = () =>
   createClient(
@@ -32,12 +33,14 @@ interface FamilyMember {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await resolveAuthenticatedUser(
+      supabase,
+      request,
+      "/api/family/members"
+    );
 
     if (!user) {
       return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
