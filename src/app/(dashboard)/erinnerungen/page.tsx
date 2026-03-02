@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -92,7 +91,6 @@ export default function ErinnerungenPage() {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
 
   const supabase = createClient()
-  const router = useRouter()
   const canUseWatcher = useMemo(() => userTier.limits.familyDashboard, [userTier])
 
   useEffect(() => {
@@ -120,7 +118,7 @@ export default function ErinnerungenPage() {
     
     if (!user) {
       setIsLoading(false)
-      router.replace('/anmelden')
+      setError('Sitzung abgelaufen. Bitte melden Sie sich erneut an.')
       return
     }
 
@@ -134,7 +132,7 @@ export default function ErinnerungenPage() {
       setReminders(data)
     }
     setIsLoading(false)
-  }, [router, supabase])
+  }, [supabase])
 
   const fetchFamilyMembers = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
