@@ -9,7 +9,6 @@ datasources:
     isDefault: true
     editable: false
 
-  # Backward-compatible UID for previously created alert rules.
   - name: Prometheus Legacy
     uid: prometheus-1
     type: prometheus
