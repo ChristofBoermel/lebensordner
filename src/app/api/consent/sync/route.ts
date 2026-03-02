@@ -1,16 +1,36 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import { recordConsent } from '@/lib/consent/manager'
 import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
-import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user: cookieUser } } = await supabase.auth.getUser()
+
+    let user = cookieUser
+
+    // Fallback for immediate post-login requests where cookies may not be visible yet.
+    if (!user) {
+      const authHeader = request.headers.get('authorization')
+      const bearerToken = authHeader?.startsWith('Bearer ')
+        ? authHeader.slice('Bearer '.length).trim()
+        : null
+
+      if (bearerToken) {
+        const { data: tokenData } = await supabase.auth.getUser(bearerToken)
+        user = tokenData.user
+      }
+    }
 
     if (!user) {
+      emitStructuredWarn({
+        event_type: 'auth',
+        event_message: 'Consent sync unauthorized',
+        endpoint: '/api/consent/sync',
+      })
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }

@@ -127,7 +127,12 @@ export default function LoginPage() {
 
           // Sync consent cookie to server ledger (non-blocking)
           try {
-            await fetch('/api/consent/sync', { method: 'POST' })
+            await fetch('/api/consent/sync', {
+              method: 'POST',
+              headers: data.access_token
+                ? { Authorization: `Bearer ${data.access_token}` }
+                : undefined,
+            })
           } catch {
             // Consent sync failure must not block login
           }
@@ -301,7 +306,12 @@ export default function LoginPage() {
 
         // Sync consent cookie to server ledger (non-blocking)
         try {
-          await fetch('/api/consent/sync', { method: 'POST' })
+          await fetch('/api/consent/sync', {
+            method: 'POST',
+            headers: loginData.access_token
+              ? { Authorization: `Bearer ${loginData.access_token}` }
+              : undefined,
+          })
         } catch {
           // Consent sync failure must not block login
         }

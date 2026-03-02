@@ -261,11 +261,26 @@ export async function POST(req: Request) {
       'Error spike detected'
     const alertName =
       payload.commonLabels?.alertname ?? payload.alerts?.[0]?.labels?.alertname ?? 'Error Spike'
+    const isDatasourceNoData =
+      alertName.toLowerCase().includes('datasourcenodata') ||
+      alertSummary.toLowerCase().includes('no data')
     const alertId = crypto.randomUUID()
 
     if (status === 'resolved') {
       await sendTelegramMessage({
         text: `✅ <b>${escapeHtml(alertName)} resolved</b>`,
+      })
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
+
+    // "DatasourceNoData" is not a concrete app failure context.
+    // Avoid noisy issue prompts for this technical alert state.
+    if (isDatasourceNoData) {
+      await sendTelegramMessage({
+        text:
+          `ℹ️ <b>${escapeHtml(alertName)}</b>\n\n` +
+          `Grafana datasource returned no data for this evaluation window.\n` +
+          `No fix issue was created because no concrete error context is available.`,
       })
       return NextResponse.json({ received: true }, { status: 200 })
     }
@@ -278,6 +293,8 @@ export async function POST(req: Request) {
     const stack = latest?.stack || ''
     const grafanaCount = extractGrafanaAlertCount(payload)
     const count = grafanaCount ?? lokiLogs.length
+
+    const hasConcreteContext = count > 0 || lokiLogs.length > 0
 
     const alertContext = {
       alert_id: alertId,
@@ -293,6 +310,7 @@ export async function POST(req: Request) {
     }
 
     const redisTask = (async () => {
+      if (!hasConcreteContext) return
       try {
         const redis = getRedis()
         await withTimeout(
@@ -304,18 +322,23 @@ export async function POST(req: Request) {
       }
     })()
 
+    const keyboard = hasConcreteContext
+      ? [[
+          { text: '📊 View in Grafana', url: GRAFANA_DASHBOARD_URL },
+          { text: '🐛 Create Fix Issue', callback_data: `create_issue:${alertId}` },
+        ]]
+      : [[{ text: '📊 View in Grafana', url: GRAFANA_DASHBOARD_URL }]]
+
     const telegramTask = sendTelegramMessage({
       text:
         `🚨 <b>${escapeHtml(alertName)}</b>\n\n` +
         `<b>Count:</b> ${count} errors in 5 min\n` +
         `<b>Type:</b> ${escapeHtml(errorType)}\n` +
         `<b>Endpoint:</b> ${escapeHtml(endpoint || 'n/a')}\n\n` +
-        `<code>${escapeHtml(errorMessage).slice(0, 350)}</code>`,
+        `<code>${escapeHtml(errorMessage).slice(0, 350)}</code>` +
+        (hasConcreteContext ? '' : '\n\nNo concrete error context was found for issue creation.'),
       reply_markup: {
-        inline_keyboard: [[
-          { text: '📊 View in Grafana', url: GRAFANA_DASHBOARD_URL },
-          { text: '🐛 Create Fix Issue', callback_data: `create_issue:${alertId}` },
-        ]],
+        inline_keyboard: keyboard,
       },
     })
 

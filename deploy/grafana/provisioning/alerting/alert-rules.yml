@@ -162,7 +162,7 @@ groups:
         uid: error-spike
         condition: C
         for: 0s
-        noDataState: NoData
+        noDataState: OK
         execErrState: Error
         annotations:
           summary: "More than 3 application errors detected in the last 5 minutes"
@@ -205,7 +205,7 @@ groups:
         uid: auth-security-signal-spike
         condition: C
         for: 2m
-        noDataState: NoData
+        noDataState: OK
         execErrState: Error
         annotations:
           summary: "High volume of auth security warn events in the last 5 minutes"
@@ -218,7 +218,7 @@ groups:
               to: 0
             datasourceUid: loki
             model:
-              expr: 'sum(count_over_time({container="lebensordner-app"} | json | level="warn" | endpoint=~"/api/auth/login|/api/auth/password-reset/request" [5m]))'
+              expr: 'sum(count_over_time({container="lebensordner-app"} | json | level="warn" | endpoint=~"/api/auth/login|/api/auth/password-reset/request|/api/consent/sync" [5m]))'
               refId: A
           - refId: B
             datasourceUid: __expr__

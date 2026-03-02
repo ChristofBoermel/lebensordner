@@ -31,7 +31,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | endpoint=\"/api/auth/login\" | event_message=~\".*invalid credentials.*\" [5m]))",
+          "expr": "sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | endpoint=\"/api/auth/login\" | error_message=~\".*invalid credentials.*\" [5m]))",
           "legendFormat": "invalid_credentials"
         }
       ]
@@ -46,7 +46,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | event_message=~\".*captcha.*failed.*\" [5m]))",
+          "expr": "sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | error_message=~\".*captcha.*failed.*\" [5m]))",
           "legendFormat": "captcha_failed"
         }
       ]
