@@ -20,6 +20,9 @@
     "cicd-audit": "python scripts/ops/cicd-audit.py",
     "cicd-audit:strict": "python scripts/ops/cicd-audit.py --strict",
     "cicd-audit:hints": "python scripts/ops/cicd-audit.py --fix-hints",
+    "ui-audit": "python scripts/ops/agent-rules-audit.py",
+    "ui-audit:strict": "python scripts/ops/agent-rules-audit.py --strict",
+    "ui-audit:hints": "python scripts/ops/agent-rules-audit.py --fix-hints",
     "audit:agent-rules": "python scripts/ops/agent-rules-audit.py",
     "audit:logging": "python scripts/ops/logging-audit.py"
   },

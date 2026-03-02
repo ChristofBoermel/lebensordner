@@ -16,6 +16,24 @@ Mandatory rule files:
 Implementation must not start until the full list above has been reviewed and
 cross-referenced.
 
+# Mandatory AI Memory And Handoff
+Before implementing any major change, every AI agent must also:
+1. Read `docs/ai-context.md`.
+2. Read the latest entries in `docs/ai-changelog.md`.
+
+After completing any major change, every AI agent must add one concise entry to
+`docs/ai-changelog.md` including:
+- UTC timestamp
+- agent name (`Codex`, `Gemini`, or `Claude`)
+- commit hash (or `uncommitted`)
+- change summary
+- risk/regression notes
+- verification commands
+- rollback note
+
+Canonical protocol reference:
+- `docs/ai-collaboration.md`
+
 # Mandatory Logging Guardrail
 Before implementing any new backend/API feature, every AI agent must run a
 logging-quality check workflow (either via a dedicated subagent or equivalent
