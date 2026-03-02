@@ -81,6 +81,64 @@ if (missing.length > 0) {
   process.exit(1)
 }
 
+check_runtime_public_config_from_nextjs() {
+  local nextjs_container_id="$1"
+
+  docker exec -i "$nextjs_container_id" node - <<'NODE'
+const expectedUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
+if (!expectedUrl) {
+  console.error('Missing NEXT_PUBLIC_SUPABASE_URL in nextjs container')
+  process.exit(1)
+}
+
+async function main() {
+  const response = await fetch('http://127.0.0.1:3000')
+  if (!response.ok) {
+    console.error(`Failed to fetch app root HTML: status=${response.status}`)
+    process.exit(1)
+  }
+
+  const html = await response.text()
+  const match = html.match(/__LEBENSORDNER_PUBLIC_CONFIG__=({.*?});/)
+  if (!match) {
+    console.error('Missing __LEBENSORDNER_PUBLIC_CONFIG__ script in rendered HTML')
+    process.exit(1)
+  }
+
+  let parsed
+  try {
+    parsed = JSON.parse(match[1])
+  } catch (error) {
+    console.error(`Invalid runtime public config JSON: ${error instanceof Error ? error.message : String(error)}`)
+    process.exit(1)
+  }
+
+  const renderedUrl = String(parsed?.supabaseUrl || '').trim()
+  if (!renderedUrl) {
+    console.error('Rendered runtime config is missing supabaseUrl')
+    process.exit(1)
+  }
+
+  if (renderedUrl !== expectedUrl) {
+    console.error(`Rendered supabaseUrl mismatch. expected=${expectedUrl} rendered=${renderedUrl}`)
+    process.exit(1)
+  }
+
+  if (/\.supabase\.co\b/i.test(renderedUrl)) {
+    console.error(`Rendered supabaseUrl unexpectedly points to hosted Supabase: ${renderedUrl}`)
+    process.exit(1)
+  }
+
+  console.log('PASS: runtime public config supabaseUrl matches container env')
+}
+
+main().catch((error) => {
+  console.error(`Runtime public config probe crashed: ${error instanceof Error ? error.message : String(error)}`)
+  process.exit(1)
+})
+NODE
+}
+
 const baseUrl = process.env.SUPABASE_URL.replace(/\/+$/, '')
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -175,12 +233,18 @@ pass "kong.yml keys match deploy .env keys"
 
 echo "Checking app container env parity..."
 ENV_SUPABASE_URL="$(require_env_key SUPABASE_URL)"
+ENV_NEXT_PUBLIC_SUPABASE_URL="$(require_env_key NEXT_PUBLIC_SUPABASE_URL)"
 ENV_SERVICE_ROLE_HASH="$(printf '%s' "$SERVICE_ROLE_KEY" | sha256sum | awk '{print $1}')"
 NEXTJS_SUPABASE_URL="$(docker exec "$NEXTJS_CONTAINER_ID" node -e "process.stdout.write(process.env.SUPABASE_URL || '')")"
+NEXTJS_PUBLIC_SUPABASE_URL="$(docker exec "$NEXTJS_CONTAINER_ID" node -e "process.stdout.write(process.env.NEXT_PUBLIC_SUPABASE_URL || '')")"
 NEXTJS_SERVICE_ROLE_HASH="$(docker exec "$NEXTJS_CONTAINER_ID" node -e "const crypto = require('crypto'); const key = process.env.SUPABASE_SERVICE_ROLE_KEY || ''; process.stdout.write(crypto.createHash('sha256').update(key).digest('hex'))")"
 [[ "$NEXTJS_SUPABASE_URL" == "$ENV_SUPABASE_URL" ]] || fail "nextjs SUPABASE_URL does not match deploy .env SUPABASE_URL"
+[[ "$NEXTJS_PUBLIC_SUPABASE_URL" == "$ENV_NEXT_PUBLIC_SUPABASE_URL" ]] || fail "nextjs NEXT_PUBLIC_SUPABASE_URL does not match deploy .env NEXT_PUBLIC_SUPABASE_URL"
 [[ "$NEXTJS_SERVICE_ROLE_HASH" == "$ENV_SERVICE_ROLE_HASH" ]] || fail "nextjs SUPABASE_SERVICE_ROLE_KEY does not match deploy .env SERVICE_ROLE_KEY"
 pass "nextjs container env matches deploy .env"
+
+echo "Checking rendered runtime public config from nextjs..."
+check_runtime_public_config_from_nextjs "$NEXTJS_CONTAINER_ID"
 
 echo "Checking internal Supabase probes from nextjs..."
 check_internal_supabase_from_nextjs "$NEXTJS_CONTAINER_ID"

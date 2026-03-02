@@ -651,6 +651,10 @@ def check_verify_deploy_script() -> None:
         "REST key-auth probe":   ("rest/v1" in content and "apikey" in content),
         "Health endpoint check": "/api/health" in content,
         "Prometheus check":      "prometheus" in content or "Prometheus" in content,
+        "Runtime public config probe": (
+            "check_runtime_public_config_from_nextjs" in content
+            and "__LEBENSORDNER_PUBLIC_CONFIG__" in content
+        ),
         "Service running check": (
             "require_service_running" in content or "docker compose ps" in content
         ),
@@ -672,6 +676,7 @@ def check_verify_deploy_internal_supabase_probe() -> None:
         return
     required_signals = {
         "internal probe function": "check_internal_supabase_from_nextjs" in content,
+        "runtime public config function": "check_runtime_public_config_from_nextjs" in content,
         "rest probe path": "/rest/v1/profiles?select=id&limit=1" in content,
         "auth health probe path": "/auth/v1/health" in content,
         "service key parity check": (
