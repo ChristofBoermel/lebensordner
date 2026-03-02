@@ -1,9 +1,4 @@
 apiVersion: 1
-prune: true
-
-deleteDatasources:
-  - uid: ffeqxsg8rlg5ce
-    orgId: 1
 
 datasources:
   - name: Prometheus
@@ -15,7 +10,6 @@ datasources:
     editable: false
 
   # Backward-compatible UID for previously created alert rules.
-  # Some persisted Grafana resources may still reference "prometheus-1".
   - name: Prometheus Legacy
     uid: prometheus-1
     type: prometheus
