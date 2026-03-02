@@ -3,6 +3,7 @@ prune: true
 
 deleteDatasources:
   - uid: ffeqxsg8rlg5ce
+    orgId: 1
 
 datasources:
   - name: Prometheus

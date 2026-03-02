@@ -54,7 +54,14 @@
       "Bash(gh secret:*)",
       "Bash(curl:*)",
       "Bash(find:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "WebSearch",
+      "WebFetch(domain:blog.logrocket.com)",
+      "WebFetch(domain:www.accessibility.works)",
+      "WebFetch(domain:github.blog)",
+      "WebFetch(domain:www.w3.org)",
+      "WebFetch(domain:docs.expo.dev)",
+      "WebFetch(domain:tamagui.dev)"
     ]
   }
 }
