@@ -9,6 +9,15 @@ datasources:
     isDefault: true
     editable: false
 
+  # Backward-compatible UID for previously created alert rules.
+  # Some persisted Grafana resources may still reference "prometheus-1".
+  - name: Prometheus Legacy
+    uid: prometheus-1
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    editable: false
+
   - name: Loki
     uid: loki
     type: loki
