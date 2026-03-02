@@ -96,6 +96,25 @@
           "expr": "{container=~\"lebensordner-app|lebensordner-worker\"} | json | level=\"error\""
         }
       ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Auth 401/403 Signals (Selected Range)",
+      "datasource": "Loki",
+      "gridPos": { "x": 0, "y": 24, "w": 8, "h": 4 },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "noValue": "0"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"error\" | error_type=\"client\" | error_message=~\".*HTTP (401|403).*\" [$__range]))"
+        }
+      ]
     }
   ]
 }

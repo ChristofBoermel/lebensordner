@@ -35,6 +35,65 @@ function getSupabaseConfig() {
   return { supabaseUrl, supabaseAnonKey }
 }
 
+type AuthErrorTelemetry = {
+  error_type: 'client'
+  error_message: string
+  endpoint?: string
+}
+
+const AUTH_ERROR_THROTTLE_MS = 10_000
+
+function getTelemetryKey(endpoint: string, status: number): string {
+  return `lo_auth_err_${endpoint}_${status}`
+}
+
+function shouldSendAuthError(endpoint: string, status: number): boolean {
+  if (typeof window === 'undefined') return false
+  const key = getTelemetryKey(endpoint, status)
+  const now = Date.now()
+  const last = Number(window.sessionStorage.getItem(key) ?? '0')
+  if (Number.isFinite(last) && now - last < AUTH_ERROR_THROTTLE_MS) {
+    return false
+  }
+  window.sessionStorage.setItem(key, String(now))
+  return true
+}
+
+function reportAuthFailure(endpoint: string, status: number): void {
+  if (typeof window === 'undefined') return
+  if (!shouldSendAuthError(endpoint, status)) return
+  const payload: AuthErrorTelemetry = {
+    error_type: 'client',
+    error_message: `HTTP ${status} from Supabase request`,
+    endpoint,
+  }
+
+  fetch('/api/errors/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => {
+    // Telemetry failure must never break user flows.
+  })
+}
+
+async function instrumentedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, init)
+  if ((response.status === 401 || response.status === 403) && typeof window !== 'undefined') {
+    const rawUrl =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+    if (!rawUrl.includes('/api/errors/log')) {
+      const endpoint = rawUrl.startsWith('http') ? new URL(rawUrl).pathname : rawUrl
+      reportAuthFailure(endpoint, response.status)
+    }
+  }
+  return response
+}
+
 /**
  * Factory that returns a Supabase browser client.
  *
@@ -54,6 +113,9 @@ export function createClient(options: CreateClientOptions = {}) {
       supabaseUrl,
       supabaseAnonKey,
       {
+        global: {
+          fetch: instrumentedFetch,
+        },
         auth: {
           persistSession: true,
           storage: window.sessionStorage,
@@ -64,7 +126,12 @@ export function createClient(options: CreateClientOptions = {}) {
 
   return createBrowserClient(
     supabaseUrl,
-    supabaseAnonKey
+    supabaseAnonKey,
+    {
+      global: {
+        fetch: instrumentedFetch,
+      },
+    }
   )
 }
 

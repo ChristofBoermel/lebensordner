@@ -175,7 +175,7 @@ groups:
               to: 0
             datasourceUid: loki
             model:
-              expr: 'sum(count_over_time({container=~"lebensordner-app|lebensordner-worker"} | json | level="error" [5m]))'
+              expr: 'sum(count_over_time({container=~"lebensordner-app|lebensordner-worker"} | json | level="error" [5m])) or vector(0)'
               refId: A
           - refId: B
             datasourceUid: __expr__
@@ -218,7 +218,7 @@ groups:
               to: 0
             datasourceUid: loki
             model:
-              expr: 'sum(count_over_time({container="lebensordner-app"} | json | level="warn" | endpoint=~"/api/auth/login|/api/auth/password-reset/request|/api/consent/sync" [5m]))'
+              expr: 'sum(count_over_time({container="lebensordner-app"} | json | level="warn" | endpoint=~"/api/auth/login|/api/auth/password-reset/request|/api/consent/sync" [5m])) or vector(0)'
               refId: A
           - refId: B
             datasourceUid: __expr__
