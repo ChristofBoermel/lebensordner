@@ -256,24 +256,47 @@ def check_next_public_var_names() -> None:
 
 
 def check_supabase_url_consistency() -> None:
-    """SUPABASE_URL and NEXT_PUBLIC_SUPABASE_URL should use the same CI secret."""
-    ci = read(".github/workflows/ci.yml")
-    # Match patterns like: SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-    url_secrets     = set(re.findall(r"SUPABASE_URL:\s*\$\{\{\s*secrets\.([A-Z_]+)\s*\}\}", ci))
-    pub_url_secrets = set(re.findall(
-        r"NEXT_PUBLIC_SUPABASE_URL:\s*\$\{\{\s*secrets\.([A-Z_]+)\s*\}\}", ci
-    ))
-    if url_secrets and pub_url_secrets:
-        if url_secrets == pub_url_secrets:
-            record("PASS", "SUPABASE_URL and NEXT_PUBLIC_SUPABASE_URL use the same CI secret")
-        else:
-            record("WARN",
-                   "SUPABASE_URL and NEXT_PUBLIC_SUPABASE_URL map to different CI secrets",
-                   f"SUPABASE_URL             -> {url_secrets}\n"
-                   f"NEXT_PUBLIC_SUPABASE_URL -> {pub_url_secrets}\n"
-                   "A mismatch means server and browser clients hit different endpoints.")
+    """SUPABASE_URL and NEXT_PUBLIC_SUPABASE_URL should map to the same secret in workflows."""
+    workflow_paths = [
+        ".github/workflows/ci.yml",
+        ".github/workflows/deploy.yml",
+    ]
+    found_any = False
+    mismatches: list[str] = []
+    per_file_summary: list[str] = []
+
+    for workflow_path in workflow_paths:
+        content = read(workflow_path)
+        if not content:
+            continue
+        # Match patterns like: SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        url_secrets = set(re.findall(r"SUPABASE_URL:\s*\$\{\{\s*secrets\.([A-Z_]+)\s*\}\}", content))
+        pub_url_secrets = set(re.findall(
+            r"NEXT_PUBLIC_SUPABASE_URL:\s*\$\{\{\s*secrets\.([A-Z_]+)\s*\}\}",
+            content,
+        ))
+        if not url_secrets and not pub_url_secrets:
+            continue
+        found_any = True
+        per_file_summary.append(
+            f"{workflow_path}: SUPABASE_URL={sorted(url_secrets)} NEXT_PUBLIC_SUPABASE_URL={sorted(pub_url_secrets)}"
+        )
+        if url_secrets and pub_url_secrets and url_secrets != pub_url_secrets:
+            mismatches.append(workflow_path)
+
+    if not found_any:
+        record("WARN", "Could not verify SUPABASE_URL consistency in workflow files")
+        return
+
+    if mismatches:
+        record(
+            "WARN",
+            "SUPABASE_URL and NEXT_PUBLIC_SUPABASE_URL map to different secrets",
+            "\n".join(per_file_summary)
+            + "\nA mismatch means server and browser clients may hit different endpoints.",
+        )
     else:
-        record("WARN", "Could not verify SUPABASE_URL consistency in ci.yml")
+        record("PASS", "SUPABASE_URL and NEXT_PUBLIC_SUPABASE_URL use the same secret in workflows")
 
 
 def check_docker_compose_env_coverage() -> None:
@@ -638,12 +661,77 @@ def check_verify_deploy_script() -> None:
         record("PASS", "verify-deploy.sh has all expected smoke probes")
 
 
-def check_smoke_check_in_ci() -> None:
-    ci = read(".github/workflows/ci.yml")
-    if "verify-deploy.sh" in ci or "smoke-check" in ci.lower():
-        record("PASS", "CI workflow includes a smoke-check step")
+def check_verify_deploy_internal_supabase_probe() -> None:
+    """
+    verify-deploy.sh must validate the exact internal path that failed in prod:
+    nextjs container -> SUPABASE_URL (kong) -> rest/auth with service key.
+    """
+    content = read("scripts/ops/verify-deploy.sh")
+    if not content:
+        return
+    required_signals = {
+        "internal probe function": "check_internal_supabase_from_nextjs" in content,
+        "rest probe path": "/rest/v1/profiles?select=id&limit=1" in content,
+        "auth health probe path": "/auth/v1/health" in content,
+        "service key parity check": (
+            "SUPABASE_SERVICE_ROLE_KEY" in content and "nextjs container env matches deploy .env" in content
+        ),
+    }
+    missing = [name for name, ok in required_signals.items() if not ok]
+    if missing:
+        record(
+            "WARN",
+            f"verify-deploy.sh missing internal Supabase guard(s): {', '.join(missing)}",
+            "Without these checks, deploy can appear healthy while app->kong auth is broken.",
+        )
     else:
-        record("WARN", "CI workflow may be missing smoke-check step")
+        record("PASS", "verify-deploy.sh validates internal nextjs->supabase auth path")
+
+
+def check_deploy_force_recreate_app_worker() -> None:
+    """
+    Deploy workflow must force-recreate nextjs/worker to ensure runtime env changes
+    (SUPABASE_URL, SERVICE_ROLE_KEY, etc.) are actually applied.
+    """
+    workflow_path, workflow = get_deploy_workflow_content()
+    if not workflow:
+        record("WARN", "No deploy workflow found -- skipping app/worker force-recreate check")
+        return
+
+    has_combined = bool(re.search(r"--force-recreate\s+nextjs\s+worker", workflow))
+    has_nextjs = bool(re.search(r"--force-recreate[^\n]*\bnextjs\b", workflow))
+    has_worker = bool(re.search(r"--force-recreate[^\n]*\bworker\b", workflow))
+    if has_combined or (has_nextjs and has_worker):
+        record("PASS", f"Deploy workflow force-recreates nextjs and worker ({workflow_path})")
+    else:
+        record(
+            "WARN",
+            "Deploy workflow may not force-recreate nextjs/worker",
+            "Runtime env drift can persist across deploys even if Kong was recreated.",
+        )
+
+
+def check_smoke_check_in_workflows() -> None:
+    """
+    Smoke checks commonly live in deploy.yml in split CI/deploy setups.
+    Accept either a dedicated smoke-check job or direct verify-deploy.sh execution.
+    """
+    workflow_paths = [
+        ".github/workflows/deploy.yml",
+        ".github/workflows/ci.yml",
+    ]
+    found = []
+    for workflow_path in workflow_paths:
+        content = read(workflow_path)
+        if not content:
+            continue
+        if "verify-deploy.sh" in content or "smoke-check" in content.lower():
+            found.append(workflow_path)
+
+    if found:
+        record("PASS", "Workflow includes a smoke-check step", ", ".join(found))
+    else:
+        record("WARN", "Workflow may be missing smoke-check step")
 
 
 # -- TypeScript ---------------------------------------------------------------
@@ -727,7 +815,9 @@ def main() -> int:
 
     section("Deploy Tooling")
     check_verify_deploy_script()
-    check_smoke_check_in_ci()
+    check_verify_deploy_internal_supabase_probe()
+    check_deploy_force_recreate_app_worker()
+    check_smoke_check_in_workflows()
 
     if not args.no_tsc:
         section("TypeScript")
