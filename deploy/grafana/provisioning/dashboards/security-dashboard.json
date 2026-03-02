@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 36,
+  "version": 1,
+  "uid": "security-signals",
+  "title": "Security Signals",
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Auth Warn Events / 5m",
+      "datasource": "Loki",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (endpoint) (count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | endpoint=~\"/api/auth/login|/api/auth/password-reset/request\" [5m]))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Invalid Credentials Signals / 5m",
+      "datasource": "Loki",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | endpoint=\"/api/auth/login\" | error_message=~\".*invalid credentials.*\" [5m]))",
+          "legendFormat": "invalid_credentials"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "CAPTCHA Fail Signals / 5m",
+      "datasource": "Loki",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({container=\"lebensordner-app\"} | json | level=\"warn\" | error_message=~\".*captcha.*failed.*\" [5m]))",
+          "legendFormat": "captcha_failed"
+        }
+      ]
+    }
+  ]
+}

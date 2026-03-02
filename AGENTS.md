@@ -16,6 +16,23 @@ Mandatory rule files:
 Implementation must not start until the full list above has been reviewed and
 cross-referenced.
 
+# Mandatory Logging Guardrail
+Before implementing any new backend/API feature, every AI agent must run a
+logging-quality check workflow (either via a dedicated subagent or equivalent
+self-check) and ensure:
+
+- expected user/security outcomes use `warn`/`info`, not `error`
+- unexpected failures use structured `error` logs
+- no raw `console.error` remains in API routes
+- no sensitive values are logged unredacted
+- Grafana error alerts stay scoped to `level="error"`
+
+Required automated check:
+- `python scripts/ops/logging-audit.py`
+
+CI enforces this via the `logging-guard` job. Changes failing this policy must
+not be merged.
+
 # Composition Pattern Rules
 These rules are read by Codex on session start and govern all React composition decisions in this project.
 

@@ -34,8 +34,15 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
       - run: python scripts/ops/agent-rules-audit.py
 
+  logging-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - run: python scripts/ops/logging-audit.py
+
   lint:
-    needs: [agent-rule-guard]
+    needs: [agent-rule-guard, logging-guard]
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_mode == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -49,7 +56,7 @@ jobs:
       - run: npm run lint
 
   type-check:
-    needs: [agent-rule-guard]
+    needs: [agent-rule-guard, logging-guard]
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_mode == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -63,7 +70,7 @@ jobs:
       - run: npm run type-check
 
   unit-tests:
-    needs: [agent-rule-guard]
+    needs: [agent-rule-guard, logging-guard]
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_mode == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -78,7 +85,7 @@ jobs:
       - run: python scripts/ops/pre-deploy-qa.py --no-tsc
 
   e2e-tests:
-    needs: [agent-rule-guard]
+    needs: [agent-rule-guard, logging-guard]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: Production

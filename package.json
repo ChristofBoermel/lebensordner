@@ -20,7 +20,8 @@
     "cicd-audit": "python scripts/ops/cicd-audit.py",
     "cicd-audit:strict": "python scripts/ops/cicd-audit.py --strict",
     "cicd-audit:hints": "python scripts/ops/cicd-audit.py --fix-hints",
-    "audit:agent-rules": "python scripts/ops/agent-rules-audit.py"
+    "audit:agent-rules": "python scripts/ops/agent-rules-audit.py",
+    "audit:logging": "python scripts/ops/logging-audit.py"
   },
   "keywords": [
     "lebensordner",

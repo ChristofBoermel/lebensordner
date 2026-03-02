@@ -200,3 +200,41 @@ groups:
           group_wait: "0s"
           group_interval: "30m"
           repeat_interval: "30m"
+
+      - title: "Auth Security Signal Spike"
+        uid: auth-security-signal-spike
+        condition: C
+        for: 2m
+        noDataState: NoData
+        execErrState: Error
+        annotations:
+          summary: "High volume of auth security warn events in the last 5 minutes"
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({container="lebensordner-app"} | json | level="warn" | endpoint=~"/api/auth/login|/api/auth/password-reset/request" [5m]))'
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              reducer: last
+              expression: A
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 30
