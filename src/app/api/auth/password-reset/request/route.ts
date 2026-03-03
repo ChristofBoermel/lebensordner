@@ -320,9 +320,27 @@ export async function POST(request: NextRequest) {
       publicOrigin,
     ).toString();
 
-    await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo,
     });
+
+    if (resetError) {
+      emitStructuredError({
+        error_type: "auth",
+        error_message: `Password reset email dispatch failed: ${resetError.message}`,
+        endpoint: "/api/auth/password-reset/request",
+        metadata: {
+          code: "code" in resetError ? String(resetError.code) : undefined,
+          status: "status" in resetError ? Number(resetError.status) : undefined,
+        },
+      });
+    } else {
+      emitStructuredInfo({
+        event_type: "auth",
+        event_message: "Password reset email dispatch requested successfully",
+        endpoint: "/api/auth/password-reset/request",
+      });
+    }
 
     // --- Audit Logging ---
 

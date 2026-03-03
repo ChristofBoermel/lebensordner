@@ -24,6 +24,31 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 21:04 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Added explicit reset-email dispatch result handling in `src/app/api/auth/password-reset/request/route.ts`:
+  - logs structured `error` when `supabase.auth.resetPasswordForEmail()` returns an error
+  - logs structured `info` when dispatch request succeeds
+  - preserves anti-enumeration behavior (always returns success response to caller on dispatch errors).
+- Added regression test in `tests/api/password-reset.test.ts` to verify dispatch-failure path still returns `200 { success: true }` while emitting structured error telemetry.
+
+Why:
+- User reported no reset email delivery; previous route did not log non-throwing Supabase dispatch errors, making SMTP/provider failures opaque.
+
+Risk / Regression Watch:
+- Additional auth-route logs may increase volume on repeated delivery failures; rate limiting in structured logger remains active.
+- User-facing behavior intentionally unchanged for anti-enumeration.
+
+Verification:
+- `npm test -- --run tests/api/password-reset.test.ts`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/app/api/auth/password-reset/request/route.ts`, `tests/api/password-reset.test.ts`, and this changelog entry.
+
+Open Issues:
+- none
+
 ## 2026-03-03 20:48 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Updated `src/app/api/auth/password-reset/request/route.ts` to use a dedicated public-URL Supabase client (`createClient`) for `resetPasswordForEmail()` so recovery email links are generated from the public gateway URL without changing the global internal `SUPABASE_URL`.

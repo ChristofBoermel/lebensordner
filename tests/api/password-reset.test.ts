@@ -277,6 +277,36 @@ describe('Password reset request', () => {
     expect(mockResetPasswordForEmail).not.toHaveBeenCalled()
     expect(mockEmitStructuredError).toHaveBeenCalled()
   })
+
+  it('still returns success when reset email dispatch fails, while logging error', async () => {
+    mockResetPasswordForEmail.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'SMTP transport failed', status: 500, code: 'smtp_error' },
+    })
+
+    const { POST } = await import('@/app/api/auth/password-reset/request/route')
+
+    const request = new Request('http://localhost/api/auth/password-reset/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    })
+
+    const response = await POST(request as any)
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.success).toBe(true)
+    expect(mockEmitStructuredError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_type: 'auth',
+        error_message: expect.stringContaining('Password reset email dispatch failed'),
+      })
+    )
+  })
 })
 
 // ======================================================================
