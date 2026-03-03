@@ -1072,20 +1072,6 @@ export default function DocumentsPage() {
     setHighlightedDoc(searchParams.get("highlight"));
   }, [searchParams]);
 
-  // allowed: subscription - sync tag filter state to URL param
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (activeTagFilters.size > 0) {
-      params.set("tags", [...activeTagFilters].join(","));
-    } else {
-      params.delete("tags");
-    }
-    const nextQuery = params.toString();
-    const currentQuery = searchParams.toString();
-    if (nextQuery === currentQuery) return;
-    router.replace(nextQuery ? `?${nextQuery}` : "?", { scroll: false });
-  }, [activeTagFilters, router, searchParams]);
-
   // Handle document highlighting from search
   useEffect(() => {
     if (highlightedDoc && documents.length > 0) {
@@ -2407,7 +2393,7 @@ export default function DocumentsPage() {
     [documents],
   );
 
-  const tagCounts = useMemo(() => {
+  const tagCounts = (() => {
     const counts = new Map<string, number>();
     const docsForTagCount = validatedDocuments.filter((doc) => {
       if (selectedCustomCategory) return doc.custom_category_id === selectedCustomCategory;
@@ -2421,7 +2407,29 @@ export default function DocumentsPage() {
       });
     });
     return counts;
-  }, [validatedDocuments, selectedCategory, selectedCustomCategory]);
+  })();
+
+  function updateTagFilters(
+    next:
+      | Set<string>
+      | ((prev: Set<string>) => Set<string>),
+  ) {
+    setActiveTagFilters((prev) => {
+      const nextFilters = next instanceof Function ? next(prev) : next;
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextFilters.size > 0) {
+        params.set("tags", [...nextFilters].join(","));
+      } else {
+        params.delete("tags");
+      }
+      const nextQuery = params.toString();
+      const currentQuery = searchParams.toString();
+      if (nextQuery !== currentQuery) {
+        router.replace(nextQuery ? `?${nextQuery}` : "?", { scroll: false });
+      }
+      return nextFilters;
+    });
+  }
 
   const filteredDocuments = validatedDocuments
     .filter((doc) => {
@@ -3089,7 +3097,7 @@ export default function DocumentsPage() {
                 {activeTagFilters.size > 0 && (
                   <button
                     type="button"
-                    onClick={() => setActiveTagFilters(new Set())}
+                    onClick={() => updateTagFilters(new Set())}
                     className="text-xs text-warmgray-500 hover:text-warmgray-700 transition-colors"
                   >
                     Alle zurücksetzen
@@ -3105,7 +3113,7 @@ export default function DocumentsPage() {
                       key={tag}
                       type="button"
                       onClick={() =>
-                        setActiveTagFilters((prev) => {
+                        updateTagFilters((prev) => {
                           const next = new Set(prev);
                           next.has(tag) ? next.delete(tag) : next.add(tag);
                           return next;
