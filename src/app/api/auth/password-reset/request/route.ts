@@ -28,6 +28,23 @@ const normalizeOrigin = (value: string | undefined | null): string | null => {
   }
 };
 
+const normalizeUrlWithPath = (value: string | undefined | null): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return null;
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    const normalizedPath = parsed.pathname.replace(/\/+$/, "");
+    return normalizedPath && normalizedPath !== "/"
+      ? `${parsed.origin}${normalizedPath}`
+      : parsed.origin;
+  } catch {
+    return null;
+  }
+};
+
 const resolvePublicOrigin = (request: NextRequest): string | null => {
   const fromEnv =
     normalizeOrigin(process.env.AUTH_PUBLIC_BASE_URL) ??
@@ -41,9 +58,9 @@ const resolvePublicOrigin = (request: NextRequest): string | null => {
 
 const resolvePublicSupabaseUrl = (): string | null => {
   return (
-    normalizeOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL) ??
-    normalizeOrigin(process.env.API_EXTERNAL_URL) ??
-    normalizeOrigin(process.env.SUPABASE_URL)
+    normalizeUrlWithPath(process.env.NEXT_PUBLIC_SUPABASE_URL) ??
+    normalizeUrlWithPath(process.env.API_EXTERNAL_URL) ??
+    normalizeUrlWithPath(process.env.SUPABASE_URL)
   );
 };
 

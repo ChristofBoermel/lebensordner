@@ -64,8 +64,10 @@ const supabaseJsClient = {
   from: createAdminTableDispatch(),
 }
 
+const mockCreateClient = vi.fn(() => supabaseJsClient)
+
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => supabaseJsClient),
+  createClient: (...args: unknown[]) => mockCreateClient(...args),
 }))
 
 // --- Mock: isAccountLocked ---
@@ -132,6 +134,7 @@ beforeEach(async () => {
 
   // Rebuild admin dispatch so mockAdminProfileSingle is picked up
   supabaseJsClient.from = createAdminTableDispatch()
+  mockCreateClient.mockReturnValue(supabaseJsClient)
 })
 
 afterEach(() => {
@@ -193,6 +196,34 @@ describe('Password reset request', () => {
     expect(mockResetPasswordForEmail).toHaveBeenCalledWith(
       'user@example.com',
       { redirectTo: expect.stringContaining('/auth/callback?next=/passwort-reset') }
+    )
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      'https://lebensordner.org/supabase',
+      'anon-test-key',
+      expect.any(Object)
+    )
+  })
+
+  it('preserves path segments in NEXT_PUBLIC_SUPABASE_URL when creating reset client', async () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://lebensordner.org/supabase/'
+
+    const { POST } = await import('@/app/api/auth/password-reset/request/route')
+
+    const request = new Request('http://localhost/api/auth/password-reset/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    })
+
+    const response = await POST(request as any)
+    expect(response.status).toBe(200)
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      'https://lebensordner.org/supabase',
+      'anon-test-key',
+      expect.any(Object)
     )
   })
 

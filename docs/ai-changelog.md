@@ -24,6 +24,27 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 22:47 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Fixed password-reset Supabase URL normalization in `src/app/api/auth/password-reset/request/route.ts` by preserving URL path segments (e.g. `/supabase`) instead of collapsing to origin-only host.
+- Added regression assertions in `tests/api/password-reset.test.ts` to verify the reset route creates the Supabase client with `https://lebensordner.org/supabase` (including trailing-slash normalization).
+
+Why:
+- Reset email dispatch client was built from `.origin`, which dropped `/supabase` and could route reset requests to the wrong auth endpoint in production.
+
+Risk / Regression Watch:
+- Password reset route now treats path-bearing Supabase URLs as canonical; if env values intentionally rely on root-only host behavior, monitor for config mismatches.
+
+Verification:
+- `npm test -- --run tests/api/password-reset.test.ts`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/app/api/auth/password-reset/request/route.ts`, `tests/api/password-reset.test.ts`, and this changelog entry.
+
+Open Issues:
+- none
+
 ## 2026-03-03 21:26 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Increased password-reset rate limit from `3/hour` to `5/hour` in shared security constants.
