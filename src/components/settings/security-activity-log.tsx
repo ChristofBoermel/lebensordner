@@ -20,6 +20,13 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   download_link_created: 'Download-Link erstellt',
   download_link_viewed: 'Download-Link geöffnet',
   gdpr_export_requested: 'GDPR-Export angefordert',
+  vault_unlocked_biometric: 'Tresor per Biometrie entsperrt',
+  document_viewed: 'Dokument angesehen',
+  document_downloaded: 'Dokument heruntergeladen',
+  document_locked: 'Dokument gesperrt',
+  document_unlocked: 'Dokument entsperrt',
+  category_locked: 'Kategorie gesperrt',
+  category_unlocked: 'Kategorie entsperrt',
 }
 
 function formatEventType(eventType: string): string {

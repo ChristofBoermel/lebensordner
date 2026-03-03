@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { toast } from "@/components/ui/toast";
 
 import {
   Dialog,
@@ -33,6 +34,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 const DocumentPreview = dynamic(
   () =>
     import("@/components/ui/document-preview").then(
@@ -55,6 +61,7 @@ import {
   File,
   Trash2,
   Download,
+  History,
   Loader2,
   Search,
   Eye,
@@ -79,12 +86,17 @@ import {
   ScrollText,
   Share2,
   Lock,
+  LockOpen,
   ShieldCheck,
   ShieldOff,
   Clock,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
-import { useVault } from "@/lib/vault/VaultContext";
+import { VaultContext } from "@/lib/vault/VaultContext";
+import {
+  FIVE_MINUTES_MS,
+  useCategoryLockState,
+} from "@/lib/dokumente/useCategoryLockState";
 import {
   DOCUMENT_CATEGORIES,
   CATEGORY_METADATA_FIELDS,
@@ -105,9 +117,20 @@ import {
 import { UpgradeNudge, UpgradeModal } from "@/components/upgrade";
 import Link from "next/link";
 import { decryptField, unwrapKey } from "@/lib/security/document-e2ee";
+import {
+  EVENT_CATEGORY_LOCKED,
+  EVENT_CATEGORY_UNLOCKED,
+  EVENT_DOCUMENT_DOWNLOADED,
+  EVENT_DOCUMENT_LOCKED,
+  EVENT_DOCUMENT_UNLOCKED,
+  EVENT_DOCUMENT_VIEWED,
+} from "@/lib/security/audit-log";
+import { useDocumentAuditLog } from "@/lib/security/useDocumentAuditLog";
 import { ShareDocumentDialog } from "@/components/sharing/ShareDocumentDialog";
 import { BulkShareDialog } from "@/components/sharing/BulkShareDialog";
 import { useThemeSafe } from "@/components/theme/theme-provider";
+import { ExpiryDashboardWidget } from "@/components/dokumente/ExpiryDashboardWidget";
+import { EncryptedNotesEditor } from "@/components/dokumente/EncryptedNotesEditor";
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   user: User,
@@ -182,12 +205,182 @@ function resolveCategoryIcon(iconName: string | null | undefined) {
 }
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
-const RECENT_UNLOCK_WINDOW_MS = 3 * 60 * 1000;
 
 const UploadDialog = dynamic(() => import("./UploadDialog"), {
   loading: () => <div className="text-warmgray-600">Laden...</div>,
   ssr: false,
 });
+
+interface CategoryCardProps {
+  categoryKey: string;
+  title: string;
+  description?: string | null;
+  icon: React.ComponentType<{ className?: string }>;
+  documentCount: number;
+  securedCategories: string[];
+  lastUnlockTimestamp: number;
+  onCardClick: (categoryKey: string) => void;
+  onToggleCategoryLock: (e: React.MouseEvent, categoryKey: string) => void;
+  onAddDocument: (categoryKey: string) => void;
+}
+
+interface DocumentAuditEntry {
+  id: string;
+  event_type: string;
+  timestamp: string;
+  event_data: Record<string, unknown> | null;
+}
+
+function formatRelativeTime(timestamp: string): string {
+  const diffMs = Date.now() - new Date(timestamp).getTime();
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 60) return `Vor ${minutes} Minute${minutes !== 1 ? "n" : ""}`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Vor ${hours} Stunde${hours !== 1 ? "n" : ""}`;
+  const days = Math.floor(hours / 24);
+  return `Vor ${days} Tag${days !== 1 ? "en" : ""}`;
+}
+
+function CategoryCard({
+  categoryKey,
+  title,
+  description,
+  icon: Icon,
+  documentCount,
+  securedCategories,
+  lastUnlockTimestamp,
+  onCardClick,
+  onToggleCategoryLock,
+  onAddDocument,
+}: CategoryCardProps) {
+  const isSecured = securedCategories.includes(categoryKey);
+  const { isLocked, secondsRemaining } = useCategoryLockState({
+    isSecured,
+    lastUnlockTimestamp,
+  });
+
+  const timerBadge =
+    secondsRemaining !== null
+      ? `${Math.floor(secondsRemaining / 60)}:${String(secondsRemaining % 60).padStart(2, "0")}`
+      : null;
+
+  return (
+    <Tooltip open={isLocked ? undefined : false}>
+      <TooltipTrigger asChild>
+        <Card
+          className={`group relative overflow-hidden cursor-pointer transition-all duration-300 border-2 ${
+            isSecured
+              ? "border-amber-300 bg-amber-50/20 hover:border-amber-400"
+              : "border-warmgray-200 bg-white hover:border-sage-400 hover:shadow-xl"
+          } senior-mode:p-2`}
+          onClick={() => onCardClick(categoryKey)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onCardClick(categoryKey);
+            }
+          }}
+        >
+          <CardHeader className="pb-3 relative z-0">
+            <div className="flex items-start justify-between">
+              <div
+                className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                  isLocked
+                    ? "bg-warmgray-200 text-warmgray-500 group-hover:scale-95"
+                    : isSecured
+                      ? "bg-amber-100 text-amber-600"
+                      : "bg-sage-100 text-sage-600 group-hover:bg-sage-600 group-hover:text-white group-hover:rotate-3"
+                } senior-mode:w-20 senior-mode:h-20`}
+              >
+                {isLocked ? (
+                  <Lock className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
+                ) : (
+                  <Icon className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
+                )}
+              </div>
+              <div className="flex gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={`h-11 w-11 rounded-full transition-all ${
+                    isSecured
+                      ? "text-amber-600 bg-amber-100"
+                      : "text-warmgray-300 hover:text-sage-600 hover:bg-sage-50"
+                  } senior-mode:h-14 senior-mode:w-14`}
+                  onClick={(event) => onToggleCategoryLock(event, categoryKey)}
+                  title={
+                    isSecured
+                      ? "Extra-Sicherheit aktiviert"
+                      : "Extra-Sicherheit aktivieren"
+                  }
+                >
+                  {isSecured ? (
+                    <ShieldCheck className="w-6 h-6" />
+                  ) : (
+                    <Shield className="w-6 h-6" />
+                  )}
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-11 w-11 rounded-full text-warmgray-300 hover:text-sage-600 hover:bg-sage-50 transition-colors senior-mode:h-14 senior-mode:w-14"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onAddDocument(categoryKey);
+                  }}
+                  title="Dokument hinzufügen"
+                >
+                  <Plus className="w-6 h-6" />
+                </Button>
+              </div>
+            </div>
+            <div className="pt-4">
+              <CardTitle className="text-xl font-serif senior-mode:text-3xl">
+                {title}
+              </CardTitle>
+              {description ? (
+                <CardDescription className="line-clamp-2 mt-1.5 leading-relaxed senior-mode:text-xl senior-mode:mt-2">
+                  {description}
+                </CardDescription>
+              ) : null}
+            </div>
+          </CardHeader>
+          <CardContent className="relative z-0">
+            <div className="flex items-center justify-between border-t border-warmgray-100 pt-4 mt-2">
+              <div className="flex flex-col">
+                <p className="text-sm text-warmgray-500 senior-mode:text-lg">Inhalt</p>
+                <p className="text-base font-semibold text-warmgray-900 senior-mode:text-2xl">
+                  <span className={isLocked ? "text-warmgray-400" : "text-sage-700"}>
+                    {isLocked ? "--" : documentCount}
+                  </span>{" "}
+                  Dokument{documentCount !== 1 ? "e" : ""}
+                </p>
+              </div>
+              {isSecured ? (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-300 bg-amber-50/20 text-amber-700">
+                  <ShieldCheck className="w-3 h-3" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider">
+                    {isLocked ? "Gesperrt" : "Gesichert"}
+                  </span>
+                  {timerBadge ? (
+                    <span className="text-xs text-amber-600 font-mono">
+                      {timerBadge}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      </TooltipTrigger>
+      <TooltipContent>
+        🔒 Gesperrte Kategorie – Klicken zum Entsperren
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 export default function DocumentsPage() {
   const searchParams = useSearchParams();
@@ -217,6 +410,9 @@ export default function DocumentsPage() {
     null,
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTagFilters, setActiveTagFilters] = useState<Set<string>>(
+    new Set(),
+  );
   const [storageUsed, setStorageUsed] = useState(0);
   const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
   const [userTier, setUserTier] = useState<TierConfig>(SUBSCRIPTION_TIERS.free);
@@ -250,7 +446,6 @@ export default function DocumentsPage() {
   const [pendingUnlockDocumentId, setPendingUnlockDocumentId] = useState<string | null>(null);
   const [requiresRecentUnlock, setRequiresRecentUnlock] = useState(false);
   const [privacyModeEnabled, setPrivacyModeEnabled] = useState(false);
-  const lastVaultUnlockRef = useRef<number>(0);
 
   // Upgrade Modal state
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
@@ -269,6 +464,15 @@ export default function DocumentsPage() {
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(
     new Set(),
   );
+  const [pendingBulkSecurityAction, setPendingBulkSecurityAction] = useState<
+    "lock" | "unlock" | null
+  >(null);
+  const [
+    pendingBulkSecuritySelectionIds,
+    setPendingBulkSecuritySelectionIds,
+  ] = useState<string[] | null>(null);
+  const [isAwaitingBulkSecurityUnlock, setIsAwaitingBulkSecurityUnlock] =
+    useState(false);
   const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
   const [isBulkShareDialogOpen, setIsBulkShareDialogOpen] = useState(false);
   const [bulkShareDocuments, setBulkShareDocuments] = useState<
@@ -276,6 +480,7 @@ export default function DocumentsPage() {
   >([]);
   const [moveTargetFolder, setMoveTargetFolder] = useState<string | null>(null);
   const [isMoving, setIsMoving] = useState(false);
+  const [isApplyingBulkSecurity, setIsApplyingBulkSecurity] = useState(false);
   const [isCreatingFolderInMove, setIsCreatingFolderInMove] = useState(false);
   const [newFolderNameInMove, setNewFolderNameInMove] = useState("");
 
@@ -296,6 +501,8 @@ export default function DocumentsPage() {
   const [uploadMetadata, setUploadMetadata] = useState<Record<string, string>>(
     {},
   );
+  const [uploadTags, setUploadTags] = useState<string[]>([]);
+  const [lockAfterUpload, setLockAfterUpload] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -303,6 +510,37 @@ export default function DocumentsPage() {
   // Share dialog state
   const [shareDocument, setShareDocument] = useState<Document | null>(null);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+
+  // Encrypted notes editor state
+  const [notesEditorDoc, setNotesEditorDoc] = useState<Document | null>(null);
+  const [auditLogDocumentId, setAuditLogDocumentId] = useState<string | null>(null);
+  const [auditLogDocumentTitle, setAuditLogDocumentTitle] = useState<string | null>(null);
+  const [auditLogEntries, setAuditLogEntries] = useState<DocumentAuditEntry[]>([]);
+  const [auditLogLoading, setAuditLogLoading] = useState(false);
+  const handleEncryptedNoteSaveSuccess = (
+    savedNote: Pick<Document, "id" | "notes_encrypted" | "notes">,
+  ) => {
+    setDocuments((prev) =>
+      prev.map((doc) =>
+        doc.id === savedNote.id
+          ? {
+              ...doc,
+              notes_encrypted: savedNote.notes_encrypted,
+              notes: savedNote.notes,
+            }
+          : doc,
+      ),
+    );
+    setNotesEditorDoc((prev) =>
+      prev && prev.id === savedNote.id
+        ? {
+            ...prev,
+            notes_encrypted: savedNote.notes_encrypted,
+            notes: savedNote.notes,
+          }
+        : prev,
+    );
+  };
 
   // Family members for reminder watcher
   interface FamilyMember {
@@ -315,7 +553,17 @@ export default function DocumentsPage() {
   const [categoryIconSearch, setCategoryIconSearch] = useState("");
 
   const supabase = createClient();
-  const vaultContext = useVault();
+  const vaultContext = use(VaultContext);
+  if (!vaultContext) {
+    throw new Error("DocumentsPage must be used within VaultProvider");
+  }
+  const { emit } = useDocumentAuditLog();
+  const vaultState: "unlocked" | "locked" | "not-setup" = !vaultContext.isSetUp
+    ? "not-setup"
+    : !vaultContext.isUnlocked
+      ? "locked"
+      : "unlocked";
+  const isUnlockRequested = vaultContext.isUnlockRequested;
   const { seniorMode } = useThemeSafe();
   const { capture } = usePostHog();
 
@@ -378,47 +626,48 @@ export default function DocumentsPage() {
     );
   }, [categoryIconSearch]);
 
+  const hasRecentUnlock =
+    vaultContext.isUnlocked &&
+    Date.now() - vaultContext.lastUnlockTimestamp <= FIVE_MINUTES_MS;
+
   useEffect(() => {
-    if (vaultContext.isUnlocked) {
-      lastVaultUnlockRef.current = Date.now();
-      setRequiresRecentUnlock(false);
-      if (pendingUnlockCategory) {
-        if (pendingUnlockCategory.startsWith("custom:")) {
-          const customId = pendingUnlockCategory.replace("custom:", "");
-          setActiveTab(`custom:${customId}`);
-          setSelectedCustomCategory(customId);
-          setSelectedCategory(null);
-        } else {
-          setActiveTab(pendingUnlockCategory);
-          setSelectedCategory(pendingUnlockCategory as DocumentCategory);
-          setSelectedCustomCategory(null);
-        }
-        setCurrentFolder(null);
-        setPendingUnlockCategory(null);
+    if (!hasRecentUnlock) {
+      return;
+    }
+
+    setRequiresRecentUnlock(false);
+
+    if (pendingUnlockCategory) {
+      if (pendingUnlockCategory.startsWith("custom:")) {
+        const customId = pendingUnlockCategory.replace("custom:", "");
+        setActiveTab(`custom:${customId}`);
+        setSelectedCustomCategory(customId);
+        setSelectedCategory(null);
+      } else {
+        setActiveTab(pendingUnlockCategory);
+        setSelectedCategory(pendingUnlockCategory as DocumentCategory);
+        setSelectedCustomCategory(null);
       }
-      if (pendingUnlockDocumentId) {
-        setHighlightedDoc(pendingUnlockDocumentId);
-        const target = documents.find((doc) => doc.id === pendingUnlockDocumentId);
-        if (target) {
-          void handleOpenDocument(target);
-        }
-        setPendingUnlockDocumentId(null);
+      setCurrentFolder(null);
+      setPendingUnlockCategory(null);
+    }
+
+    if (pendingUnlockDocumentId) {
+      setHighlightedDoc(pendingUnlockDocumentId);
+      const target = documents.find((doc) => doc.id === pendingUnlockDocumentId);
+      if (target) {
+        void handleOpenDocument(target);
       }
+      setPendingUnlockDocumentId(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    vaultContext.isUnlocked,
+    hasRecentUnlock,
     pendingUnlockCategory,
     pendingUnlockDocumentId,
     documents,
+    vaultContext.lastUnlockTimestamp,
   ]);
-
-  const hasRecentUnlock = useCallback(() => {
-    return (
-      vaultContext.isUnlocked &&
-      Date.now() - lastVaultUnlockRef.current <= RECENT_UNLOCK_WINDOW_MS
-    );
-  }, [vaultContext.isUnlocked]);
 
   const isDocumentLocked = useCallback(
     (doc: Document) => Boolean(doc.extra_security_enabled) && !vaultContext.isUnlocked,
@@ -428,11 +677,16 @@ export default function DocumentsPage() {
   const handleToggleCategoryLock = async (e: React.MouseEvent, categoryKey: string) => {
     e.stopPropagation();
 
-    if (!hasRecentUnlock()) {
+    if (!hasRecentUnlock) {
       setRequiresRecentUnlock(true);
       vaultContext.requestUnlock();
       return;
     }
+
+    const willLock = !securedCategories.includes(categoryKey);
+    emit(willLock ? EVENT_CATEGORY_LOCKED : EVENT_CATEGORY_UNLOCKED, {
+      category_key: categoryKey,
+    });
 
     const newSecured = securedCategories.includes(categoryKey)
       ? securedCategories.filter((key) => key !== categoryKey)
@@ -470,12 +724,16 @@ export default function DocumentsPage() {
   ) => {
     event.stopPropagation();
 
-    if (!hasRecentUnlock()) {
+    if (!hasRecentUnlock) {
       setRequiresRecentUnlock(true);
       setPendingUnlockDocumentId(documentId);
       vaultContext.requestUnlock();
       return;
     }
+
+    emit(enabled ? EVENT_DOCUMENT_LOCKED : EVENT_DOCUMENT_UNLOCKED, {
+      document_id: documentId,
+    });
 
     setDocuments((prev) =>
       prev.map((doc) =>
@@ -497,14 +755,18 @@ export default function DocumentsPage() {
     }
   };
 
-  const isCategoryLocked = useCallback(
-    (categoryKey: string) =>
-      securedCategories.includes(categoryKey) && !vaultContext.isUnlocked,
-    [securedCategories, vaultContext.isUnlocked],
-  );
+  const isCategoryTimeLocked = (categoryKey: string) =>
+    securedCategories.includes(categoryKey) &&
+    (!vaultContext.isUnlocked ||
+      Date.now() - vaultContext.lastUnlockTimestamp > FIVE_MINUTES_MS);
 
   const handleCategoryClick = (categoryKey: string) => {
-    if (isCategoryLocked(categoryKey)) {
+    const lockedByTime =
+      securedCategories.includes(categoryKey) &&
+      (!vaultContext.isUnlocked ||
+        Date.now() - vaultContext.lastUnlockTimestamp > FIVE_MINUTES_MS);
+
+    if (lockedByTime) {
       setPendingUnlockCategory(categoryKey);
       vaultContext.requestUnlock();
       return;
@@ -638,7 +900,11 @@ export default function DocumentsPage() {
         const targetCategoryKey = targetDoc.custom_category_id
           ? `custom:${targetDoc.custom_category_id}`
           : targetDoc.category;
-        if (isCategoryLocked(targetCategoryKey) || isDocumentLocked(targetDoc)) {
+        const categoryIsLocked =
+          securedCategories.includes(targetCategoryKey) &&
+          (!vaultContext.isUnlocked ||
+            Date.now() - vaultContext.lastUnlockTimestamp > FIVE_MINUTES_MS);
+        if (categoryIsLocked || isDocumentLocked(targetDoc)) {
           setPendingUnlockCategory(targetCategoryKey);
           setPendingUnlockDocumentId(targetDoc.id);
           vaultContext.requestUnlock();
@@ -664,13 +930,82 @@ export default function DocumentsPage() {
         clearTimeout(clearTimer);
       };
     }
-  }, [highlightedDoc, documents, vaultContext, isCategoryLocked, isDocumentLocked]);
+  }, [
+    highlightedDoc,
+    documents,
+    isDocumentLocked,
+    securedCategories,
+    vaultContext.isUnlocked,
+    vaultContext.lastUnlockTimestamp,
+    vaultContext,
+  ]);
 
   const [decryptedTitles, setDecryptedTitles] = useState<
     Record<string, string>
   >({});
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewNotes, setPreviewNotes] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!auditLogDocumentId) {
+      setAuditLogEntries([]);
+      setAuditLogLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchAuditLog = async () => {
+      setAuditLogLoading(true);
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+          if (isMounted) {
+            setAuditLogEntries([]);
+          }
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("security_audit_log")
+          .select("id, event_type, timestamp, event_data")
+          .eq("user_id", user.id)
+          .in("event_type", [
+            "document_viewed",
+            "document_downloaded",
+            "document_locked",
+            "document_unlocked",
+          ])
+          .filter("event_data->>document_id", "eq", auditLogDocumentId)
+          .order("timestamp", { ascending: false })
+          .limit(50);
+
+        if (error) {
+          throw error;
+        }
+
+        if (isMounted) {
+          setAuditLogEntries((data ?? []) as DocumentAuditEntry[]);
+        }
+      } catch {
+        if (isMounted) {
+          setAuditLogEntries([]);
+        }
+      } finally {
+        if (isMounted) {
+          setAuditLogLoading(false);
+        }
+      }
+    };
+
+    void fetchAuditLog();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [auditLogDocumentId, supabase]);
 
   useEffect(() => {
     if (!vaultContext.isUnlocked || !vaultContext.masterKey) {
@@ -868,16 +1203,6 @@ export default function DocumentsPage() {
       }
     }
 
-    // Vault gate: once vault is set up, all uploads must be encrypted
-    if (!vaultContext.isUnlocked) {
-      if (!vaultContext.isSetUp) {
-        vaultContext.requestSetup();
-      } else {
-        vaultContext.requestUnlock();
-      }
-      return;
-    }
-
     setIsUploading(true);
     setUploadError(null);
 
@@ -921,10 +1246,13 @@ export default function DocumentsPage() {
           );
         }
       } else {
-        formData.append("file", uploadFile, uploadFile.name);
-        formData.append("title", uploadTitle.trim());
-        formData.append("file_name", uploadFile.name);
-        if (uploadNotes) formData.append("notes", uploadNotes);
+        // Zero-plaintext guarantee: uploads must always be encrypted.
+        // If the vault is not unlocked at this point, the UploadDialog UI gate
+        // (SubmitLocked / SubmitNotSetup) should have prevented reaching here.
+        // If we somehow arrive here anyway, abort — never upload unencrypted content.
+        throw new Error(
+          "Tresor nicht entsperrt. Bitte entsperren Sie Ihren Tresor, bevor Sie ein Dokument hochladen.",
+        );
       }
 
       formData.append("path", uploadCategory || "sonstige");
@@ -960,6 +1288,7 @@ export default function DocumentsPage() {
       if (Object.keys(filteredMetadata).length > 0) {
         formData.append("metadata", JSON.stringify(filteredMetadata));
       }
+      formData.append("tags", JSON.stringify(uploadTags));
 
       const uploadRes = await fetch("/api/documents/upload", {
         method: "POST",
@@ -1024,6 +1353,8 @@ export default function DocumentsPage() {
         file_size_kb: Math.round(fileSize / 1024),
       });
 
+      const uploadedTitle = uploadTitle.trim() || uploadFile.name;
+
       // Reset and refresh
       setUploadFile(null);
       setUploadTitle("");
@@ -1034,7 +1365,72 @@ export default function DocumentsPage() {
       setUploadCustomCategory(null);
       setUploadReminderWatcher(null);
       setUploadMetadata({});
+      setUploadTags([]);
+      setLockAfterUpload(false);
       setIsUploadOpen(false);
+
+      let lockSucceeded = false;
+      let lockFailed = false;
+      if (lockAfterUpload && insertedDoc) {
+        const { error: lockError } = await supabase
+          .from("documents")
+          .update({ extra_security_enabled: true })
+          .eq("id", insertedDoc.id);
+        if (lockError) {
+          lockFailed = true;
+        } else {
+          lockSucceeded = true;
+          setDocuments((prev) =>
+            prev.map((doc) =>
+              doc.id === insertedDoc.id
+                ? { ...doc, extra_security_enabled: true }
+                : doc,
+            ),
+          );
+        }
+      }
+
+      if (lockFailed) {
+        toast({
+          title: "⚠️ Automatisches Sperren fehlgeschlagen",
+          description:
+            'Das Dokument wurde hochgeladen, aber nicht gesperrt. Verwenden Sie "🔒 Sperren".',
+          duration: 7000,
+        });
+      }
+
+      toast({
+        title: `✅ "${uploadedTitle}" hochgeladen`,
+        duration: 6000,
+        actions: insertedDoc
+          ? [
+              ...(lockSucceeded
+            ? [{ label: "🔒 Gesperrt" }]
+            : [
+                {
+                  label: "🔒 Sperren",
+                  onClick: async () => {
+                    await handleToggleDocumentSecurity(
+                      { stopPropagation: () => {} },
+                      insertedDoc.id,
+                      true,
+                    );
+                    toast({
+                      title: "🔒 Dokument gesperrt",
+                      duration: 3000,
+                    });
+                  },
+                },
+              ]),
+              {
+                label: "Ansehen",
+                onClick: () => {
+                  navigateToDocument(insertedDoc);
+                },
+              },
+            ]
+          : undefined,
+      });
 
       // Fetch in background to ensure consistency
       fetchDocuments();
@@ -1100,6 +1496,9 @@ export default function DocumentsPage() {
         );
         setUpgradeModalFeature("document");
         setUpgradeModalOpen(true);
+      } else if (errorObj?.message?.includes("Tresor nicht entsperrt")) {
+        // Surface the vault-not-unlocked error directly
+        setUploadError(errorObj.message ?? "Tresor nicht entsperrt.");
       } else {
         setUploadError("Fehler beim Hochladen. Bitte versuchen Sie es erneut.");
       }
@@ -1194,6 +1593,10 @@ export default function DocumentsPage() {
         a.click();
         URL.revokeObjectURL(url);
         window.document.body.removeChild(a);
+        emit(EVENT_DOCUMENT_DOWNLOADED, {
+          document_id: doc.id,
+          document_title: doc.title ?? "Unbekannt",
+        });
       } catch {
         alert("Fehler beim Herunterladen des Dokuments");
       }
@@ -1202,7 +1605,15 @@ export default function DocumentsPage() {
     const { data } = await supabase.storage
       .from("documents")
       .createSignedUrl(doc.file_path, 60);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+    if (data?.signedUrl) {
+      const openedWindow = window.open(data.signedUrl, "_blank");
+      if (openedWindow) {
+        emit(EVENT_DOCUMENT_DOWNLOADED, {
+          document_id: doc.id,
+          document_title: doc.title ?? "Unbekannt",
+        });
+      }
+    }
   };
 
   const handleOpenDocument = async (doc: Document) => {
@@ -1216,6 +1627,10 @@ export default function DocumentsPage() {
       setPreviewBlob(null);
       setPreviewNotes(null);
       setPreviewDocument(doc);
+      emit(EVENT_DOCUMENT_VIEWED, {
+        document_id: doc.id,
+        document_title: doc.title ?? "Unbekannt",
+      });
       return;
     }
     assertEncryptionVersionSupported(doc);
@@ -1248,6 +1663,10 @@ export default function DocumentsPage() {
           : null,
       );
       setPreviewDocument(doc);
+      emit(EVENT_DOCUMENT_VIEWED, {
+        document_id: doc.id,
+        document_title: doc.title ?? "Unbekannt",
+      });
     } catch {
       alert("Fehler beim Öffnen des Dokuments");
     }
@@ -1271,9 +1690,114 @@ export default function DocumentsPage() {
     setSelectedDocuments(new Set(categoryDocs.map((d) => d.id)));
   };
 
+  const clearPendingBulkSecurityAction = useCallback(() => {
+    setPendingBulkSecurityAction(null);
+    setPendingBulkSecuritySelectionIds(null);
+    setIsAwaitingBulkSecurityUnlock(false);
+  }, []);
+
   const clearSelection = () => {
     setSelectedDocuments(new Set());
+    clearPendingBulkSecurityAction();
   };
+
+  const applyBulkDocumentSecurity = useCallback(
+    async (enabled: boolean, targetDocumentIds?: string[]) => {
+      const docIds = targetDocumentIds ?? Array.from(selectedDocuments);
+      if (docIds.length === 0) return;
+
+      setIsApplyingBulkSecurity(true);
+
+      try {
+        const results = await Promise.all(
+          docIds.map(async (docId) => {
+            const { error } = await supabase
+              .from("documents")
+              .update({ extra_security_enabled: enabled })
+              .eq("id", docId);
+            return { docId, ok: !error };
+          }),
+        );
+
+        const successfulIds = new Set(
+          results.filter((result) => result.ok).map((result) => result.docId),
+        );
+        const successCount = successfulIds.size;
+        const failureCount = docIds.length - successCount;
+
+        if (successCount > 0) {
+          setDocuments((prev) =>
+            prev.map((doc) =>
+              successfulIds.has(doc.id)
+                ? { ...doc, extra_security_enabled: enabled }
+                : doc,
+            ),
+          );
+          toast({
+            title: `${successCount} Dokumente ${enabled ? "gesperrt" : "entsperrt"}`,
+          });
+        }
+
+        if (failureCount > 0) {
+          toast({
+            title: "Teilweise fehlgeschlagen",
+            description: `${failureCount} Dokumente konnten nicht aktualisiert werden.`,
+          });
+        }
+      } finally {
+        setIsApplyingBulkSecurity(false);
+      }
+    },
+    [selectedDocuments, supabase],
+  );
+
+  useEffect(() => {
+    if (
+      !pendingBulkSecurityAction ||
+      !pendingBulkSecuritySelectionIds ||
+      pendingBulkSecuritySelectionIds.length === 0 ||
+      !hasRecentUnlock
+    ) {
+      return;
+    }
+
+    const shouldEnable = pendingBulkSecurityAction === "lock";
+    const deferredDocIds = pendingBulkSecuritySelectionIds;
+    clearPendingBulkSecurityAction();
+    setRequiresRecentUnlock(false);
+    void applyBulkDocumentSecurity(shouldEnable, deferredDocIds);
+  }, [
+    applyBulkDocumentSecurity,
+    clearPendingBulkSecurityAction,
+    hasRecentUnlock,
+    pendingBulkSecurityAction,
+    pendingBulkSecuritySelectionIds,
+  ]);
+
+  useEffect(() => {
+    if (!isAwaitingBulkSecurityUnlock) {
+      return;
+    }
+
+    if (!pendingBulkSecurityAction || !pendingBulkSecuritySelectionIds) {
+      setIsAwaitingBulkSecurityUnlock(false);
+      return;
+    }
+
+    if (hasRecentUnlock || isUnlockRequested) {
+      return;
+    }
+
+    clearPendingBulkSecurityAction();
+    setRequiresRecentUnlock(false);
+  }, [
+    clearPendingBulkSecurityAction,
+    hasRecentUnlock,
+    isAwaitingBulkSecurityUnlock,
+    isUnlockRequested,
+    pendingBulkSecurityAction,
+    pendingBulkSecuritySelectionIds,
+  ]);
 
   // Navigate to document logic
   const navigateToDocument = (doc: Document) => {
@@ -1281,7 +1805,7 @@ export default function DocumentsPage() {
       ? `custom:${doc.custom_category_id}`
       : doc.category;
 
-    if (isCategoryLocked(targetCategoryKey) || isDocumentLocked(doc)) {
+    if (isCategoryTimeLocked(targetCategoryKey) || isDocumentLocked(doc)) {
       setPendingUnlockCategory(targetCategoryKey);
       setPendingUnlockDocumentId(doc.id);
       vaultContext.requestUnlock();
@@ -1484,6 +2008,12 @@ export default function DocumentsPage() {
     setIsUploadOpen(true);
   };
 
+  const handleCloseUpload = () => {
+    setUploadTags([]);
+    setLockAfterUpload(false);
+    setIsUploadOpen(false);
+  };
+
   // Custom category handlers
   const openCategoryDialog = (category?: CustomCategory) => {
     if (
@@ -1654,48 +2184,53 @@ export default function DocumentsPage() {
     });
   })();
 
-  const filteredDocuments = validatedDocuments.filter((doc) => {
-    const matchesSearchQuery = (d: Document) => {
-      if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
+  const availableTags = useMemo(
+    () => [...new Set(documents.flatMap((d) => d.tags ?? []))].sort(),
+    [documents],
+  );
 
-      // Check stored title
-      if (d.title.toLowerCase().includes(q)) return true;
+  const filteredDocuments = validatedDocuments
+    .filter((doc) => {
+      const matchesSearchQuery = (d: Document) => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
 
-      // Check decrypted title if available
-      const decryptedTitle = decryptedTitles[d.id];
-      if (decryptedTitle && decryptedTitle.toLowerCase().includes(q)) return true;
+        if (d.title.toLowerCase().includes(q)) return true;
 
-      // Check notes
-      if (d.notes?.toLowerCase().includes(q)) return true;
+        const decryptedTitle = decryptedTitles[d.id];
+        if (decryptedTitle && decryptedTitle.toLowerCase().includes(q))
+          return true;
 
-      // Check metadata
-      if (d.metadata) {
-        return Object.values(d.metadata).some(
-          (val) => typeof val === "string" && val.toLowerCase().includes(q),
-        );
+        if (d.notes?.toLowerCase().includes(q)) return true;
+
+        if (d.metadata) {
+          return Object.values(d.metadata).some(
+            (val) => typeof val === "string" && val.toLowerCase().includes(q),
+          );
+        }
+        return false;
+      };
+
+      if (selectedCustomCategory) {
+        const matchesCustomCategory =
+          doc.custom_category_id === selectedCustomCategory;
+        return matchesCustomCategory && matchesSearchQuery(doc);
       }
-      return false;
-    };
 
-    // Check if viewing a custom category
-    if (selectedCustomCategory) {
-      const matchesCustomCategory =
-        doc.custom_category_id === selectedCustomCategory;
-      return matchesCustomCategory && matchesSearchQuery(doc);
-    }
-
-    // Check standard category
-    const matchesCategory =
-      !selectedCategory || doc.category === selectedCategory;
-    // Also filter out documents that have a custom category when viewing standard categories
-    const notInCustomCategory = !doc.custom_category_id;
-    return (
-      matchesCategory &&
-      (selectedCategory ? notInCustomCategory : true) &&
-      matchesSearchQuery(doc)
+      const matchesCategory =
+        !selectedCategory || doc.category === selectedCategory;
+      const notInCustomCategory = !doc.custom_category_id;
+      return (
+        matchesCategory &&
+        (selectedCategory ? notInCustomCategory : true) &&
+        matchesSearchQuery(doc)
+      );
+    })
+    .filter(
+      (doc) =>
+        activeTagFilters.size === 0 ||
+        (doc.tags ?? []).some((t) => activeTagFilters.has(t)),
     );
-  });
 
   const getDocumentCountForCategory = (category: DocumentCategory) => {
     return validatedDocuments.filter(
@@ -1723,8 +2258,18 @@ export default function DocumentsPage() {
   };
 
   const getDisplayTitle = (doc: Document) => {
-    if (privacyModeEnabled && (isCategoryLocked(doc.custom_category_id ? `custom:${doc.custom_category_id}` : doc.category) || isDocumentLocked(doc))) {
+    if (
+      privacyModeEnabled &&
+      (isCategoryTimeLocked(
+        doc.custom_category_id ? `custom:${doc.custom_category_id}` : doc.category,
+      ) ||
+        isDocumentLocked(doc))
+    ) {
       return "Titel verborgen";
+    }
+    // When vault is locked and doc is encrypted, keep plaintext title visible.
+    if (doc.extra_security_enabled && !vaultContext.isUnlocked && !privacyModeEnabled) {
+      return doc.title;
     }
     return decryptedTitles[doc.id] ?? doc.title;
   };
@@ -1872,6 +2417,24 @@ export default function DocumentsPage() {
                 {isExtraSecured
                   ? "Extra-Sicherheit entfernen"
                   : "Extra-Sicherheit aktivieren"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setNotesEditorDoc(doc)}
+                className="py-3"
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                Notiz bearbeiten
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  setAuditLogDocumentId(doc.id);
+                  setAuditLogDocumentTitle(doc.title ?? "Unbekannt");
+                }}
+                className="py-3"
+              >
+                <History className="w-4 h-4 mr-2" />
+                Zugriffsprotokoll
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -2272,6 +2835,43 @@ export default function DocumentsPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {availableTags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {availableTags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() =>
+                    setActiveTagFilters((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(tag)) {
+                        next.delete(tag);
+                      } else {
+                        next.add(tag);
+                      }
+                      return next;
+                    })
+                  }
+                  className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
+                    activeTagFilters.has(tag)
+                      ? "bg-sage-500 text-white border-sage-500"
+                      : "bg-white text-warmgray-700 border-warmgray-300 hover:border-sage-400"
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+              {activeTagFilters.size > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveTagFilters(new Set())}
+                  className="px-3 py-1 rounded-full text-sm text-warmgray-500 border border-warmgray-200 hover:border-warmgray-400"
+                >
+                  Filter zurücksetzen
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
         <Button
           type="button"
@@ -2383,6 +2983,11 @@ export default function DocumentsPage() {
             </div>
           ) : (
             <div className="space-y-10 animate-fade-in">
+              <ExpiryDashboardWidget
+                documents={validatedDocuments}
+                onOpenDocument={navigateToDocument}
+              />
+
               {/* Recent Documents Section */}
               {recentDocuments.length > 0 && !searchQuery && (
                 <section>
@@ -2423,217 +3028,40 @@ export default function DocumentsPage() {
               <div>
                 <h2 className="text-lg font-semibold text-warmgray-900 mb-4">Kategorien</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => {
-                    const Icon = iconMap[category.icon] || FileText;
-                    const count = getDocumentCountForCategory(key as DocumentCategory);
-                    const locked = isCategoryLocked(key);
-                    const secured = securedCategories.includes(key);
-
-                    return (
-                      <Card
-                        key={key}
-                        className={`group relative overflow-hidden cursor-pointer transition-all duration-300 border-2 ${
-                          locked 
-                            ? 'bg-warmgray-50/50 border-warmgray-200 grayscale-[0.3]' 
-                            : 'hover:border-sage-400 hover:shadow-xl border-warmgray-200 bg-white'
-                        } senior-mode:p-2`}
-                        onClick={() => handleCategoryClick(key as DocumentCategory)}
-                      >
-                        {/* Hover Overlay for Locked state */}
-                        {locked && (
-                          <div className="absolute inset-0 bg-warmgray-900/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
-                            <div className="bg-white/90 px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
-                              <Lock className="w-4 h-4 text-amber-600" />
-                              <span className="text-xs font-bold text-warmgray-900 uppercase tracking-tight">Klicken zum Entsperren</span>
-                            </div>
-                          </div>
-                        )}
-
-                        <CardHeader className="pb-3 relative z-0">
-                          <div className="flex items-start justify-between">
-                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                              locked 
-                                ? 'bg-warmgray-200 text-warmgray-500 group-hover:scale-95' 
-                                : 'bg-sage-100 text-sage-600 group-hover:bg-sage-600 group-hover:text-white group-hover:rotate-3'
-                            } senior-mode:w-20 senior-mode:h-20`}>
-                              {locked ? (
-                                <Lock className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
-                              ) : (
-                                <Icon className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
-                              )}
-                            </div>
-                            <div className="flex gap-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className={`h-11 w-11 rounded-full transition-all ${
-                                  secured ? 'text-amber-600 bg-amber-50 border-amber-100 border' : 'text-warmgray-300 hover:text-sage-600 hover:bg-sage-50'
-                                } senior-mode:h-14 senior-mode:w-14`}
-                                onClick={(e) => handleToggleCategoryLock(e, key)}
-                                title={secured ? "Extra-Sicherheit aktiviert" : "Extra-Sicherheit aktivieren"}
-                              >
-                                {secured ? <ShieldCheck className="w-6 h-6" /> : <Shield className="w-6 h-6" />}
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-11 w-11 rounded-full text-warmgray-300 hover:text-sage-600 hover:bg-sage-50 transition-colors senior-mode:h-14 senior-mode:w-14"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openUploadDialog(key as DocumentCategory);
-                                }}
-                              >
-                                <Plus className="w-6 h-6" />
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="pt-4">
-                            <CardTitle className="text-xl font-serif senior-mode:text-3xl">{category.name}</CardTitle>
-                            <CardDescription className="line-clamp-2 mt-1.5 leading-relaxed senior-mode:text-xl senior-mode:mt-2">
-                              {category.description}
-                            </CardDescription>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="relative z-0">
-                          <div className="flex items-center justify-between border-t border-warmgray-100 pt-4 mt-2">
-                            <div className="flex flex-col">
-                              <p className="text-sm text-warmgray-500 senior-mode:text-lg">Inhalt</p>
-                              <p className="text-base font-semibold text-warmgray-900 senior-mode:text-2xl">
-                                <span className={locked ? 'text-warmgray-400' : 'text-sage-700'}>
-                                  {locked ? '--' : count}
-                                </span>{" "}
-                                Dokument{count !== 1 ? "e" : ""}
-                              </p>
-                            </div>
-                            {secured && (
-                              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${
-                                locked ? 'bg-warmgray-100 border-warmgray-200 text-warmgray-600' : 'bg-amber-50 border-amber-200 text-amber-700'
-                              }`}>
-                                <Lock className="w-3 h-3" />
-                                <span className="text-[11px] font-bold uppercase tracking-wider">
-                                  {locked ? 'Gesperrt' : 'Gesichert'}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-
-                  })}
+                  {Object.entries(DOCUMENT_CATEGORIES).map(([key, category]) => (
+                    <CategoryCard
+                      key={key}
+                      categoryKey={key}
+                      title={category.name}
+                      description={category.description}
+                      icon={iconMap[category.icon] || FileText}
+                      documentCount={getDocumentCountForCategory(key as DocumentCategory)}
+                      securedCategories={securedCategories}
+                      lastUnlockTimestamp={vaultContext.lastUnlockTimestamp}
+                      onCardClick={handleCategoryClick}
+                      onToggleCategoryLock={handleToggleCategoryLock}
+                      onAddDocument={(categoryKey) =>
+                        openUploadDialog(categoryKey as DocumentCategory)
+                      }
+                    />
+                  ))}
 
                   {/* Custom Category Cards */}
-                  {customCategories.map((cat) => {
-                    const count = getDocumentCountForCustomCategory(cat.id);
-                    const locked = isCategoryLocked(`custom:${cat.id}`);
-                    const secured = securedCategories.includes(`custom:${cat.id}`);
-                    const CustomIcon = resolveCategoryIcon(cat.icon);
-
-                    return (
-                      <Card
-                        key={cat.id}
-                        className={`group relative overflow-hidden cursor-pointer transition-all duration-300 border-2 ${
-                          locked 
-                            ? 'bg-warmgray-50/50 border-warmgray-200 grayscale-[0.3]' 
-                            : 'hover:border-sage-400 hover:shadow-xl border-warmgray-200 bg-white'
-                        }`}
-                        onClick={() => handleCategoryClick(`custom:${cat.id}`)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            handleCategoryClick(`custom:${cat.id}`);
-                          }
-                        }}
-                      >
-                        {locked && (
-                          <div className="absolute inset-0 bg-warmgray-900/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
-                            <div className="bg-white/90 px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
-                              <Lock className="w-4 h-4 text-amber-600" />
-                              <span className="text-xs font-bold text-warmgray-900 uppercase tracking-tight">
-                                Klicken zum Entsperren
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        <CardHeader className="pb-3 relative z-0">
-                          <div className="flex items-start justify-between">
-                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                              locked 
-                                ? "bg-warmgray-200 text-warmgray-500 group-hover:scale-95"
-                                : "bg-sage-100 text-sage-600 group-hover:bg-sage-600 group-hover:text-white group-hover:rotate-3"
-                            } senior-mode:w-20 senior-mode:h-20`}>
-                              {locked ? (
-                                <Lock className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
-                              ) : (
-                                <CustomIcon className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
-                              )}
-                            </div>
-                            <div className="flex gap-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className={`h-11 w-11 rounded-full transition-all ${
-                                  secured
-                                    ? "text-amber-600 bg-amber-50 border border-amber-100"
-                                    : "text-warmgray-300 hover:text-sage-600 hover:bg-sage-50"
-                                }`}
-                                onClick={(e) => handleToggleCategoryLock(e, `custom:${cat.id}`)}
-                                title={secured ? "Extra-Sicherheit aktiviert" : "Extra-Sicherheit aktivieren"}
-                              >
-                                {secured ? <ShieldCheck className="w-6 h-6" /> : <Shield className="w-6 h-6" />}
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-11 w-11 rounded-full text-warmgray-300 hover:text-sage-600 hover:bg-sage-50 transition-colors"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openUploadDialog(null, cat.id);
-                                }}
-                                title="Dokument hinzufügen"
-                              >
-                                <Plus className="w-6 h-6" />
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="pt-4">
-                            <CardTitle className="text-xl font-serif senior-mode:text-3xl">{cat.name}</CardTitle>
-                            {cat.description && (
-                              <CardDescription className="line-clamp-2 mt-1.5 leading-relaxed senior-mode:text-xl senior-mode:mt-2">
-                                {cat.description}
-                              </CardDescription>
-                            )}
-                          </div>
-                        </CardHeader>
-                        <CardContent className="relative z-0">
-                          <div className="flex items-center justify-between border-t border-warmgray-100 pt-4 mt-2">
-                            <div className="flex flex-col">
-                              <p className="text-sm text-warmgray-500 senior-mode:text-lg">Inhalt</p>
-                              <p className="text-base font-semibold text-warmgray-900 senior-mode:text-2xl">
-                                <span className={locked ? "text-warmgray-400" : "text-sage-700"}>
-                                  {locked ? "--" : count}
-                                </span>{" "}
-                                Dokument{count !== 1 ? "e" : ""}
-                              </p>
-                            </div>
-                            {secured && (
-                              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${
-                                locked ? "bg-warmgray-100 border-warmgray-200 text-warmgray-600" : "bg-amber-50 border-amber-200 text-amber-700"
-                              }`}>
-                                <Lock className="w-3 h-3" />
-                                <span className="text-[11px] font-bold uppercase tracking-wider">
-                                  {locked ? "Gesperrt" : "Gesichert"}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                  {customCategories.map((cat) => (
+                    <CategoryCard
+                      key={cat.id}
+                      categoryKey={`custom:${cat.id}`}
+                      title={cat.name}
+                      description={cat.description}
+                      icon={resolveCategoryIcon(cat.icon)}
+                      documentCount={getDocumentCountForCustomCategory(cat.id)}
+                      securedCategories={securedCategories}
+                      lastUnlockTimestamp={vaultContext.lastUnlockTimestamp}
+                      onCardClick={handleCategoryClick}
+                      onToggleCategoryLock={handleToggleCategoryLock}
+                      onAddDocument={() => openUploadDialog(null, cat.id)}
+                    />
+                  ))}
 
                   {/* Add Custom Category Card */}
                   <button
@@ -2843,7 +3271,16 @@ export default function DocumentsPage() {
         ))}
       </Tabs>
       {/* Upload Dialog */}
-      <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+      <Dialog
+        open={isUploadOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setIsUploadOpen(true);
+          } else {
+            handleCloseUpload();
+          }
+        }}
+      >
         {isUploadOpen ? (
           <UploadDialog
             customCategories={customCategories}
@@ -2856,7 +3293,7 @@ export default function DocumentsPage() {
             isCreatingSubcategory={isCreatingSubcategory}
             isUploading={isUploading}
             newSubcategoryName={newSubcategoryName}
-            onClose={() => setIsUploadOpen(false)}
+            onClose={handleCloseUpload}
             setIsCreatingSubcategory={setIsCreatingSubcategory}
             setNewSubcategoryName={setNewSubcategoryName}
             setUploadCategory={setUploadCategory}
@@ -2879,6 +3316,18 @@ export default function DocumentsPage() {
             uploadReminderWatcher={uploadReminderWatcher}
             uploadSubcategory={uploadSubcategory}
             uploadTitle={uploadTitle}
+            tags={uploadTags}
+            onTagsChange={setUploadTags}
+            lockAfterUpload={lockAfterUpload}
+            onLockAfterUploadChange={setLockAfterUpload}
+            vaultState={vaultState}
+            vault={{
+              unlock: vaultContext.unlock,
+              unlockWithBiometric: vaultContext.unlockWithBiometric,
+              hasBiometricSetup: vaultContext.hasBiometricSetup,
+              isBiometricSupported: vaultContext.isBiometricSupported,
+              requestSetup: vaultContext.requestSetup,
+            }}
             userTier={userTier}
             validateAndSetFile={validateAndSetFile}
           />
@@ -3068,9 +3517,9 @@ export default function DocumentsPage() {
                   const categoryKey = doc.custom_category_id
                     ? `custom:${doc.custom_category_id}`
                     : doc.category;
-                  return isDocumentLocked(doc) || isCategoryLocked(categoryKey);
+                  return isDocumentLocked(doc) || isCategoryTimeLocked(categoryKey);
                 });
-                if (hasSecuredSelection && !hasRecentUnlock()) {
+                if (hasSecuredSelection && !hasRecentUnlock) {
                   setRequiresRecentUnlock(true);
                   vaultContext.requestUnlock();
                   return;
@@ -3090,6 +3539,60 @@ export default function DocumentsPage() {
             >
               <Share2 className="sm:mr-2 h-4 w-4" />
               <span className="hidden sm:inline">Teilen</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-white hover:bg-warmgray-800 h-9 px-2 sm:px-3 flex-shrink-0"
+              disabled={isApplyingBulkSecurity}
+              onClick={() => {
+                const selectedDocIds = Array.from(selectedDocuments);
+                if (selectedDocIds.length === 0) {
+                  clearPendingBulkSecurityAction();
+                  return;
+                }
+
+                if (!hasRecentUnlock) {
+                  setRequiresRecentUnlock(true);
+                  setPendingBulkSecurityAction("lock");
+                  setPendingBulkSecuritySelectionIds(selectedDocIds);
+                  setIsAwaitingBulkSecurityUnlock(true);
+                  vaultContext.requestUnlock();
+                  return;
+                }
+                clearPendingBulkSecurityAction();
+                void applyBulkDocumentSecurity(true, selectedDocIds);
+              }}
+            >
+              <Lock className="sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Sperren</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-white hover:bg-warmgray-800 h-9 px-2 sm:px-3 flex-shrink-0"
+              disabled={isApplyingBulkSecurity}
+              onClick={() => {
+                const selectedDocIds = Array.from(selectedDocuments);
+                if (selectedDocIds.length === 0) {
+                  clearPendingBulkSecurityAction();
+                  return;
+                }
+
+                if (!hasRecentUnlock) {
+                  setRequiresRecentUnlock(true);
+                  setPendingBulkSecurityAction("unlock");
+                  setPendingBulkSecuritySelectionIds(selectedDocIds);
+                  setIsAwaitingBulkSecurityUnlock(true);
+                  vaultContext.requestUnlock();
+                  return;
+                }
+                clearPendingBulkSecurityAction();
+                void applyBulkDocumentSecurity(false, selectedDocIds);
+              }}
+            >
+              <ShieldOff className="sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Entsperren</span>
             </Button>
             <Button
               size="sm"
@@ -3236,6 +3739,94 @@ export default function DocumentsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+      {/* Encrypted Notes Editor Dialog */}
+      <Dialog
+        open={!!notesEditorDoc}
+        onOpenChange={(open) => { if (!open) setNotesEditorDoc(null); }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Notiz</DialogTitle>
+            <DialogDescription>
+              {notesEditorDoc?.title}
+            </DialogDescription>
+          </DialogHeader>
+          {notesEditorDoc && (
+            vaultContext.isUnlocked
+              ? <EncryptedNotesEditor.Unlocked
+                  doc={notesEditorDoc}
+                  onClose={() => setNotesEditorDoc(null)}
+                  onSaveSuccess={handleEncryptedNoteSaveSuccess}
+                />
+              : <EncryptedNotesEditor.Locked onClose={() => setNotesEditorDoc(null)} />
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={auditLogDocumentId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAuditLogDocumentId(null);
+            setAuditLogDocumentTitle(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Zugriffsprotokoll - {auditLogDocumentTitle}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-96 overflow-y-auto">
+            {auditLogLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-sage-600" />
+              </div>
+            ) : auditLogEntries.length === 0 ? (
+              <div className="py-8 text-center text-warmgray-500">
+                Keine Einträge vorhanden.
+              </div>
+            ) : (
+              <div>
+                {auditLogEntries.map((entry) => {
+                  const icon =
+                    entry.event_type === "document_viewed" ? (
+                      <Eye className="w-4 h-4 text-sage-600" />
+                    ) : entry.event_type === "document_downloaded" ? (
+                      <Download className="w-4 h-4 text-sage-600" />
+                    ) : entry.event_type === "document_locked" ? (
+                      <Lock className="w-4 h-4 text-sage-600" />
+                    ) : (
+                      <LockOpen className="w-4 h-4 text-sage-600" />
+                    );
+
+                  const label =
+                    entry.event_type === "document_viewed"
+                      ? "Angesehen"
+                      : entry.event_type === "document_downloaded"
+                        ? "Heruntergeladen"
+                        : entry.event_type === "document_locked"
+                          ? "Gesperrt"
+                          : "Entsperrt";
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className="flex items-center gap-3 py-2 border-b border-warmgray-100"
+                    >
+                      {icon}
+                      <span className="font-medium text-warmgray-900">{label}</span>
+                      <span className="text-sm text-warmgray-500">
+                        {formatRelativeTime(entry.timestamp)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
       {/* Upgrade Modal - friendly limit notification */}

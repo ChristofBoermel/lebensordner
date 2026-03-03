@@ -34,6 +34,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
+import { useVault } from '@/lib/vault/VaultContext'
 
 type Step = 'welcome' | 'profile' | 'documents' | 'emergency' | 'complete'
 
@@ -325,6 +326,8 @@ export default function OnboardingPage() {
   const [quickStartMode, setQuickStartMode] = useState(false)
   const [showSkipDialog, setShowSkipDialog] = useState(false)
   const [skipDialogStep, setSkipDialogStep] = useState<'profile' | 'emergency'>('profile')
+  const vault = useVault()
+  const [vaultSetupDismissed, setVaultSetupDismissed] = useState(false)
 
   // Auto-save progress (both server and localStorage)
   const autoSave = useCallback(async () => {
@@ -1368,6 +1371,44 @@ export default function OnboardingPage() {
                 Nach der Einrichtung können Sie Dokumente in diese Kategorien sortieren:
               </p>
             </div>
+
+            {!vault.isSetUp && !vaultSetupDismissed && (
+              <div className="max-w-lg mx-auto rounded-xl border border-amber-300 bg-amber-50 p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl leading-none" aria-hidden="true">🔐</span>
+                  <div className="flex-1">
+                    <p className="text-base font-semibold text-amber-900">
+                      Tresor einrichten
+                    </p>
+                    <p className="mt-1 text-sm text-amber-900/90">
+                      Alle Ihre Dokumente werden Ende-zu-Ende-verschlüsselt. Richten Sie jetzt Ihr Tresor-Passwort ein — ohne dieses kann niemand (auch wir nicht) Ihre Dateien lesen.
+                    </p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Button
+                        onClick={() => vault.requestSetup()}
+                        className="bg-amber-600 text-white hover:bg-amber-700 focus-visible:ring-amber-500"
+                      >
+                        Tresor einrichten
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => setVaultSetupDismissed(true)}
+                        className="text-sm text-amber-800 underline underline-offset-2 hover:text-amber-900 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-amber-500 focus-visible:ring-offset-2"
+                      >
+                        Später einrichten
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {vault.isSetUp && (
+              <div className="max-w-lg mx-auto flex items-center justify-center gap-2 rounded-full border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-800">
+                <span aria-hidden="true">✓</span>
+                <span>Tresor eingerichtet</span>
+              </div>
+            )}
 
             <div className="max-w-lg mx-auto">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">

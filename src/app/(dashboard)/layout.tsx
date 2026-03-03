@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { DashboardNav } from '@/components/layout/dashboard-nav'
 import { getUserTier } from '@/lib/auth/tier-guard'
 import { VaultClientWrapper } from './vault-client-wrapper'
+import { ToastProvider, ToastViewport } from '@/components/ui/toast'
 
 // Wrapper to stream tier data
 async function NavWithTier({ user }: { user: any }) {
@@ -81,7 +82,10 @@ export default async function DashboardLayout({
       {/* Main Content */}
       <main className="lg:pl-64">
         <div className="py-8 px-4 sm:px-6 lg:px-8">
-          <VaultClientWrapper>{children}</VaultClientWrapper>
+          <ToastProvider duration={6000}>
+            <VaultClientWrapper>{children}</VaultClientWrapper>
+            <ToastViewport />
+          </ToastProvider>
         </div>
       </main>
     </div>

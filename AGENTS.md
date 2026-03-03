@@ -8,6 +8,7 @@ Mandatory rule files:
 - architecture-avoid-boolean-props.md
 - architecture-compound-components.md
 - patterns-explicit-variants.md
+- react-compiler-global-default-hook-discipline.md
 - react19-no-forwardref.md
 - state-context-interface.md
 - state-decouple-implementation.md

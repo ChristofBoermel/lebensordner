@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
     const fileIv = formData.get("file_iv") as string | null;
     const titleEncrypted = formData.get("title_encrypted") as string | null;
     const notesEncrypted = formData.get("notes_encrypted") as string | null;
+    const tagsRaw = formData.get("tags") as string | null;
     const fileNameEncrypted = formData.get("file_name_encrypted") as
       | string
       | null;
@@ -335,6 +336,40 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      let tags: string[] = [];
+      if (tagsRaw && tagsRaw.trim().length > 0) {
+        try {
+          const parsed = JSON.parse(tagsRaw);
+          if (!Array.isArray(parsed)) {
+            return NextResponse.json(
+              { error: "Ungültige Tags: Erwartet ein Array" },
+              { status: 400 },
+            );
+          }
+
+          if (parsed.length > 10) {
+            return NextResponse.json(
+              { error: "Ungültige Tags: maximal 10 Tags erlaubt" },
+              { status: 400 },
+            );
+          }
+
+          if (!parsed.every((tag) => typeof tag === "string")) {
+            return NextResponse.json(
+              { error: "Ungültige Tags: nur Textwerte erlaubt" },
+              { status: 400 },
+            );
+          }
+
+          tags = [...new Set(parsed.map((tag) => tag.trim()).filter(Boolean))];
+        } catch {
+          return NextResponse.json(
+            { error: "Ungültige Tags" },
+            { status: 400 },
+          );
+        }
+      }
+
       const insertPayload = {
         user_id: user.id,
         category,
@@ -350,6 +385,7 @@ export async function POST(req: NextRequest) {
         custom_reminder_days: customReminderDays,
         reminder_watcher_id: reminderWatcherId,
         metadata,
+        tags,
         is_encrypted: isEncrypted,
         encryption_version: encryptionVersion ?? null,
         wrapped_dek: wrappedDek ?? null,

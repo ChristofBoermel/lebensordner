@@ -46,6 +46,8 @@ import {
   ArrowRight,
   History,
   Eye,
+  Fingerprint,
+  Clock,
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { useTheme } from '@/components/theme/theme-provider'
@@ -57,6 +59,7 @@ import Cookies from 'js-cookie'
 import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
 import Link from 'next/link'
 import { SecurityActivityLog } from '@/components/settings/security-activity-log'
+import { DocumentAuditLog } from '@/components/settings/document-audit-log'
 import { useVault } from '@/lib/vault/VaultContext'
 import { extractAvatarStoragePath, resolveAvatarUrl } from '@/lib/avatar'
 
@@ -129,6 +132,11 @@ export default function EinstellungenPage() {
 
   // Vault state
   const vault = useVault()
+  const [isBiometricLoading, setIsBiometricLoading] = useState(false)
+  const [biometricError, setBiometricError] = useState<string | null>(null)
+  const [vaultIdleTimeoutSaving, setVaultIdleTimeoutSaving] = useState(false)
+  const [vaultIdleTimeoutSaveSuccess, setVaultIdleTimeoutSaveSuccess] = useState(false)
+  const [vaultIdleTimeoutError, setVaultIdleTimeoutError] = useState<string | null>(null)
 
   const router = useRouter()
   const routerRef = useRef(router)
@@ -597,6 +605,70 @@ export default function EinstellungenPage() {
     setShowHealthWithdrawalDialog(false)
   }
 
+  const handleSetupBiometric = async () => {
+    setIsBiometricLoading(true)
+    setBiometricError(null)
+    try {
+      await vault.setupBiometric()
+      await vault.refreshBiometricStatus()
+    } catch (err: any) {
+      setBiometricError(err?.message || 'Biometrie konnte nicht eingerichtet werden.')
+    } finally {
+      setIsBiometricLoading(false)
+    }
+  }
+
+  const handleRemoveBiometric = async () => {
+    setIsBiometricLoading(true)
+    setBiometricError(null)
+    try {
+      const response = await fetch('/api/vault/biometric-key', { method: 'DELETE' })
+      if (!response.ok) {
+        throw new Error('Biometrie konnte nicht entfernt werden.')
+      }
+      await vault.refreshBiometricStatus()
+    } catch (err: any) {
+      setBiometricError(err?.message || 'Biometrie konnte nicht entfernt werden.')
+    } finally {
+      setIsBiometricLoading(false)
+    }
+  }
+
+  const handleVaultIdleTimeoutChange = async (value: string) => {
+    const nextTimeout = Number(value)
+    const previousTimeout = profile.vault_idle_timeout_minutes ?? 15
+    setProfile((prev) => ({ ...prev, vault_idle_timeout_minutes: nextTimeout }))
+    setVaultIdleTimeoutSaving(true)
+    setVaultIdleTimeoutSaveSuccess(false)
+    setVaultIdleTimeoutError(null)
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+      if (authError || !user) {
+        throw new Error('Benutzer nicht gefunden')
+      }
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ vault_idle_timeout_minutes: nextTimeout })
+        .eq('id', user.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      setVaultIdleTimeoutSaveSuccess(true)
+      setTimeout(() => setVaultIdleTimeoutSaveSuccess(false), 2000)
+    } catch {
+      setProfile((prev) => ({ ...prev, vault_idle_timeout_minutes: previousTimeout }))
+      setVaultIdleTimeoutError('Speichern fehlgeschlagen. Der vorherige Wert wurde wiederhergestellt.')
+    } finally {
+      setVaultIdleTimeoutSaving(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -873,6 +945,100 @@ export default function EinstellungenPage() {
                     )}
                   </div>
                 </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-4 border-b border-warmgray-100 last:border-0">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-sage-600" />
+                      <p className="font-semibold text-lg text-warmgray-900">Automatische Tresor-Sperre nach Inaktivität</p>
+                    </div>
+                    <p className="text-base text-warmgray-500">Tresor wird nach Inaktivität automatisch gesperrt</p>
+                  </div>
+                  <div className="w-full sm:w-auto">
+                    <select
+                      value={profile.vault_idle_timeout_minutes ?? 15}
+                      onChange={(e) => void handleVaultIdleTimeoutChange(e.target.value)}
+                      className="h-14 senior-mode:h-16 w-full rounded-md border-2 border-warmgray-400 bg-white px-4 text-base text-warmgray-900 focus:border-sage-500 focus:outline-none focus:ring-2 focus:ring-sage-200 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={vaultIdleTimeoutSaving}
+                    >
+                      <option value={0}>Nie</option>
+                      <option value={5}>5 Min</option>
+                      <option value={15}>15 Min (Standard)</option>
+                      <option value={30}>30 Min</option>
+                      <option value={60}>1 Std</option>
+                    </select>
+                    {vaultIdleTimeoutSaving && (
+                      <p className="text-sm text-warmgray-500 mt-2">Speichern...</p>
+                    )}
+                    {vaultIdleTimeoutSaveSuccess && (
+                      <p className="text-sm text-sage-600 mt-2">Gespeichert ✓</p>
+                    )}
+                    {vaultIdleTimeoutError && (
+                      <p className="text-sm text-red-700 mt-2">{vaultIdleTimeoutError}</p>
+                    )}
+                  </div>
+                </div>
+
+                {vault.isSetUp && !vault.isUnlocked && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-4 border-b border-warmgray-100 last:border-0">
+                    <div className="space-y-1">
+                      <p className="font-semibold text-lg text-warmgray-900">Biometrie</p>
+                      <p className="text-base text-warmgray-500">Tresor entsperren um Biometrie zu verwalten</p>
+                    </div>
+                    <Button size="lg" disabled className="w-full sm:w-auto h-14 senior-mode:h-16">
+                      <Fingerprint className="mr-2 h-5 w-5" />
+                      Biometrie verwalten
+                    </Button>
+                  </div>
+                )}
+
+                {vault.isSetUp && vault.isUnlocked && !vault.hasBiometricSetup && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-4 border-b border-warmgray-100 last:border-0">
+                    <div className="space-y-1">
+                      <p className="font-semibold text-lg text-warmgray-900">Biometrie</p>
+                      <p className="text-base text-warmgray-500">Richten Sie biometrisches Entsperren für den Tresor ein</p>
+                    </div>
+                    <Button
+                      size="lg"
+                      onClick={() => void handleSetupBiometric()}
+                      disabled={isBiometricLoading}
+                      className="w-full sm:w-auto h-14 senior-mode:h-16"
+                    >
+                      {isBiometricLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Fingerprint className="mr-2 h-5 w-5" />}
+                      Biometrie einrichten
+                    </Button>
+                  </div>
+                )}
+
+                {vault.isSetUp && vault.isUnlocked && vault.hasBiometricSetup && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-4 border-b border-warmgray-100 last:border-0">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-lg text-warmgray-900">Biometrie</p>
+                        <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-green-100 text-green-700 uppercase">
+                          Aktiviert ✓
+                        </span>
+                      </div>
+                      <p className="text-base text-warmgray-500">Biometrisches Entsperren ist aktiviert</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={() => void handleRemoveBiometric()}
+                      disabled={isBiometricLoading}
+                      className="w-full sm:w-auto h-14 senior-mode:h-16"
+                    >
+                      {isBiometricLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Fingerprint className="mr-2 h-5 w-5" />}
+                      Entfernen
+                    </Button>
+                  </div>
+                )}
+
+                {biometricError ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {biometricError}
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </>
@@ -1360,6 +1526,111 @@ export default function EinstellungenPage() {
         </CardContent>
       </Card>
 
+      {vault.isSetUp && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Fingerprint className="w-5 h-5 text-sage-600" />
+              Biometrie
+            </CardTitle>
+            <CardDescription>
+              Biometrisches Entsperren für den Dokument-Tresor verwalten
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {vault.isSetUp && !vault.isUnlocked && (
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <p className="font-medium text-warmgray-900">Tresor entsperren um Biometrie zu verwalten</p>
+                  <p className="text-sm text-warmgray-500">Biometrie ist erst nach dem Entsperren verfügbar</p>
+                </div>
+                <Button disabled>
+                  <Fingerprint className="mr-2 h-4 w-4" />
+                  Biometrie verwalten
+                </Button>
+              </div>
+            )}
+
+            {vault.isSetUp && vault.isUnlocked && !vault.hasBiometricSetup && (
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <p className="font-medium text-warmgray-900">Biometrie einrichten</p>
+                  <p className="text-sm text-warmgray-500">Nutzen Sie Fingerabdruck oder Face ID zum Entsperren</p>
+                </div>
+                <Button onClick={() => void handleSetupBiometric()} disabled={isBiometricLoading}>
+                  {isBiometricLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Fingerprint className="mr-2 h-4 w-4" />}
+                  Biometrie einrichten
+                </Button>
+              </div>
+            )}
+
+            {vault.isSetUp && vault.isUnlocked && vault.hasBiometricSetup && (
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-warmgray-900">Biometrie aktiviert</p>
+                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                      Aktiviert ✓
+                    </span>
+                  </div>
+                  <p className="text-sm text-warmgray-500">Biometrisches Entsperren ist eingerichtet</p>
+                </div>
+                <Button variant="outline" onClick={() => void handleRemoveBiometric()} disabled={isBiometricLoading}>
+                  {isBiometricLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Fingerprint className="mr-2 h-4 w-4" />}
+                  Entfernen
+                </Button>
+              </div>
+            )}
+
+            {biometricError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {biometricError}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-sage-600" />
+            Tresor-Sicherheit
+          </CardTitle>
+          <CardDescription>
+            Automatische Sperre zum Schutz Ihrer Daten bei Inaktivität
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-start justify-between py-3">
+            <div>
+              <p className="font-medium text-warmgray-900">Automatische Tresor-Sperre nach Inaktivität</p>
+              <p className="text-sm text-warmgray-500">Tresor wird nach Inaktivität automatisch gesperrt</p>
+            </div>
+            <div>
+              <select
+                value={profile.vault_idle_timeout_minutes ?? 15}
+                onChange={(e) => void handleVaultIdleTimeoutChange(e.target.value)}
+                className="rounded-md border-2 border-warmgray-400 bg-white px-3 py-2 text-sm text-warmgray-900 focus:border-sage-500 focus:outline-none focus:ring-2 focus:ring-sage-200 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={vaultIdleTimeoutSaving}
+              >
+                <option value={0}>Nie (deaktiviert)</option>
+                <option value={5}>5 Minuten</option>
+                <option value={15}>15 Minuten (Standard)</option>
+                <option value={30}>30 Minuten</option>
+                <option value={60}>1 Stunde</option>
+              </select>
+              {vaultIdleTimeoutSaveSuccess && (
+                <p className="text-xs text-sage-600 mt-1">Gespeichert ✓</p>
+              )}
+              {vaultIdleTimeoutError && (
+                <p className="text-xs text-red-700 mt-1">{vaultIdleTimeoutError}</p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Security */}
       <Card>
         <CardHeader>
@@ -1694,6 +1965,7 @@ export default function EinstellungenPage() {
 
       {/* Security & Activity */}
       <SecurityActivityLog />
+      <DocumentAuditLog />
 
       {/* Password Change Dialog */}
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>

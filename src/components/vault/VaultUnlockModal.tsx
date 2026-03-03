@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2 } from 'lucide-react'
+import { Fingerprint, Loader2 } from 'lucide-react'
 import { useVault } from '@/lib/vault/VaultContext'
 
 type VaultUnlockContextValue = {
@@ -25,6 +25,10 @@ type VaultUnlockContextValue = {
   isLoading: boolean
   error: string | null
   handleUnlock: () => Promise<void>
+  hasBiometricSetup: boolean
+  isBiometricSupported: boolean
+  unlockWithBiometric: () => Promise<void>
+  onClose: () => void
 }
 
 const VaultUnlockContext = createContext<VaultUnlockContextValue | null>(null)
@@ -38,7 +42,20 @@ function useVaultUnlockContext() {
 }
 
 function VaultUnlockPassphrase() {
-  const { passphrase, setPassphrase, setMode, isLoading, error, handleUnlock } = useVaultUnlockContext()
+  const {
+    passphrase,
+    setPassphrase,
+    setMode,
+    isLoading,
+    error,
+    handleUnlock,
+    hasBiometricSetup,
+    isBiometricSupported,
+    unlockWithBiometric,
+    onClose
+  } = useVaultUnlockContext()
+  const [isBiometricLoading, setIsBiometricLoading] = useState(false)
+  const [biometricError, setBiometricError] = useState<string | null>(null)
 
   return (
     <form
@@ -60,6 +77,34 @@ function VaultUnlockPassphrase() {
         <Button variant="link" className="px-0" onClick={() => setMode('recovery')}>
           Wiederherstellungsschlussel verwenden
         </Button>
+        {hasBiometricSetup && isBiometricSupported ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={isLoading || isBiometricLoading}
+              onClick={async () => {
+                setBiometricError(null)
+                setIsBiometricLoading(true)
+                try {
+                  await unlockWithBiometric()
+                  onClose()
+                } catch {
+                  setBiometricError('Biometrische Authentifizierung fehlgeschlagen')
+                } finally {
+                  setIsBiometricLoading(false)
+                }
+              }}
+            >
+              <Fingerprint className="mr-2 h-4 w-4" />
+              Mit Biometrie entsperren
+            </Button>
+            {biometricError ? (
+              <div className="text-sm text-red-600">{biometricError}</div>
+            ) : null}
+          </>
+        ) : null}
       </div>
 
       {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
@@ -156,7 +201,11 @@ export const VaultUnlockModal: VaultUnlockModalComponent = function VaultUnlockM
     setRecoveryKey,
     isLoading,
     error,
-    handleUnlock
+    handleUnlock,
+    hasBiometricSetup: vault.hasBiometricSetup,
+    isBiometricSupported: vault.isBiometricSupported,
+    unlockWithBiometric: vault.unlockWithBiometric,
+    onClose
   }
 
   return (

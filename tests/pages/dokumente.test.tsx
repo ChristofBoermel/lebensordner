@@ -9,6 +9,36 @@ import {
 import { setMockProfile, resetMockProfile } from '../mocks/supabase'
 import { createSupabaseMock } from '../mocks/supabase-client'
 
+const { mockToast, mockRequestUnlock, mockVaultState } = vi.hoisted(() => {
+  const hoistedToast = vi.fn()
+  const hoistedRequestUnlock = vi.fn()
+  const hoistedVaultState = {
+    isSetUp: true,
+    isUnlocked: true,
+    isUnlockRequested: false,
+    masterKey: null,
+    lastUnlockTimestamp: Date.now(),
+    hasBiometricSetup: false,
+    isBiometricSupported: false,
+    isSetupRequested: false,
+    requestUnlock: hoistedRequestUnlock,
+    requestSetup: vi.fn(),
+    closeSetup: vi.fn(),
+    refreshBiometricStatus: vi.fn(async () => {}),
+    setup: vi.fn(async () => {}),
+    unlock: vi.fn(async () => {}),
+    unlockWithRecovery: vi.fn(async () => {}),
+    setupBiometric: vi.fn(async () => {}),
+    unlockWithBiometric: vi.fn(async () => {}),
+    lock: vi.fn(),
+  }
+  return {
+    mockToast: hoistedToast,
+    mockRequestUnlock: hoistedRequestUnlock,
+    mockVaultState: hoistedVaultState,
+  }
+})
+
 type MockDocument = {
   id: string
   title: string
@@ -22,6 +52,8 @@ type MockDocument = {
   expiry_date: string | null
   notes: string | null
   created_at: string
+  extra_security_enabled?: boolean | null
+  wrapped_dek?: string | null
 }
 
 type MockTrustedPerson = {
@@ -52,6 +84,7 @@ let lastUploadFormData: FormData | null = null
 let lastUploadDocument: Record<string, unknown> | null = null
 let mockUploadDocument: Record<string, unknown> | null = null
 let trustedPersonsQueryCount = 0
+let documentUpdateCalls: Array<{ id: string; extra_security_enabled: boolean }> = []
 
 const createMockBuilder = (tableName: string) => {
   const builder: Record<string, any> = {}
@@ -80,9 +113,21 @@ const createMockBuilder = (tableName: string) => {
     }
   })
 
-  builder.update = vi.fn().mockReturnValue({
-    eq: vi.fn().mockResolvedValue({ data: null, error: null }),
-  })
+  builder.update = vi.fn((payload: Record<string, unknown>) => ({
+    eq: vi.fn((field: string, value: string) => {
+      if (
+        tableName === 'documents' &&
+        field === 'id' &&
+        typeof payload.extra_security_enabled === 'boolean'
+      ) {
+        documentUpdateCalls.push({
+          id: value,
+          extra_security_enabled: payload.extra_security_enabled,
+        })
+      }
+      return Promise.resolve({ data: null, error: null })
+    }),
+  }))
   builder.delete = vi.fn().mockResolvedValue({ data: null, error: null })
 
   builder.then = (
@@ -119,20 +164,16 @@ vi.mock('@/lib/supabase/client', () => ({
   createClient: () => mockSupabaseClient,
 }))
 
-vi.mock('@/lib/vault/VaultContext', () => ({
-  useVault: () => ({
-    isSetUp: false,
-    isUnlocked: true,
-    masterKey: null,
-    requestUnlock: vi.fn(),
-    requestSetup: vi.fn(),
-    closeSetup: vi.fn(),
-    isSetupRequested: false,
-    setup: vi.fn(),
-    unlock: vi.fn(),
-    unlockWithRecovery: vi.fn(),
-    lock: vi.fn(),
-  }),
+vi.mock('@/lib/vault/VaultContext', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+  return {
+    VaultContext: React.createContext(mockVaultState),
+    useVault: () => mockVaultState,
+  }
+})
+
+vi.mock('@/components/ui/toast', () => ({
+  toast: (...args: unknown[]) => mockToast(...args),
 }))
 
 vi.mock('@/lib/posthog', () => ({
@@ -172,6 +213,12 @@ vi.mock('@/components/ui/date-picker', () => ({
   ),
 }))
 
+vi.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: unknown }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: unknown }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: unknown }) => <>{children}</>,
+}))
+
 const setMockFetch = () => {
   global.fetch = vi.fn((input: RequestInfo, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
@@ -209,6 +256,23 @@ const setMockFetch = () => {
     } as Response)
   }) as unknown as typeof fetch
 }
+
+const resetVaultMockState = () => {
+  mockVaultState.isSetUp = true
+  mockVaultState.isUnlocked = true
+  mockVaultState.isUnlockRequested = false
+  mockVaultState.lastUnlockTimestamp = Date.now()
+  mockRequestUnlock.mockReset()
+  mockRequestUnlock.mockImplementation(() => {
+    mockVaultState.isUnlockRequested = true
+  })
+}
+
+beforeEach(() => {
+  mockToast.mockReset()
+  documentUpdateCalls = []
+  resetVaultMockState()
+})
 
 const renderPage = async () => {
   render(<DocumentsPage />)
@@ -998,6 +1062,25 @@ const mockDocBulk = {
   expiry_date: null,
   notes: null,
   created_at: '2025-01-01T10:00:00.000Z',
+  extra_security_enabled: false,
+  wrapped_dek: null,
+}
+
+const mockDocBulkLocked = {
+  id: 'doc-bulk-2',
+  title: 'Mietvertrag',
+  file_name: 'mietvertrag.pdf',
+  file_path: 'test/mietvertrag.pdf',
+  file_type: 'application/pdf',
+  file_size: 2048,
+  category: 'wohnen',
+  subcategory_id: null,
+  custom_category_id: null,
+  expiry_date: null,
+  notes: null,
+  created_at: '2025-01-02T10:00:00.000Z',
+  extra_security_enabled: true,
+  wrapped_dek: null,
 }
 
 describe('Dokumente Bulk-Action Bar — T-14', () => {
@@ -1039,6 +1122,25 @@ describe('Dokumente Bulk-Action Bar — T-14', () => {
     await waitFor(() => {
       expect(screen.getByTestId('bulk-share-dialog')).toBeInTheDocument()
     })
+  }
+
+  const selectDocumentsByTitle = async (titles: string[]) => {
+    await renderPage()
+    await userEvent.click(screen.getByRole('tab', { name: /Alle/i }))
+    await waitFor(() => {
+      const rows = document.querySelectorAll('.document-item')
+      expect(rows.length).toBeGreaterThan(0)
+    })
+
+    for (const title of titles) {
+      const docItem = Array.from(document.querySelectorAll('.document-item')).find((row) =>
+        row.textContent?.includes(title)
+      ) as HTMLElement | undefined
+      expect(docItem).toBeDefined()
+      const checkbox = docItem!.querySelector('button')
+      expect(checkbox).not.toBeNull()
+      await userEvent.click(checkbox!)
+    }
   }
 
   it('Bulk-Action-Bar ist zentriert (left-1/2, -translate-x-1/2, kein inset-x-4)', async () => {
@@ -1098,5 +1200,94 @@ describe('Dokumente Bulk-Action Bar — T-14', () => {
       screen.getByRole('button', { name: /Auswahl aufheben/i })
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Teilen/i })).toBeInTheDocument()
+  })
+
+  it('zeigt Sperren und Entsperren in der Bulk-Action-Bar', async () => {
+    await selectFirstDocument()
+
+    expect(screen.getByRole('button', { name: /Sperren/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Entsperren/i })).toBeInTheDocument()
+  })
+
+  it('fordert bei gesperrtem Tresor erst Entsperren an und fuehrt keine direkte Batch-Aktualisierung aus', async () => {
+    mockVaultState.isUnlocked = false
+    mockVaultState.lastUnlockTimestamp = 0
+
+    await selectFirstDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Sperren/i }))
+
+    expect(mockRequestUnlock).toHaveBeenCalledTimes(1)
+    expect(documentUpdateCalls).toHaveLength(0)
+  })
+
+  it('wendet Sperren auf alle ausgewaehlten Dokumente an und zeigt Count-Toast', async () => {
+    mockTables.documents = [mockDocBulk, mockDocBulkLocked]
+
+    await selectDocumentsByTitle(['Reisepass', 'Mietvertrag'])
+    await userEvent.click(screen.getByRole('button', { name: /Sperren/i }))
+
+    await waitFor(() => {
+      expect(documentUpdateCalls).toEqual([
+        { id: 'doc-bulk-1', extra_security_enabled: true },
+        { id: 'doc-bulk-2', extra_security_enabled: true },
+      ])
+    })
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '2 Dokumente gesperrt' })
+    )
+  })
+
+  it('entsperrt gemischte Auswahl (gesperrt/ungesperrt) gesammelt und zeigt Count-Toast', async () => {
+    mockTables.documents = [mockDocBulk, mockDocBulkLocked]
+
+    await selectDocumentsByTitle(['Reisepass', 'Mietvertrag'])
+    await userEvent.click(screen.getByRole('button', { name: /Entsperren/i }))
+
+    await waitFor(() => {
+      expect(documentUpdateCalls).toEqual([
+        { id: 'doc-bulk-1', extra_security_enabled: false },
+        { id: 'doc-bulk-2', extra_security_enabled: false },
+      ])
+    })
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '2 Dokumente entsperrt' })
+    )
+  })
+
+  it('fuehrt eine aufgeschobene Sperren-Aktion nach erfolgreichem Entsperren mit dem Snapshot aus', async () => {
+    mockTables.documents = [mockDocBulk, mockDocBulkLocked]
+    mockVaultState.isUnlocked = false
+    mockVaultState.lastUnlockTimestamp = 0
+
+    const view = render(<DocumentsPage />)
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Dokumente/i })).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByRole('tab', { name: /Alle/i }))
+
+    for (const title of ['Reisepass', 'Mietvertrag']) {
+      const docItem = Array.from(document.querySelectorAll('.document-item')).find((row) =>
+        row.textContent?.includes(title)
+      ) as HTMLElement | undefined
+      expect(docItem).toBeDefined()
+      const checkbox = docItem!.querySelector('button')
+      expect(checkbox).not.toBeNull()
+      await userEvent.click(checkbox!)
+    }
+
+    await userEvent.click(screen.getByRole('button', { name: /Sperren/i }))
+    expect(documentUpdateCalls).toHaveLength(0)
+
+    mockVaultState.isUnlocked = true
+    mockVaultState.isUnlockRequested = false
+    mockVaultState.lastUnlockTimestamp = Date.now()
+    view.rerender(<DocumentsPage />)
+
+    await waitFor(() => {
+      expect(documentUpdateCalls).toEqual([
+        { id: 'doc-bulk-1', extra_security_enabled: true },
+        { id: 'doc-bulk-2', extra_security_enabled: true },
+      ])
+    })
   })
 })

@@ -177,6 +177,7 @@ export interface Database {
           sms_reminder_days_before: number
           phone_verified: boolean
           profile_picture_url: string | null
+          secured_categories: string[]
           upgrade_email_7d_sent_at: string | null
           upgrade_email_30d_sent_at: string | null
           role: string
@@ -190,6 +191,7 @@ export interface Database {
           middle_name: string | null
           last_name: string | null
           academic_title: string | null
+          vault_idle_timeout_minutes: number
         }
         Insert: {
           id: string
@@ -216,6 +218,7 @@ export interface Database {
           sms_reminder_days_before?: number
           phone_verified?: boolean
           profile_picture_url?: string | null
+          secured_categories?: string[]
           upgrade_email_7d_sent_at?: string | null
           upgrade_email_30d_sent_at?: string | null
           role?: string
@@ -229,6 +232,7 @@ export interface Database {
           middle_name?: string | null
           last_name?: string | null
           academic_title?: string | null
+          vault_idle_timeout_minutes?: number
         }
         Update: {
           id?: string
@@ -255,6 +259,7 @@ export interface Database {
           sms_reminder_days_before?: number
           phone_verified?: boolean
           profile_picture_url?: string | null
+          secured_categories?: string[]
           upgrade_email_7d_sent_at?: string | null
           upgrade_email_30d_sent_at?: string | null
           role?: string
@@ -268,6 +273,7 @@ export interface Database {
           middle_name?: string | null
           last_name?: string | null
           academic_title?: string | null
+          vault_idle_timeout_minutes?: number
         }
       }
       documents: {
@@ -299,6 +305,7 @@ export interface Database {
           notes_encrypted: string | null
           file_name_encrypted: string | null
           extra_security_enabled: boolean
+          tags: string[]
         }
         Insert: {
           id?: string
@@ -328,6 +335,7 @@ export interface Database {
           notes_encrypted?: string | null
           file_name_encrypted?: string | null
           extra_security_enabled?: boolean
+          tags?: string[]
         }
         Update: {
           id?: string
@@ -357,6 +365,7 @@ export interface Database {
           notes_encrypted?: string | null
           file_name_encrypted?: string | null
           extra_security_enabled?: boolean
+          tags?: string[]
         }
       }
       subcategories: {
@@ -978,6 +987,9 @@ export interface Database {
           wrapped_mk: string
           wrapped_mk_with_recovery: string
           recovery_key_salt: string | null
+          wrapped_mk_with_biometric: string | null
+          webauthn_credential_id: string | null
+          webauthn_rp_id: string | null
           created_at: string
           updated_at: string
         }
@@ -989,6 +1001,9 @@ export interface Database {
           wrapped_mk: string
           wrapped_mk_with_recovery: string
           recovery_key_salt?: string | null
+          wrapped_mk_with_biometric?: string | null
+          webauthn_credential_id?: string | null
+          webauthn_rp_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -1000,6 +1015,9 @@ export interface Database {
           wrapped_mk?: string
           wrapped_mk_with_recovery?: string
           recovery_key_salt?: string | null
+          wrapped_mk_with_biometric?: string | null
+          webauthn_credential_id?: string | null
+          webauthn_rp_id?: string | null
           created_at?: string
           updated_at?: string
         }

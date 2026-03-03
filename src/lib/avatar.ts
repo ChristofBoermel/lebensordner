@@ -35,7 +35,19 @@ export async function resolveAvatarUrl(
     .createSignedUrl(path, expiresInSeconds)
 
   if (error || !data?.signedUrl) {
-    return /^https?:\/\//i.test(value) ? value : null
+    // Avoid reusing stale signed URLs (they cause repeated 401 image fetches).
+    // Only keep direct public object URLs as fallback.
+    if (/^https?:\/\//i.test(value)) {
+      try {
+        const parsed = new URL(value)
+        if (parsed.pathname.includes('/object/public/avatars/')) {
+          return value
+        }
+      } catch {
+        return null
+      }
+    }
+    return null
   }
 
   return data.signedUrl

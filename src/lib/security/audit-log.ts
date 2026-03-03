@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { NextRequest } from 'next/server'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // --- Interfaces ---
 
@@ -9,6 +10,10 @@ export interface AuditLogEvent {
   event_data?: Record<string, unknown>
   request?: NextRequest
 }
+
+export type AuditLogResult =
+  | { ok: true }
+  | { ok: false; error: string }
 
 // --- Event type constants ---
 
@@ -29,6 +34,13 @@ export const EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED = 'trusted_person_document_vie
 export const EVENT_DOWNLOAD_LINK_CREATED = 'download_link_created'
 export const EVENT_DOWNLOAD_LINK_VIEWED = 'download_link_viewed'
 export const EVENT_GDPR_EXPORT_REQUESTED = 'gdpr_export_requested'
+export const EVENT_VAULT_UNLOCKED_BIOMETRIC = 'vault_unlocked_biometric'
+export const EVENT_DOCUMENT_VIEWED = 'document_viewed'
+export const EVENT_DOCUMENT_DOWNLOADED = 'document_downloaded'
+export const EVENT_DOCUMENT_LOCKED = 'document_locked'
+export const EVENT_DOCUMENT_UNLOCKED = 'document_unlocked'
+export const EVENT_CATEGORY_LOCKED = 'category_locked'
+export const EVENT_CATEGORY_UNLOCKED = 'category_unlocked'
 
 // --- Helper ---
 
@@ -66,7 +78,7 @@ export function extractUserAgent(request?: NextRequest): string {
   return request?.headers.get('user-agent') || 'Unknown'
 }
 
-export async function logSecurityEvent(event: AuditLogEvent): Promise<void> {
+export async function logSecurityEvent(event: AuditLogEvent): Promise<AuditLogResult> {
   try {
     const supabase = createServiceClient()
 
@@ -75,7 +87,7 @@ export async function logSecurityEvent(event: AuditLogEvent): Promise<void> {
     const maskedIp = ip ? maskIpAddress(ip) : null
     const userAgent = extractUserAgent(event.request)
 
-    await supabase
+    const { error } = await supabase
       .from('security_audit_log')
       .insert({
         user_id: event.user_id || null,
@@ -84,7 +96,26 @@ export async function logSecurityEvent(event: AuditLogEvent): Promise<void> {
         ip_address: maskedIp,
         user_agent: userAgent,
       })
+
+    if (error) {
+      const message = error.message || 'Unknown Supabase insert error'
+      emitStructuredError({
+        error_type: 'audit',
+        error_message: `Failed to persist security audit event: ${message}`,
+        endpoint: 'lib/security/audit-log',
+      })
+      return { ok: false, error: message }
+    }
+
+    return { ok: true }
   } catch (error) {
-    console.error('Failed to log security event:', error)
+    const message = error instanceof Error ? error.message : String(error)
+    emitStructuredError({
+      error_type: 'audit',
+      error_message: `Failed to persist security audit event: ${message}`,
+      endpoint: 'lib/security/audit-log',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
+    return { ok: false, error: message }
   }
 }

@@ -13,7 +13,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('user_vault_keys')
-      .select('kdf_salt, kdf_params, wrapped_mk, wrapped_mk_with_recovery, recovery_key_salt')
+      .select('kdf_salt, kdf_params, wrapped_mk, wrapped_mk_with_recovery, recovery_key_salt, webauthn_credential_id')
       .eq('user_id', user.id)
       .maybeSingle()
 
@@ -36,7 +36,8 @@ export async function GET() {
       kdf_params: data.kdf_params,
       wrapped_mk: data.wrapped_mk,
       wrapped_mk_with_recovery: data.wrapped_mk_with_recovery,
-      recovery_key_salt: data.recovery_key_salt
+      recovery_key_salt: data.recovery_key_salt,
+      webauthn_credential_id: data.webauthn_credential_id,
     })
   } catch (error) {
     emitStructuredError({
