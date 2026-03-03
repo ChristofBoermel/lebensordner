@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useState, useEffect, useCallback, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -105,6 +105,7 @@ import {
   type CustomCategory,
 } from "@/types/database";
 import { formatFileSize, formatDate } from "@/lib/utils";
+import { highlightText } from "@/lib/utils/highlight";
 import { usePostHog, ANALYTICS_EVENTS } from "@/lib/posthog";
 import {
   SUBSCRIPTION_TIERS,
@@ -385,11 +386,13 @@ function CategoryCard({
 
 export default function DocumentsPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const initialCategory = searchParams.get(
     "kategorie",
   ) as DocumentCategory | null;
   const shouldOpenUpload = searchParams.get("upload") === "true";
   const highlightDocumentId = searchParams.get("highlight");
+  const tagParam = searchParams.get("tags");
 
   const [documents, setDocuments] = useState<Document[]>([]);
   const [highlightedDoc, setHighlightedDoc] = useState<string | null>(
@@ -412,7 +415,7 @@ export default function DocumentsPage() {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTagFilters, setActiveTagFilters] = useState<Set<string>>(
-    new Set(),
+    () => (tagParam ? new Set(tagParam.split(",").filter(Boolean)) : new Set()),
   );
   const [storageUsed, setStorageUsed] = useState(0);
   const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
@@ -1068,6 +1071,20 @@ export default function DocumentsPage() {
   useEffect(() => {
     setHighlightedDoc(searchParams.get("highlight"));
   }, [searchParams]);
+
+  // allowed: subscription - sync tag filter state to URL param
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (activeTagFilters.size > 0) {
+      params.set("tags", [...activeTagFilters].join(","));
+    } else {
+      params.delete("tags");
+    }
+    const nextQuery = params.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery === currentQuery) return;
+    router.replace(nextQuery ? `?${nextQuery}` : "?", { scroll: false });
+  }, [activeTagFilters, router, searchParams]);
 
   // Handle document highlighting from search
   useEffect(() => {
@@ -2390,6 +2407,22 @@ export default function DocumentsPage() {
     [documents],
   );
 
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    const docsForTagCount = validatedDocuments.filter((doc) => {
+      if (selectedCustomCategory) return doc.custom_category_id === selectedCustomCategory;
+      const matchesCategory = !selectedCategory || doc.category === selectedCategory;
+      const notInCustomCategory = !doc.custom_category_id;
+      return matchesCategory && (selectedCategory ? notInCustomCategory : true);
+    });
+    docsForTagCount.forEach((doc) => {
+      (doc.tags ?? []).forEach((tag) => {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      });
+    });
+    return counts;
+  }, [validatedDocuments, selectedCategory, selectedCustomCategory]);
+
   const filteredDocuments = validatedDocuments
     .filter((doc) => {
       const matchesSearchQuery = (d: Document) => {
@@ -2499,7 +2532,7 @@ export default function DocumentsPage() {
         onClick={() => navigateToDocument(doc)}
         className={`document-item flex items-center gap-3 p-3 rounded-xl border border-warmgray-200 dark:border-warmgray-800 group transition-all duration-300 cursor-pointer ${
           isHighlighted
-            ? "bg-sage-50 border-sage-600 ring-2 ring-sage-400 ring-offset-2 highlight-pulse"
+            ? "border-sage-600 highlight-pulse"
             : isSelected
               ? "bg-sage-50 border-sage-300"
               : "bg-white dark:bg-warmgray-900 hover:border-sage-200 hover:bg-sage-50/30"
@@ -2526,7 +2559,9 @@ export default function DocumentsPage() {
           </div>
           <div className="flex-1 min-w-0 overflow-hidden">
             <p className="font-medium text-warmgray-900 truncate leading-tight">
-              {getDisplayTitle(doc)}
+              {searchQuery
+                ? highlightText(getDisplayTitle(doc), searchQuery)
+                : getDisplayTitle(doc)}
             </p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-warmgray-500 mt-0.5">
               <span className="truncate">{category.name}</span>
@@ -3041,40 +3076,60 @@ export default function DocumentsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {availableTags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
-              {availableTags.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() =>
-                    setActiveTagFilters((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(tag)) {
-                        next.delete(tag);
-                      } else {
-                        next.add(tag);
+            <div className="mt-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-warmgray-500 uppercase tracking-wide">
+                  Tags
+                  {activeTagFilters.size > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold bg-sage-500 text-white rounded-full">
+                      {activeTagFilters.size}
+                    </span>
+                  )}
+                </span>
+                {activeTagFilters.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTagFilters(new Set())}
+                    className="text-xs text-warmgray-500 hover:text-warmgray-700 transition-colors"
+                  >
+                    Alle zurücksetzen
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {availableTags.map((tag) => {
+                  const count = tagCounts.get(tag) ?? 0;
+                  const isActive = activeTagFilters.has(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() =>
+                        setActiveTagFilters((prev) => {
+                          const next = new Set(prev);
+                          next.has(tag) ? next.delete(tag) : next.add(tag);
+                          return next;
+                        })
                       }
-                      return next;
-                    })
-                  }
-                  className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
-                    activeTagFilters.has(tag)
-                      ? "bg-sage-500 text-white border-sage-500"
-                      : "bg-white text-warmgray-700 border-warmgray-300 hover:border-sage-400"
-                  }`}
-                >
-                  {tag}
-                </button>
-              ))}
-              {activeTagFilters.size > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveTagFilters(new Set())}
-                  className="px-3 py-1 rounded-full text-sm text-warmgray-500 border border-warmgray-200 hover:border-warmgray-400"
-                >
-                  Filter zurücksetzen
-                </button>
-              ) : null}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                        isActive
+                          ? "bg-sage-500 text-white border-sage-500 shadow-sm"
+                          : count === 0
+                            ? "bg-white text-warmgray-400 border-warmgray-200 cursor-default opacity-50"
+                            : "bg-white text-warmgray-700 border-warmgray-300 hover:border-sage-400 hover:bg-sage-50"
+                      }`}
+                      disabled={count === 0 && !isActive}
+                    >
+                      {tag}
+                      <span className={`text-[10px] px-1 py-0.5 rounded-full font-bold ${
+                        isActive ? "bg-white/20" : "bg-warmgray-100 text-warmgray-500"
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -3543,6 +3598,7 @@ export default function DocumentsPage() {
             uploadTitle={uploadTitle}
             tags={uploadTags}
             onTagsChange={setUploadTags}
+            tagSuggestions={availableTags}
             lockAfterUpload={lockAfterUpload}
             onLockAfterUploadChange={setLockAfterUpload}
             vaultState={vaultState}

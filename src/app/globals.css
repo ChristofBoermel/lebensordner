@@ -348,19 +348,22 @@
 
   /* Highlight pulse animation for search navigation */
   @keyframes highlight-pulse {
-    0%,
-    100% {
-      transform: scale(1);
-      opacity: 1;
+    0% {
+      background-color: rgb(164 198 135 / 0.4);
+      box-shadow: 0 0 0 3px rgb(108 163 71 / 0.3);
     }
-    50% {
-      transform: scale(1.01);
-      opacity: 0.95;
+    40% {
+      background-color: rgb(213 229 200 / 0.6);
+      box-shadow: 0 0 0 2px rgb(108 163 71 / 0.2);
+    }
+    100% {
+      background-color: transparent;
+      box-shadow: none;
     }
   }
 
   .highlight-pulse {
-    animation: highlight-pulse 0.6s ease-in-out 2;
+    animation: highlight-pulse 1.8s ease-out forwards;
   }
 
   /* Mobile-specific utilities */
