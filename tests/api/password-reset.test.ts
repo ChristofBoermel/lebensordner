@@ -57,12 +57,15 @@ const createAdminTableDispatch = () =>
     }
   })
 
-const adminClient = {
+const supabaseJsClient = {
+  auth: {
+    resetPasswordForEmail: mockResetPasswordForEmail,
+  },
   from: createAdminTableDispatch(),
 }
 
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => adminClient),
+  createClient: vi.fn(() => supabaseJsClient),
 }))
 
 // --- Mock: isAccountLocked ---
@@ -128,7 +131,7 @@ beforeEach(async () => {
   vi.mocked(incrementRateLimit).mockResolvedValue(undefined)
 
   // Rebuild admin dispatch so mockAdminProfileSingle is picked up
-  adminClient.from = createAdminTableDispatch()
+  supabaseJsClient.from = createAdminTableDispatch()
 })
 
 afterEach(() => {
@@ -145,6 +148,8 @@ describe('Password reset request', () => {
   const originalSiteUrl = process.env.SITE_URL
 
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://lebensordner.org/supabase'
+    process.env.SUPABASE_ANON_KEY = 'anon-test-key'
     delete process.env.AUTH_PUBLIC_BASE_URL
     delete process.env.NEXT_PUBLIC_APP_URL
     delete process.env.SITE_URL
@@ -288,7 +293,7 @@ describe('Auth callback — existing user, onboarding complete', () => {
       data: { id: 'uid', onboarding_completed: true },
       error: null,
     })
-    adminClient.from = createAdminTableDispatch()
+    supabaseJsClient.from = createAdminTableDispatch()
   })
 
   it("redirects to /passwort-reset when next=/passwort-reset", async () => {
@@ -328,7 +333,7 @@ describe('Auth callback — new user', () => {
       data: null,
       error: { code: 'PGRST116' },
     })
-    adminClient.from = createAdminTableDispatch()
+    supabaseJsClient.from = createAdminTableDispatch()
 
     vi.resetModules()
     const { GET } = await import('@/app/auth/callback/route')

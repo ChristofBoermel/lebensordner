@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import {
   checkRateLimit,
   incrementRateLimit,
@@ -37,6 +37,14 @@ const resolvePublicOrigin = (request: NextRequest): string | null => {
   if (fromEnv) return fromEnv;
 
   return normalizeOrigin(request.headers.get("origin"));
+};
+
+const resolvePublicSupabaseUrl = (): string | null => {
+  return (
+    normalizeOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL) ??
+    normalizeOrigin(process.env.API_EXTERNAL_URL) ??
+    normalizeOrigin(process.env.SUPABASE_URL)
+  );
 };
 
 // --- Turnstile Verification ---
@@ -274,7 +282,26 @@ export async function POST(request: NextRequest) {
 
     // --- Send Password Reset Email ---
 
-    const supabase = await createServerSupabaseClient();
+    const publicSupabaseUrl = resolvePublicSupabaseUrl();
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+    if (!publicSupabaseUrl || !supabaseAnonKey) {
+      emitStructuredError({
+        error_type: "config",
+        error_message: "Password reset Supabase client config is missing",
+        endpoint: "/api/auth/password-reset/request",
+      });
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 },
+      );
+    }
+
+    const supabase = createClient(publicSupabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
     const publicOrigin = resolvePublicOrigin(request);
     if (!publicOrigin) {
       emitStructuredError({

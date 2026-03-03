@@ -24,6 +24,29 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 20:48 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Updated `src/app/api/auth/password-reset/request/route.ts` to use a dedicated public-URL Supabase client (`createClient`) for `resetPasswordForEmail()` so recovery email links are generated from the public gateway URL without changing the global internal `SUPABASE_URL`.
+- Added `resolvePublicSupabaseUrl()` fallback chain (`NEXT_PUBLIC_SUPABASE_URL` -> `API_EXTERNAL_URL` -> `SUPABASE_URL`) and retained existing guarded public callback origin resolution.
+- Updated `tests/api/password-reset.test.ts` Supabase JS mock and env defaults to cover the new public-client reset path.
+
+Why:
+- Production still emitted `http://kong/.../verify` recovery links even with correct GoTrue public URL envs; targeted route-level public client avoids internal-host leakage while preserving internal service-to-service config.
+
+Risk / Regression Watch:
+- Password reset now depends on `SUPABASE_ANON_KEY` plus a resolvable public Supabase URL in app env; missing vars will fail fast with config error.
+- This change is scoped to password-reset request route only; other API flows still use existing internal client behavior.
+
+Verification:
+- `npm test -- --run tests/api/password-reset.test.ts`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/app/api/auth/password-reset/request/route.ts`, `tests/api/password-reset.test.ts`, and this changelog entry.
+
+Open Issues:
+- none
+
 ## 2026-03-03 20:28 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Fixed `scripts/ops/verify-deploy.sh` smoke-check regression by moving `check_auth_public_urls()` outside the `node <<'NODE'` heredoc in `check_runtime_public_config_from_nextjs()`.
