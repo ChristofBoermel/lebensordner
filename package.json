@@ -24,7 +24,8 @@
     "ui-audit:strict": "python scripts/ops/agent-rules-audit.py --strict",
     "ui-audit:hints": "python scripts/ops/agent-rules-audit.py --fix-hints",
     "audit:agent-rules": "python scripts/ops/agent-rules-audit.py",
-    "audit:logging": "python scripts/ops/logging-audit.py"
+    "audit:logging": "python scripts/ops/logging-audit.py",
+    "audit:hook-discipline": "python scripts/ops/hook-discipline-audit.py"
   },
   "keywords": [
     "lebensordner",

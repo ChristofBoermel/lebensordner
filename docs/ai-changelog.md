@@ -24,6 +24,30 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 14:23 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Added `scripts/ops/hook-discipline-audit.py` as a baseline regression guard for React Compiler hook discipline.
+- Added npm script `audit:hook-discipline` in `package.json`.
+- Added new CI job `hook-discipline-guard` to `.github/workflows/ci.yml` and wired it as a prerequisite for lint/type-check/unit/e2e jobs.
+
+Why:
+- User requested a CI/CD improvement before committing: enforce no hook-discipline regression while web app refactors remain incremental.
+
+Risk / Regression Watch:
+- Guard intentionally blocks only growth above baseline; it does not enforce immediate reduction.
+- Baseline values are snapshot-based and may need explicit updates after future cleanup milestones.
+
+Verification:
+- `python scripts/ops/hook-discipline-audit.py`
+- `npm run type-check`
+- `npm run lint`
+
+Rollback:
+- Revert `.github/workflows/ci.yml`, `package.json`, remove `scripts/ops/hook-discipline-audit.py`, and remove this changelog entry.
+
+Open Issues:
+- none
+
 ## 2026-03-03 14:04 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Applied global React Compiler hook-discipline refactor on current uncommitted web changes.
