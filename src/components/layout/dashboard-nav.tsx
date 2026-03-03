@@ -41,6 +41,7 @@ import {
 import { useState, useEffect, useMemo } from 'react'
 import { useTheme } from '@/components/theme/theme-provider'
 import { resolveAvatarUrl } from '@/lib/avatar'
+import { PROFILE_AVATAR_UPDATED_EVENT, type ProfileAvatarUpdatedDetail } from '@/lib/profile-events'
 
 import { TierConfig, hasFeatureAccess } from '@/lib/subscription-tiers'
 
@@ -93,7 +94,12 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [healthConsentGranted, setHealthConsentGranted] = useState<boolean | null>(null)
   const [resolvedAvatarUrl, setResolvedAvatarUrl] = useState<string | null>(null)
+  const [avatarPath, setAvatarPath] = useState<string | null>(user.profile_picture_url ?? null)
   const { theme, setTheme, resolvedTheme, fontSize, setFontSize, seniorMode, setSeniorMode } = useTheme()
+
+  useEffect(() => {
+    setAvatarPath(user.profile_picture_url ?? null)
+  }, [user.profile_picture_url])
 
   const openGlobalSearch = () => {
     setSearchOpenCycle((prev) => prev + 1)
@@ -140,12 +146,12 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
     let isMounted = true
 
     const resolveAvatar = async () => {
-      if (!user.profile_picture_url) {
+      if (!avatarPath) {
         if (isMounted) setResolvedAvatarUrl(null)
         return
       }
 
-      const signedUrl = await resolveAvatarUrl(supabase, user.profile_picture_url)
+      const signedUrl = await resolveAvatarUrl(supabase, avatarPath)
       if (isMounted) setResolvedAvatarUrl(signedUrl)
     }
 
@@ -153,7 +159,17 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
     return () => {
       isMounted = false
     }
-  }, [supabase, user.profile_picture_url])
+  }, [supabase, avatarPath])
+
+  useEffect(() => {
+    const handleAvatarUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<ProfileAvatarUpdatedDetail>
+      setAvatarPath(customEvent.detail?.path ?? null)
+    }
+
+    window.addEventListener(PROFILE_AVATAR_UPDATED_EVENT, handleAvatarUpdated)
+    return () => window.removeEventListener(PROFILE_AVATAR_UPDATED_EVENT, handleAvatarUpdated)
+  }, [])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()

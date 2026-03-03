@@ -95,7 +95,6 @@ import * as LucideIcons from "lucide-react";
 import { VaultContext } from "@/lib/vault/VaultContext";
 import {
   FIVE_MINUTES_MS,
-  useCategoryLockState,
 } from "@/lib/dokumente/useCategoryLockState";
 import {
   DOCUMENT_CATEGORIES,
@@ -131,6 +130,10 @@ import { BulkShareDialog } from "@/components/sharing/BulkShareDialog";
 import { useThemeSafe } from "@/components/theme/theme-provider";
 import { ExpiryDashboardWidget } from "@/components/dokumente/ExpiryDashboardWidget";
 import { EncryptedNotesEditor } from "@/components/dokumente/EncryptedNotesEditor";
+import {
+  DisableCategoryLockDialog,
+  type DisableCategoryLockMode,
+} from "./DisableCategoryLockDialog";
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   user: User,
@@ -218,11 +221,14 @@ interface CategoryCardProps {
   icon: React.ComponentType<{ className?: string }>;
   documentCount: number;
   securedCategories: string[];
-  lastUnlockTimestamp: number;
+  isVaultUnlocked: boolean;
+  toggleDisabled: boolean;
   onCardClick: (categoryKey: string) => void;
   onToggleCategoryLock: (e: React.MouseEvent, categoryKey: string) => void;
   onAddDocument: (categoryKey: string) => void;
 }
+
+type SecuredCategorySupport = "unknown" | "available" | "unavailable";
 
 interface DocumentAuditEntry {
   id: string;
@@ -248,136 +254,131 @@ function CategoryCard({
   icon: Icon,
   documentCount,
   securedCategories,
-  lastUnlockTimestamp,
+  isVaultUnlocked,
+  toggleDisabled,
   onCardClick,
   onToggleCategoryLock,
   onAddDocument,
 }: CategoryCardProps) {
   const isSecured = securedCategories.includes(categoryKey);
-  const { isLocked, secondsRemaining } = useCategoryLockState({
-    isSecured,
-    lastUnlockTimestamp,
-  });
+  const isLocked = isSecured && !isVaultUnlocked;
 
-  const timerBadge =
-    secondsRemaining !== null
-      ? `${Math.floor(secondsRemaining / 60)}:${String(secondsRemaining % 60).padStart(2, "0")}`
-      : null;
+  const cardContent = (
+    <Card
+      className={`group relative overflow-hidden cursor-pointer transition-all duration-300 border-2 ${
+        isSecured
+          ? "border-amber-300 bg-amber-50/20 hover:border-amber-400"
+          : "border-warmgray-200 bg-white hover:border-sage-400 hover:shadow-xl"
+      } senior-mode:p-2`}
+      onClick={() => onCardClick(categoryKey)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onCardClick(categoryKey);
+        }
+      }}
+    >
+      <CardHeader className="pb-3 relative z-0">
+        <div className="flex items-start justify-between">
+          <div
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+              isLocked
+                ? "bg-warmgray-200 text-warmgray-500 group-hover:scale-95"
+                : isSecured
+                  ? "bg-amber-100 text-amber-600"
+                  : "bg-sage-100 text-sage-600 group-hover:bg-sage-600 group-hover:text-white group-hover:rotate-3"
+            } senior-mode:w-20 senior-mode:h-20`}
+          >
+            {isLocked ? (
+              <Lock className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
+            ) : (
+              <Icon className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
+            )}
+          </div>
+          <div className="flex gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              className={`h-11 w-11 rounded-full transition-all ${
+                isSecured
+                  ? "text-amber-600 bg-amber-100"
+                  : "text-warmgray-300 hover:text-sage-600 hover:bg-sage-50"
+              } senior-mode:h-14 senior-mode:w-14`}
+              onClick={(event) => onToggleCategoryLock(event, categoryKey)}
+              disabled={toggleDisabled}
+              title={
+                toggleDisabled
+                  ? "Kategorie-Schutz ist in dieser Umgebung nicht verfugbar"
+                  : isSecured
+                    ? "Extra-Sicherheit deaktivieren"
+                    : "Extra-Sicherheit aktivieren"
+              }
+            >
+              {isSecured ? (
+                <ShieldCheck className="w-6 h-6" />
+              ) : (
+                <Shield className="w-6 h-6" />
+              )}
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-11 w-11 rounded-full text-warmgray-300 hover:text-sage-600 hover:bg-sage-50 transition-colors senior-mode:h-14 senior-mode:w-14"
+              onClick={(event) => {
+                event.stopPropagation();
+                onAddDocument(categoryKey);
+              }}
+              title="Dokument hinzufügen"
+            >
+              <Plus className="w-6 h-6" />
+            </Button>
+          </div>
+        </div>
+        <div className="pt-4">
+          <CardTitle className="text-xl font-serif senior-mode:text-3xl">
+            {title}
+          </CardTitle>
+          {description ? (
+            <CardDescription className="line-clamp-2 mt-1.5 leading-relaxed senior-mode:text-xl senior-mode:mt-2">
+              {description}
+            </CardDescription>
+          ) : null}
+        </div>
+      </CardHeader>
+      <CardContent className="relative z-0">
+        <div className="flex items-center justify-between border-t border-warmgray-100 pt-4 mt-2">
+          <div className="flex flex-col">
+            <p className="text-sm text-warmgray-500 senior-mode:text-lg">Inhalt</p>
+            <p className="text-base font-semibold text-warmgray-900 senior-mode:text-2xl">
+              <span className={isLocked ? "text-warmgray-400" : "text-sage-700"}>
+                {isLocked ? "--" : documentCount}
+              </span>{" "}
+              Dokument{documentCount !== 1 ? "e" : ""}
+            </p>
+          </div>
+          {isSecured ? (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-300 bg-amber-50/20 text-amber-700">
+              <ShieldCheck className="w-3 h-3" />
+              <span className="text-[11px] font-bold uppercase tracking-wider">
+                {isLocked ? "Gesperrt" : "Gesichert"}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  if (!isLocked) {
+    return cardContent;
+  }
 
   return (
-    <Tooltip open={isLocked ? undefined : false}>
-      <TooltipTrigger asChild>
-        <Card
-          className={`group relative overflow-hidden cursor-pointer transition-all duration-300 border-2 ${
-            isSecured
-              ? "border-amber-300 bg-amber-50/20 hover:border-amber-400"
-              : "border-warmgray-200 bg-white hover:border-sage-400 hover:shadow-xl"
-          } senior-mode:p-2`}
-          onClick={() => onCardClick(categoryKey)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              onCardClick(categoryKey);
-            }
-          }}
-        >
-          <CardHeader className="pb-3 relative z-0">
-            <div className="flex items-start justify-between">
-              <div
-                className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                  isLocked
-                    ? "bg-warmgray-200 text-warmgray-500 group-hover:scale-95"
-                    : isSecured
-                      ? "bg-amber-100 text-amber-600"
-                      : "bg-sage-100 text-sage-600 group-hover:bg-sage-600 group-hover:text-white group-hover:rotate-3"
-                } senior-mode:w-20 senior-mode:h-20`}
-              >
-                {isLocked ? (
-                  <Lock className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
-                ) : (
-                  <Icon className="w-8 h-8 senior-mode:w-10 senior-mode:h-10" />
-                )}
-              </div>
-              <div className="flex gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className={`h-11 w-11 rounded-full transition-all ${
-                    isSecured
-                      ? "text-amber-600 bg-amber-100"
-                      : "text-warmgray-300 hover:text-sage-600 hover:bg-sage-50"
-                  } senior-mode:h-14 senior-mode:w-14`}
-                  onClick={(event) => onToggleCategoryLock(event, categoryKey)}
-                  title={
-                    isSecured
-                      ? "Extra-Sicherheit aktiviert"
-                      : "Extra-Sicherheit aktivieren"
-                  }
-                >
-                  {isSecured ? (
-                    <ShieldCheck className="w-6 h-6" />
-                  ) : (
-                    <Shield className="w-6 h-6" />
-                  )}
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-11 w-11 rounded-full text-warmgray-300 hover:text-sage-600 hover:bg-sage-50 transition-colors senior-mode:h-14 senior-mode:w-14"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onAddDocument(categoryKey);
-                  }}
-                  title="Dokument hinzufügen"
-                >
-                  <Plus className="w-6 h-6" />
-                </Button>
-              </div>
-            </div>
-            <div className="pt-4">
-              <CardTitle className="text-xl font-serif senior-mode:text-3xl">
-                {title}
-              </CardTitle>
-              {description ? (
-                <CardDescription className="line-clamp-2 mt-1.5 leading-relaxed senior-mode:text-xl senior-mode:mt-2">
-                  {description}
-                </CardDescription>
-              ) : null}
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-0">
-            <div className="flex items-center justify-between border-t border-warmgray-100 pt-4 mt-2">
-              <div className="flex flex-col">
-                <p className="text-sm text-warmgray-500 senior-mode:text-lg">Inhalt</p>
-                <p className="text-base font-semibold text-warmgray-900 senior-mode:text-2xl">
-                  <span className={isLocked ? "text-warmgray-400" : "text-sage-700"}>
-                    {isLocked ? "--" : documentCount}
-                  </span>{" "}
-                  Dokument{documentCount !== 1 ? "e" : ""}
-                </p>
-              </div>
-              {isSecured ? (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-300 bg-amber-50/20 text-amber-700">
-                  <ShieldCheck className="w-3 h-3" />
-                  <span className="text-[11px] font-bold uppercase tracking-wider">
-                    {isLocked ? "Gesperrt" : "Gesichert"}
-                  </span>
-                  {timerBadge ? (
-                    <span className="text-xs text-amber-600 font-mono">
-                      {timerBadge}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
-      </TooltipTrigger>
-      <TooltipContent>
-        🔒 Gesperrte Kategorie – Klicken zum Entsperren
-      </TooltipContent>
+    <Tooltip>
+      <TooltipTrigger asChild>{cardContent}</TooltipTrigger>
+      <TooltipContent>🔒 Gesperrte Kategorie – Passwort zum Entsperren eingeben</TooltipContent>
     </Tooltip>
   );
 }
@@ -442,8 +443,16 @@ export default function DocumentsPage() {
 
   // Category Locking state
   const [securedCategories, setSecuredCategories] = useState<string[]>([]);
+  const [securedCategoriesSupport, setSecuredCategoriesSupport] =
+    useState<SecuredCategorySupport>("unknown");
   const [pendingUnlockCategory, setPendingUnlockCategory] = useState<string | null>(null);
   const [pendingUnlockDocumentId, setPendingUnlockDocumentId] = useState<string | null>(null);
+  const [isDisableCategoryLockDialogOpen, setIsDisableCategoryLockDialogOpen] =
+    useState(false);
+  const [disableCategoryLockTarget, setDisableCategoryLockTarget] =
+    useState<string | null>(null);
+  const [disableCategoryLockError, setDisableCategoryLockError] = useState<string | null>(null);
+  const [isDisablingCategoryLock, setIsDisablingCategoryLock] = useState(false);
   const [requiresRecentUnlock, setRequiresRecentUnlock] = useState(false);
   const [privacyModeEnabled, setPrivacyModeEnabled] = useState(false);
 
@@ -587,6 +596,7 @@ export default function DocumentsPage() {
         (profileWithSecured.error.code === "42703" ||
           String(profileWithSecured.error.message).includes("secured_categories"))
       ) {
+        setSecuredCategoriesSupport("unavailable");
         const fallbackProfile = await supabase
           .from("profiles")
           .select("subscription_status")
@@ -594,6 +604,7 @@ export default function DocumentsPage() {
           .single();
         profile = fallbackProfile.data as { subscription_status: string | null } | null;
       } else {
+        setSecuredCategoriesSupport("available");
         profile = profileWithSecured.data as {
           subscription_status: string | null;
           secured_categories?: string[] | null;
@@ -635,8 +646,6 @@ export default function DocumentsPage() {
       return;
     }
 
-    setRequiresRecentUnlock(false);
-
     if (pendingUnlockCategory) {
       if (pendingUnlockCategory.startsWith("custom:")) {
         const customId = pendingUnlockCategory.replace("custom:", "");
@@ -670,29 +679,61 @@ export default function DocumentsPage() {
   ]);
 
   const isDocumentLocked = useCallback(
-    (doc: Document) => Boolean(doc.extra_security_enabled) && !vaultContext.isUnlocked,
-    [vaultContext.isUnlocked],
+    (doc: Document) => Boolean(doc.extra_security_enabled) && !hasRecentUnlock,
+    [hasRecentUnlock],
   );
+
+  const isSecuredCategoriesUnavailableError = (error: { code?: string; message?: string }) =>
+    error.code === "42703" || String(error.message).includes("secured_categories");
+
+  const isDocInCategory = (doc: Document, categoryKey: string) => {
+    if (categoryKey.startsWith("custom:")) {
+      const customId = categoryKey.replace("custom:", "");
+      return doc.custom_category_id === customId;
+    }
+    return doc.category === categoryKey;
+  };
+
+  const getCategoryTitle = (categoryKey: string | null) => {
+    if (!categoryKey) return "Kategorie";
+    if (categoryKey.startsWith("custom:")) {
+      const customId = categoryKey.replace("custom:", "");
+      const custom = customCategories.find((entry) => entry.id === customId);
+      return custom?.name ?? "Eigene Kategorie";
+    }
+    return DOCUMENT_CATEGORIES[categoryKey as DocumentCategory]?.name ?? "Kategorie";
+  };
 
   const handleToggleCategoryLock = async (e: React.MouseEvent, categoryKey: string) => {
     e.stopPropagation();
 
+    if (securedCategoriesSupport === "unavailable") {
+      toast({
+        title: "Kategorie-Schutz nicht verfugbar",
+        description:
+          "Die Datenbankspalte secured_categories fehlt in dieser Umgebung.",
+      });
+      return;
+    }
+
+    const isCurrentlySecured = securedCategories.includes(categoryKey);
+    if (isCurrentlySecured) {
+      setDisableCategoryLockTarget(categoryKey);
+      setDisableCategoryLockError(null);
+      setIsDisableCategoryLockDialogOpen(true);
+      return;
+    }
+
     if (!hasRecentUnlock) {
-      setRequiresRecentUnlock(true);
       vaultContext.requestUnlock();
       return;
     }
 
-    const willLock = !securedCategories.includes(categoryKey);
-    emit(willLock ? EVENT_CATEGORY_LOCKED : EVENT_CATEGORY_UNLOCKED, {
+    const newSecured = [...securedCategories, categoryKey];
+    setSecuredCategories(newSecured);
+    emit(EVENT_CATEGORY_LOCKED, {
       category_key: categoryKey,
     });
-
-    const newSecured = securedCategories.includes(categoryKey)
-      ? securedCategories.filter((key) => key !== categoryKey)
-      : [...securedCategories, categoryKey];
-
-    setSecuredCategories(newSecured);
 
     try {
       const {
@@ -704,17 +745,135 @@ export default function DocumentsPage() {
           .update({ secured_categories: newSecured })
           .eq("id", user.id);
 
-        if (
-          updateError &&
-          (updateError.code === "42703" ||
-            String(updateError.message).includes("secured_categories"))
-        ) {
-          console.warn("secured_categories column is unavailable in this environment");
+        if (updateError) {
+          setSecuredCategories((prev) => prev.filter((key) => key !== categoryKey));
+          if (isSecuredCategoriesUnavailableError(updateError)) {
+            setSecuredCategoriesSupport("unavailable");
+            console.warn("secured_categories column is unavailable in this environment");
+            toast({
+              title: "Kategorie-Schutz nicht gespeichert",
+              description:
+                "Die Kategorie bleibt unverandert, weil secured_categories nicht verfugbar ist.",
+            });
+            return;
+          }
+
+          toast({
+            title: "Kategorie-Schutz nicht gespeichert",
+            description: "Bitte versuchen Sie es erneut.",
+          });
         }
       }
     } catch (err) {
+      setSecuredCategories((prev) => prev.filter((key) => key !== categoryKey));
       console.warn("Could not save secured_categories to profile", err);
+      toast({
+        title: "Kategorie-Schutz nicht gespeichert",
+        description: "Bitte versuchen Sie es erneut.",
+      });
     }
+  };
+
+  const handleConfirmDisableCategoryLock = async ({
+    passphrase,
+    mode,
+  }: {
+    passphrase: string;
+    mode: DisableCategoryLockMode;
+  }) => {
+    if (!disableCategoryLockTarget) {
+      return;
+    }
+
+    setIsDisablingCategoryLock(true);
+    setDisableCategoryLockError(null);
+
+    try {
+      await vaultContext.unlock(passphrase);
+    } catch {
+      setDisableCategoryLockError("Passwort ist nicht korrekt.");
+      setIsDisablingCategoryLock(false);
+      return;
+    }
+
+    const nextSecuredCategories = securedCategories.filter(
+      (key) => key !== disableCategoryLockTarget,
+    );
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setDisableCategoryLockError("Benutzer nicht gefunden.");
+      setIsDisablingCategoryLock(false);
+      return;
+    }
+
+    const { error: updateProfileError } = await supabase
+      .from("profiles")
+      .update({ secured_categories: nextSecuredCategories })
+      .eq("id", user.id);
+
+    if (updateProfileError) {
+      if (isSecuredCategoriesUnavailableError(updateProfileError)) {
+        setSecuredCategoriesSupport("unavailable");
+        setDisableCategoryLockError(
+          "Kategorie-Schutz ist in dieser Umgebung nicht verfugbar.",
+        );
+      } else {
+        setDisableCategoryLockError("Kategorie-Schutz konnte nicht deaktiviert werden.");
+      }
+      setIsDisablingCategoryLock(false);
+      return;
+    }
+
+    setSecuredCategories(nextSecuredCategories);
+    emit(EVENT_CATEGORY_UNLOCKED, {
+      category_key: disableCategoryLockTarget,
+      mode,
+    });
+
+    if (mode === "unlock_all_docs") {
+      const targetCategory = disableCategoryLockTarget;
+      const targetDocumentIds = documents
+        .filter((doc) => isDocInCategory(doc, targetCategory))
+        .map((doc) => doc.id);
+
+      if (targetDocumentIds.length > 0) {
+        const { error: unlockDocsError } = await supabase
+          .from("documents")
+          .update({ extra_security_enabled: false })
+          .in("id", targetDocumentIds);
+
+        if (unlockDocsError) {
+          setDisableCategoryLockError(
+            "Kategorie-Schutz deaktiviert, aber Dokumente konnten nicht entsperrt werden.",
+          );
+          setIsDisablingCategoryLock(false);
+          return;
+        }
+
+        setDocuments((prev) =>
+          prev.map((doc) =>
+            targetDocumentIds.includes(doc.id)
+              ? { ...doc, extra_security_enabled: false }
+              : doc,
+          ),
+        );
+      }
+    }
+
+    setIsDisableCategoryLockDialogOpen(false);
+    setDisableCategoryLockTarget(null);
+    setDisableCategoryLockError(null);
+    toast({
+      title: "Kategorie-Schutz deaktiviert",
+      description:
+        mode === "unlock_all_docs"
+          ? "Kategorie und Dokumente sind entsperrt."
+          : "Kategorie ist entsperrt, Dokumente bleiben gesichert.",
+    });
+    setIsDisablingCategoryLock(false);
   };
 
   const handleToggleDocumentSecurity = async (
@@ -752,19 +911,40 @@ export default function DocumentsPage() {
           doc.id === documentId ? { ...doc, extra_security_enabled: !enabled } : doc,
         ),
       );
+      const errorMessage = String(error.message ?? "");
+      const missingColumnError =
+        error.code === "42703" || errorMessage.includes("extra_security_enabled");
+      toast({
+        title: "Dokument-Sicherheit konnte nicht gespeichert werden",
+        description: missingColumnError
+          ? "Sicherheitsfunktion ist auf dem Server noch nicht vollständig aktiviert."
+          : "Bitte versuchen Sie es erneut.",
+      });
+      return;
     }
+
+    if (enabled) {
+      toast({
+        title: "Dokument gesperrt",
+        description:
+          "Zum Entsperren klicken Sie auf das Dokument und geben Ihr Tresor-Passwort ein (5 Minuten gültig).",
+      });
+      return;
+    }
+
+    toast({
+      title: "Dokument entsperrt",
+    });
   };
 
-  const isCategoryTimeLocked = (categoryKey: string) =>
-    securedCategories.includes(categoryKey) &&
-    (!vaultContext.isUnlocked ||
-      Date.now() - vaultContext.lastUnlockTimestamp > FIVE_MINUTES_MS);
+  const isCategoryLocked = useCallback(
+    (categoryKey: string) =>
+      securedCategories.includes(categoryKey) && !vaultContext.isUnlocked,
+    [securedCategories, vaultContext.isUnlocked],
+  );
 
   const handleCategoryClick = (categoryKey: string) => {
-    const lockedByTime =
-      securedCategories.includes(categoryKey) &&
-      (!vaultContext.isUnlocked ||
-        Date.now() - vaultContext.lastUnlockTimestamp > FIVE_MINUTES_MS);
+    const lockedByTime = isCategoryLocked(categoryKey);
 
     if (lockedByTime) {
       setPendingUnlockCategory(categoryKey);
@@ -900,10 +1080,7 @@ export default function DocumentsPage() {
         const targetCategoryKey = targetDoc.custom_category_id
           ? `custom:${targetDoc.custom_category_id}`
           : targetDoc.category;
-        const categoryIsLocked =
-          securedCategories.includes(targetCategoryKey) &&
-          (!vaultContext.isUnlocked ||
-            Date.now() - vaultContext.lastUnlockTimestamp > FIVE_MINUTES_MS);
+        const categoryIsLocked = isCategoryLocked(targetCategoryKey);
         if (categoryIsLocked || isDocumentLocked(targetDoc)) {
           setPendingUnlockCategory(targetCategoryKey);
           setPendingUnlockDocumentId(targetDoc.id);
@@ -934,9 +1111,7 @@ export default function DocumentsPage() {
     highlightedDoc,
     documents,
     isDocumentLocked,
-    securedCategories,
-    vaultContext.isUnlocked,
-    vaultContext.lastUnlockTimestamp,
+    isCategoryLocked,
     vaultContext,
   ]);
 
@@ -1296,8 +1471,20 @@ export default function DocumentsPage() {
       });
 
       if (!uploadRes.ok) {
-        const errorData = await uploadRes.json();
-        throw new Error(errorData.error || "Upload fehlgeschlagen");
+        const errorData = await uploadRes.json().catch(() => ({}));
+        const retryAfter =
+          typeof errorData.retryAfterSeconds === "number"
+            ? errorData.retryAfterSeconds
+            : null;
+        const error = new Error(errorData.error || "Upload fehlgeschlagen") as
+          | (Error & { status?: number; retryAfterSeconds?: number })
+          | Error;
+        (error as Error & { status?: number; retryAfterSeconds?: number }).status =
+          uploadRes.status;
+        (
+          error as Error & { status?: number; retryAfterSeconds?: number }
+        ).retryAfterSeconds = retryAfter;
+        throw error;
       }
 
       const uploadData = await uploadRes.json();
@@ -1486,7 +1673,12 @@ export default function DocumentsPage() {
         category: uploadCategory,
       });
       // Check for document limit error from server
-      const errorObj = error as { message?: string; code?: string };
+      const errorObj = error as {
+        message?: string;
+        code?: string;
+        status?: number;
+        retryAfterSeconds?: number;
+      };
       if (
         errorObj?.message?.includes("Document limit") ||
         errorObj?.code === "check_violation"
@@ -1499,6 +1691,16 @@ export default function DocumentsPage() {
       } else if (errorObj?.message?.includes("Tresor nicht entsperrt")) {
         // Surface the vault-not-unlocked error directly
         setUploadError(errorObj.message ?? "Tresor nicht entsperrt.");
+      } else if (errorObj?.status === 429) {
+        const waitSeconds =
+          typeof errorObj.retryAfterSeconds === "number"
+            ? errorObj.retryAfterSeconds
+            : null;
+        setUploadError(
+          waitSeconds && waitSeconds > 0
+            ? `Zu viele Upload-Versuche. Bitte warten Sie ${waitSeconds} Sekunden und versuchen Sie es erneut.`
+            : "Zu viele Upload-Versuche. Bitte kurz warten und erneut versuchen.",
+        );
       } else {
         setUploadError("Fehler beim Hochladen. Bitte versuchen Sie es erneut.");
       }
@@ -1805,7 +2007,7 @@ export default function DocumentsPage() {
       ? `custom:${doc.custom_category_id}`
       : doc.category;
 
-    if (isCategoryTimeLocked(targetCategoryKey) || isDocumentLocked(doc)) {
+    if (isCategoryLocked(targetCategoryKey) || isDocumentLocked(doc)) {
       setPendingUnlockCategory(targetCategoryKey);
       setPendingUnlockDocumentId(doc.id);
       vaultContext.requestUnlock();
@@ -2260,7 +2462,7 @@ export default function DocumentsPage() {
   const getDisplayTitle = (doc: Document) => {
     if (
       privacyModeEnabled &&
-      (isCategoryTimeLocked(
+      (isCategoryLocked(
         doc.custom_category_id ? `custom:${doc.custom_category_id}` : doc.category,
       ) ||
         isDocumentLocked(doc))
@@ -2470,6 +2672,7 @@ export default function DocumentsPage() {
                 variant={isSecured ? "default" : "outline"}
                 className="w-full sm:w-auto"
                 onClick={(event) => void handleToggleCategoryLock(event, categoryKey)}
+                disabled={securedCategoriesSupport === "unavailable"}
               >
                 {isSecured ? (
                   <ShieldCheck className="mr-2 h-4 w-4" />
@@ -2486,8 +2689,11 @@ export default function DocumentsPage() {
                 size="icon"
                 className="h-10 w-10 self-end sm:self-auto"
                 onClick={(event) => void handleToggleCategoryLock(event, categoryKey)}
+                disabled={securedCategoriesSupport === "unavailable"}
                 title={
-                  isSecured
+                  securedCategoriesSupport === "unavailable"
+                    ? "Kategorie-Schutz ist in dieser Umgebung nicht verfugbar"
+                    : isSecured
                     ? "Extra-Sicherheit aktiv"
                     : "Extra-Sicherheit aktivieren"
                 }
@@ -3037,7 +3243,8 @@ export default function DocumentsPage() {
                       icon={iconMap[category.icon] || FileText}
                       documentCount={getDocumentCountForCategory(key as DocumentCategory)}
                       securedCategories={securedCategories}
-                      lastUnlockTimestamp={vaultContext.lastUnlockTimestamp}
+                      isVaultUnlocked={vaultContext.isUnlocked}
+                      toggleDisabled={securedCategoriesSupport === "unavailable"}
                       onCardClick={handleCategoryClick}
                       onToggleCategoryLock={handleToggleCategoryLock}
                       onAddDocument={(categoryKey) =>
@@ -3056,7 +3263,8 @@ export default function DocumentsPage() {
                       icon={resolveCategoryIcon(cat.icon)}
                       documentCount={getDocumentCountForCustomCategory(cat.id)}
                       securedCategories={securedCategories}
-                      lastUnlockTimestamp={vaultContext.lastUnlockTimestamp}
+                      isVaultUnlocked={vaultContext.isUnlocked}
+                      toggleDisabled={securedCategoriesSupport === "unavailable"}
                       onCardClick={handleCategoryClick}
                       onToggleCategoryLock={handleToggleCategoryLock}
                       onAddDocument={() => openUploadDialog(null, cat.id)}
@@ -3180,6 +3388,7 @@ export default function DocumentsPage() {
                         onClick={(event) =>
                           void handleToggleCategoryLock(event, `custom:${cat.id}`)
                         }
+                        disabled={securedCategoriesSupport === "unavailable"}
                       >
                         {securedCategories.includes(`custom:${cat.id}`) ? (
                           <ShieldCheck className="mr-2 h-4 w-4" />
@@ -3201,8 +3410,11 @@ export default function DocumentsPage() {
                         onClick={(event) =>
                           void handleToggleCategoryLock(event, `custom:${cat.id}`)
                         }
+                        disabled={securedCategoriesSupport === "unavailable"}
                         title={
-                          securedCategories.includes(`custom:${cat.id}`)
+                          securedCategoriesSupport === "unavailable"
+                            ? "Kategorie-Schutz ist in dieser Umgebung nicht verfugbar"
+                            : securedCategories.includes(`custom:${cat.id}`)
                             ? "Extra-Sicherheit aktiv"
                             : "Extra-Sicherheit aktivieren"
                         }
@@ -3270,6 +3482,20 @@ export default function DocumentsPage() {
           </TabsContent>
         ))}
       </Tabs>
+      <DisableCategoryLockDialog
+        open={isDisableCategoryLockDialogOpen}
+        categoryTitle={getCategoryTitle(disableCategoryLockTarget)}
+        loading={isDisablingCategoryLock}
+        error={disableCategoryLockError}
+        onOpenChange={(open) => {
+          setIsDisableCategoryLockDialogOpen(open);
+          if (!open) {
+            setDisableCategoryLockTarget(null);
+            setDisableCategoryLockError(null);
+          }
+        }}
+        onConfirm={handleConfirmDisableCategoryLock}
+      />
       {/* Upload Dialog */}
       <Dialog
         open={isUploadOpen}
@@ -3517,7 +3743,7 @@ export default function DocumentsPage() {
                   const categoryKey = doc.custom_category_id
                     ? `custom:${doc.custom_category_id}`
                     : doc.category;
-                  return isDocumentLocked(doc) || isCategoryTimeLocked(categoryKey);
+                  return isDocumentLocked(doc) || isCategoryLocked(categoryKey);
                 });
                 if (hasSecuredSelection && !hasRecentUnlock) {
                   setRequiresRecentUnlock(true);

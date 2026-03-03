@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   DialogContent,
   DialogDescription,
@@ -41,7 +41,7 @@ interface UploadDialogProps {
   familyMembers: FamilyMember[];
   getCategorySubcategoriesForUpload: () => Subcategory[];
   handleCreateSubcategory: () => void;
-  handleUpload: () => void;
+  handleUpload: () => Promise<void>;
   isCreatingSubcategory: boolean;
   isUploading: boolean;
   newSubcategoryName: string;
@@ -89,7 +89,7 @@ type SubmitButtonProps = {
   uploadCategory: DocumentCategory | null;
   uploadTitle: string;
   isUploading: boolean;
-  onSubmit: () => void;
+  onSubmit: () => Promise<void>;
 };
 
 function SubmitUnlocked({
@@ -118,8 +118,7 @@ function SubmitUnlocked({
 
 type SubmitLockedProps = Omit<SubmitButtonProps, "onSubmit"> & {
   vault: UploadDialogProps["vault"];
-  isPendingSubmit: boolean;
-  onUnlockSuccess: () => void;
+  onUnlockSuccess: () => Promise<void>;
 };
 
 function SubmitLocked({
@@ -128,7 +127,6 @@ function SubmitLocked({
   uploadTitle,
   isUploading,
   vault,
-  isPendingSubmit,
   onUnlockSuccess,
 }: SubmitLockedProps) {
   const [passphrase, setPassphrase] = useState("");
@@ -140,8 +138,7 @@ function SubmitLocked({
     !uploadCategory ||
     !uploadTitle.trim() ||
     isUploading ||
-    isUnlocking ||
-    isPendingSubmit;
+    isUnlocking;
 
   return (
     <div className="w-full space-y-3">
@@ -174,7 +171,7 @@ function SubmitLocked({
               setIsUnlocking(true);
               try {
                 await vault.unlockWithBiometric();
-                onUnlockSuccess();
+                await onUnlockSuccess();
               } catch {
                 setPassphraseError("Entsperren mit Biometrie fehlgeschlagen");
               } finally {
@@ -194,7 +191,7 @@ function SubmitLocked({
             setIsUnlocking(true);
             try {
               await vault.unlock(passphrase);
-              onUnlockSuccess();
+              await onUnlockSuccess();
             } catch {
               setPassphraseError("Falsches Passwort");
             } finally {
@@ -202,7 +199,7 @@ function SubmitLocked({
             }
           }}
         >
-          {isUnlocking || isUploading || isPendingSubmit ? (
+          {isUnlocking || isUploading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Entsperren...
@@ -222,7 +219,7 @@ function SubmitLocked({
 
 type SubmitNotSetupProps = {
   onClose: () => void;
-  onSubmit: () => void;
+  onSubmit: () => Promise<void>;
   vault: UploadDialogProps["vault"];
 };
 
@@ -300,29 +297,7 @@ function UploadDialogRoot({
   vault,
 }: UploadDialogProps) {
   const subcategories = getCategorySubcategoriesForUpload();
-  const [pendingSubmitAfterUnlock, setPendingSubmitAfterUnlock] =
-    useState(false);
-
-  useEffect(() => {
-    if (!pendingSubmitAfterUnlock || vaultState !== "unlocked") return;
-    let cancelled = false;
-    const submitWhenUnlocked = async () => {
-      try {
-        await handleUpload();
-      } finally {
-        if (!cancelled) {
-          setPendingSubmitAfterUnlock(false);
-        }
-      }
-    };
-    void submitWhenUnlocked();
-    return () => {
-      cancelled = true;
-    };
-  }, [handleUpload, pendingSubmitAfterUnlock, vaultState]);
-
   const handleCloseWithPendingReset = () => {
-    setPendingSubmitAfterUnlock(false);
     onClose();
   };
 
@@ -709,8 +684,7 @@ function UploadDialogRoot({
             uploadTitle={uploadTitle}
             isUploading={isUploading}
             vault={vault}
-            isPendingSubmit={pendingSubmitAfterUnlock}
-            onUnlockSuccess={() => setPendingSubmitAfterUnlock(true)}
+            onUnlockSuccess={handleUpload}
           />
         ) : null}
         {vaultState === "not-setup" ? (

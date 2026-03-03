@@ -24,6 +24,58 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 17:03 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Implemented category-security UX hardening in `src/app/(dashboard)/dokumente/page.tsx` and added `src/app/(dashboard)/dokumente/DisableCategoryLockDialog.tsx`.
+- Fixed Tooltip controlled/uncontrolled warning by removing conditional `open` prop switching and using explicit locked tooltip rendering only.
+- Removed countdown badge from secured category cards; category lock badge now shows clear secure/locked state without timer.
+- Added guarded `secured_categories` support detection (`available|unavailable`) with UI disable/toast fallback when the column is missing.
+- Added password-confirmed disable-lock flow for categories, with explicit mode to either unlock all documents in the category or keep document-level locks.
+- Updated category access gating to require unlock when vault is locked (instead of category timer-window checks).
+
+Why:
+- User-reported production issues: `profiles` PATCH 400 around `secured_categories`, confusing category timer UX, and Tooltip control-mode warning.
+
+Risk / Regression Watch:
+- Disable-lock flow now performs optional bulk document updates (`extra_security_enabled=false`) when `unlock_all_docs` is selected; DB policy/schema differences should be monitored in older environments.
+- If `secured_categories` is missing in a deployed environment, category lock toggles are intentionally disabled with user feedback.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/pages/dokumente.test.tsx`
+
+Rollback:
+- Revert `src/app/(dashboard)/dokumente/page.tsx`, remove `src/app/(dashboard)/dokumente/DisableCategoryLockDialog.tsx`, and remove this changelog entry.
+
+## 2026-03-03 17:02 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Fixed document extra-security UX and reliability in `src/app/(dashboard)/dokumente/page.tsx`:
+- Enforced document lock gating with recent-unlock semantics (`hasRecentUnlock`) so extra-secured docs require a fresh unlock window.
+- Hardened single-document lock/unlock persistence: rollback UI state on update failure and show actionable toast messages, including missing-column guidance for `extra_security_enabled`.
+- Added user guidance toast when a document is locked, clarifying click + vault-password unlock behavior.
+- Limited settings document security history to latest 5 entries in `src/components/settings/document-audit-log.tsx`.
+- Added tests:
+- `tests/components/document-audit-log.test.tsx` (query limit regression check).
+- Extended `tests/pages/dokumente.test.tsx` with stale-unlock gating and single-doc lock success/failure coverage.
+
+Why:
+- User reported `PATCH /documents ... 400`, mismatched lock UX, and requested explicit unlock warning plus latest-5 settings history behavior.
+
+Risk / Regression Watch:
+- Lock state now depends on recent unlock for extra-secured docs; users with long-open sessions will be prompted more often after 5 minutes.
+- Missing-column branch assumes `42703` or message containing `extra_security_enabled`; verify localization/proxy error formats in production logs.
+
+Verification:
+- `npm run type-check`
+- `npm test -- --run tests/pages/dokumente.test.tsx tests/components/document-audit-log.test.tsx`
+
+Rollback:
+- Revert `src/app/(dashboard)/dokumente/page.tsx`, `src/components/settings/document-audit-log.tsx`, `tests/pages/dokumente.test.tsx`, and `tests/components/document-audit-log.test.tsx`.
+
+Open Issues:
+- none
+
 ## 2026-03-03 16:15 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Fixed dashboard tooltip provider gap by wrapping `src/app/(dashboard)/layout.tsx` with `TooltipProvider`, covering `dokumente/page.tsx` tooltips.
@@ -51,6 +103,28 @@ Verification:
 
 Rollback:
 - Revert `src/app/(dashboard)/layout.tsx`, `src/components/error/error-boundary.tsx`, `src/components/error/unhandled-rejection-provider.tsx`, `src/lib/supabase/client.ts`, `src/app/api/errors/log/route.ts`, `src/app/api/webhooks/grafana-alert/route.ts`, `src/app/api/webhooks/telegram-bot/route.ts`, `src/lib/errors/structured-logger.ts`, and `deploy/grafana/provisioning/alerting/alert-rules.yml`.
+
+Open Issues:
+- none
+
+## 2026-03-03 16:29 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Added a lightweight client event channel in `src/lib/profile-events.ts` (`profile:avatar-updated`).
+- Updated settings avatar upload/delete handlers in `src/app/(dashboard)/einstellungen/page.tsx` to emit avatar update events immediately after successful server responses.
+- Updated `src/components/layout/dashboard-nav.tsx` to track a local `avatarPath`, listen for avatar update events, and re-resolve avatar URL without requiring a full page reload.
+
+Why:
+- Users saw the new avatar only after full reload because sidebar nav avatar depended on server-rendered props that were not refreshed after in-page settings updates.
+
+Risk / Regression Watch:
+- Event-based sync is in-browser/session scoped; hard reload/new tab still relies on server props as source of truth.
+- Any future component that updates avatar path should emit the same event if instant nav sync is expected.
+
+Verification:
+- `npm run type-check`
+
+Rollback:
+- Revert `src/lib/profile-events.ts`, `src/app/(dashboard)/einstellungen/page.tsx`, `src/components/layout/dashboard-nav.tsx`, and this changelog entry.
 
 Open Issues:
 - none

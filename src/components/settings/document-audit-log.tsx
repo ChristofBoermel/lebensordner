@@ -83,7 +83,7 @@ export function DocumentAuditLog() {
           .eq('user_id', user.id)
           .in('event_type', [...DOCUMENT_AUDIT_EVENT_TYPES])
           .order('timestamp', { ascending: false })
-          .limit(100)
+          .limit(5)
 
         if (queryError) {
           throw queryError

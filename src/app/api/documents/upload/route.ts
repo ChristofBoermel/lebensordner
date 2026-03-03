@@ -45,7 +45,12 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json(
       { error: "Too many requests", retryAfterSeconds },
-      { status: 429 },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.max(1, retryAfterSeconds)),
+        },
+      },
     );
   }
 
@@ -63,7 +68,12 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json(
       { error: "Too many requests", retryAfterSeconds },
-      { status: 429 },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.max(1, retryAfterSeconds)),
+        },
+      },
     );
   }
 

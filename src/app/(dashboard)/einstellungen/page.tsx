@@ -62,6 +62,7 @@ import { SecurityActivityLog } from '@/components/settings/security-activity-log
 import { DocumentAuditLog } from '@/components/settings/document-audit-log'
 import { useVault } from '@/lib/vault/VaultContext'
 import { resolveAvatarUrl } from '@/lib/avatar'
+import { emitProfileAvatarUpdated } from '@/lib/profile-events'
 
 const GDPRExportDialog = dynamic(
   () => import('@/components/settings/gdpr-export-dialog').then((mod) => ({ default: mod.GDPRExportDialog })),
@@ -452,6 +453,7 @@ export default function EinstellungenPage() {
       const { path: filePath } = uploadData
 
       setProfile({ ...profile, profile_picture_url: filePath })
+      emitProfileAvatarUpdated(filePath)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err: any) {
@@ -483,6 +485,7 @@ export default function EinstellungenPage() {
       }
 
       setProfile({ ...profile, profile_picture_url: null })
+      emitProfileAvatarUpdated(null)
       setResolvedProfilePictureUrl(null)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)

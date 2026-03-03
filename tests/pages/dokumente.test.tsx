@@ -85,6 +85,7 @@ let lastUploadDocument: Record<string, unknown> | null = null
 let mockUploadDocument: Record<string, unknown> | null = null
 let trustedPersonsQueryCount = 0
 let documentUpdateCalls: Array<{ id: string; extra_security_enabled: boolean }> = []
+let documentUpdateErrorsById = new Map<string, { code?: string; message?: string }>()
 
 const createMockBuilder = (tableName: string) => {
   const builder: Record<string, any> = {}
@@ -124,6 +125,11 @@ const createMockBuilder = (tableName: string) => {
           id: value,
           extra_security_enabled: payload.extra_security_enabled,
         })
+        const injectedError = documentUpdateErrorsById.get(value)
+        if (injectedError) {
+          documentUpdateErrorsById.delete(value)
+          return Promise.resolve({ data: null, error: injectedError })
+        }
       }
       return Promise.resolve({ data: null, error: null })
     }),
@@ -285,6 +291,7 @@ const resetVaultMockState = () => {
 beforeEach(() => {
   mockToast.mockReset()
   documentUpdateCalls = []
+  documentUpdateErrorsById = new Map()
   resetVaultMockState()
 })
 
@@ -1157,6 +1164,20 @@ describe('Dokumente Bulk-Action Bar — T-14', () => {
     }
   }
 
+  const triggerDocumentMenuAction = async (title: string, actionLabel: RegExp) => {
+    const docItem = Array.from(document.querySelectorAll('.document-item')).find((row) =>
+      row.textContent?.includes(title)
+    ) as HTMLElement | undefined
+    expect(docItem).toBeDefined()
+
+    const rowButtons = docItem!.querySelectorAll('button')
+    const menuTrigger = rowButtons[rowButtons.length - 1]
+    expect(menuTrigger).toBeDefined()
+    await userEvent.click(menuTrigger)
+
+    await userEvent.click(screen.getByRole('menuitem', { name: actionLabel }))
+  }
+
   it('Bulk-Action-Bar ist zentriert (left-1/2, -translate-x-1/2, kein inset-x-4)', async () => {
     await selectFirstDocument()
 
@@ -1232,6 +1253,63 @@ describe('Dokumente Bulk-Action Bar — T-14', () => {
 
     expect(mockRequestUnlock).toHaveBeenCalledTimes(1)
     expect(documentUpdateCalls).toHaveLength(0)
+  })
+
+  it('erzwingt auch bei isUnlocked eine erneute Entsperrung nach Ablauf der 5-Minuten-Frist', async () => {
+    mockTables.documents = [mockDocBulkLocked]
+    mockVaultState.isUnlocked = true
+    mockVaultState.lastUnlockTimestamp = 0
+
+    await renderPage()
+    await userEvent.click(screen.getByRole('tab', { name: /Alle/i }))
+    const docItem = Array.from(document.querySelectorAll('.document-item')).find((row) =>
+      row.textContent?.includes('Mietvertrag')
+    ) as HTMLElement | undefined
+    expect(docItem).toBeDefined()
+
+    await userEvent.click(docItem!)
+
+    expect(mockRequestUnlock).toHaveBeenCalledTimes(1)
+  })
+
+  it('zeigt bei erfolgreichem Einzel-Sperren den Hinweis zum Entsperren per Passwort', async () => {
+    mockTables.documents = [mockDocBulk]
+
+    await renderPage()
+    await userEvent.click(screen.getByRole('tab', { name: /Alle/i }))
+    await triggerDocumentMenuAction('Reisepass', /Extra-Sicherheit aktivieren/i)
+
+    await waitFor(() => {
+      expect(documentUpdateCalls).toEqual([{ id: 'doc-bulk-1', extra_security_enabled: true }])
+    })
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Dokument gesperrt',
+        description: expect.stringContaining('Tresor-Passwort'),
+      })
+    )
+  })
+
+  it('rollt Einzel-Sperren bei fehlender Datenbankspalte zurueck und zeigt Fehlermeldung', async () => {
+    mockTables.documents = [mockDocBulk]
+    documentUpdateErrorsById.set('doc-bulk-1', {
+      code: '42703',
+      message: 'column "extra_security_enabled" does not exist',
+    })
+
+    await renderPage()
+    await userEvent.click(screen.getByRole('tab', { name: /Alle/i }))
+    await triggerDocumentMenuAction('Reisepass', /Extra-Sicherheit aktivieren/i)
+
+    await waitFor(() => {
+      expect(documentUpdateCalls).toEqual([{ id: 'doc-bulk-1', extra_security_enabled: true }])
+    })
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Dokument-Sicherheit konnte nicht gespeichert werden',
+        description: expect.stringContaining('Server noch nicht vollständig aktiviert'),
+      })
+    )
   })
 
   it('wendet Sperren auf alle ausgewaehlten Dokumente an und zeigt Count-Toast', async () => {
