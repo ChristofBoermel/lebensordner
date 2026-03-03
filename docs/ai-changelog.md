@@ -24,6 +24,21 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 21:26 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Increased password-reset rate limit from `3/hour` to `5/hour` in shared security constants.
+- Updated security constant tests to assert the new `5/hour` policy.
+
+Risk / Regression Watch:
+- Slightly higher reset request throughput; monitor for abuse spikes and SMTP reputation impact.
+
+Verification:
+- `npm test -- --run tests/api/password-reset.test.ts tests/lib/security/rate-limit-constants.test.ts`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/lib/security/rate-limit.ts` and `tests/lib/security/rate-limit-constants.test.ts` to restore `3/hour`.
+
 ## 2026-03-03 21:04 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Added explicit reset-email dispatch result handling in `src/app/api/auth/password-reset/request/route.ts`:
