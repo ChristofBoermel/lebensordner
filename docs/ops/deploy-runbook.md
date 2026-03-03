@@ -90,3 +90,7 @@ After incident, sync the rollback state back to git.
 - `www` TLS failures:
   - confirm Caddy host includes `www.lebensordner.org`
   - check Caddy domain list in logs
+- Password reset emails include `http://kong/...`:
+  - check `deploy/.env` has `API_EXTERNAL_URL=https://lebensordner.org/supabase` and `SITE_URL=https://lebensordner.org`
+  - verify auth container env: `docker inspect $(docker compose ps -q auth) --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^(API_EXTERNAL_URL|GOTRUE_SITE_URL)='`
+  - recreate auth with updated env: `docker compose up -d --no-deps --force-recreate auth`

@@ -24,6 +24,31 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 20:09 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Hardened password-reset redirect origin resolution in `src/app/api/auth/password-reset/request/route.ts` by adding validated fallback order: `AUTH_PUBLIC_BASE_URL` -> `NEXT_PUBLIC_APP_URL` -> `SITE_URL` -> request `Origin`; `redirectTo` now uses `new URL(...)`, and invalid/missing public origin returns a controlled config error.
+- Expanded `tests/api/password-reset.test.ts` with explicit coverage for env-priority redirect selection and invalid-origin failure behavior; stabilized test mock lifecycle for rate-limit mocks.
+- Extended deploy smoke checks in `scripts/ops/verify-deploy.sh` with `check_auth_public_urls` to fail when `supabase-auth` lacks valid `API_EXTERNAL_URL` / `GOTRUE_SITE_URL` HTTPS values.
+- Updated deployment docs/config templates: added `AUTH_PUBLIC_BASE_URL` and clearer URL intent in `deploy/.env.example`, wired `AUTH_PUBLIC_BASE_URL` through `deploy/docker-compose.yml` `nextjs` env, and added runbook troubleshooting for `http://kong/...` reset links in `docs/ops/deploy-runbook.md`.
+
+Why:
+- Password reset emails were still producing internal-host verify links (`http://kong/...`) under proxy/env drift conditions; this change fixes root-cause detection in deploy checks and hardens app redirect generation.
+
+Risk / Regression Watch:
+- If `AUTH_PUBLIC_BASE_URL` is set to an invalid value, reset requests now fail fast with a 500 configuration response instead of silently generating a bad callback URL.
+- `verify-deploy.sh` now enforces HTTPS for auth public URLs; intentionally non-HTTPS dev-like production configs will fail smoke checks.
+
+Verification:
+- `npm test -- --run tests/api/password-reset.test.ts`
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+
+Rollback:
+- Revert `src/app/api/auth/password-reset/request/route.ts`, `tests/api/password-reset.test.ts`, `scripts/ops/verify-deploy.sh`, `deploy/.env.example`, `deploy/docker-compose.yml`, `docs/ops/deploy-runbook.md`, and this changelog entry.
+
+Open Issues:
+- none
+
 ## 2026-03-03 17:03 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Implemented category-security UX hardening in `src/app/(dashboard)/dokumente/page.tsx` and added `src/app/(dashboard)/dokumente/DisableCategoryLockDialog.tsx`.
