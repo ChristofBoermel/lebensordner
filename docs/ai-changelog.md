@@ -24,6 +24,30 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 23:27 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Hardened Turnstile client integration in `src/components/auth/turnstile.tsx` by adding explicit widget `size`, error callback propagation, and script-load failure callback.
+- Added visible CAPTCHA load-failure UX in auth screens:
+  - `src/app/(auth)/passwort-vergessen/page.tsx`
+  - `src/app/(auth)/anmelden/page.tsx`
+  so users get actionable feedback (including Turnstile error code) instead of a hidden/blank challenge state.
+
+Why:
+- Password reset flow showed CAPTCHA-required state while the Turnstile widget failed client-side (`400020`) and did not render, leaving users blocked without useful UI feedback.
+
+Risk / Regression Watch:
+- Auth pages now surface Turnstile error codes to end users; if error volume spikes, review Turnstile widget/site-key/domain configuration in Cloudflare.
+
+Verification:
+- `python scripts/ops/hook-discipline-audit.py`
+- `npm run type-check`
+
+Rollback:
+- Revert `src/components/auth/turnstile.tsx`, `src/app/(auth)/passwort-vergessen/page.tsx`, `src/app/(auth)/anmelden/page.tsx`, and this changelog entry.
+
+Open Issues:
+- `npm run lint` timed out in local sandbox due large `.worktrees/.../.next` artifacts; CI lint remains source of truth.
+
 ## 2026-03-03 23:00 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Added recovery-hash session handling on `src/app/(auth)/anmelden/page.tsx`:

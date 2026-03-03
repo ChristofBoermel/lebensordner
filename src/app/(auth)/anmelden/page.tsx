@@ -28,6 +28,7 @@ export default function LoginPage() {
   // Security states
   const [showCaptcha, setShowCaptcha] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileErrorCode, setTurnstileErrorCode] = useState<string | null>(null)
   const [failureCount, setFailureCount] = useState(0)
   const [isLocked, setIsLocked] = useState(false)
   const [showLockoutModal, setShowLockoutModal] = useState(false)
@@ -84,7 +85,16 @@ export default function LoginPage() {
 
   const handleTurnstileVerify = useCallback((token: string) => {
     setTurnstileToken(token)
+    setTurnstileErrorCode(null)
   }, [])
+
+  function handleTurnstileError(errorCode: string) {
+    setTurnstileToken(null)
+    setTurnstileErrorCode(errorCode)
+    setError(
+      `CAPTCHA konnte nicht geladen werden (Code: ${errorCode}). Bitte Seite neu laden oder später erneut versuchen.`,
+    )
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -197,6 +207,7 @@ export default function LoginPage() {
       if (response.status === 400 && data.requiresCaptcha) {
         // CAPTCHA required
         setShowCaptcha(true)
+        setTurnstileErrorCode(null)
         setFailureCount(data.failureCount || 3)
         setError('Aus Sicherheitsgriinden ist eine CAPTCHA-Verifizierung erforderlich.')
         return
@@ -613,11 +624,16 @@ export default function LoginPage() {
               <p className="text-sm text-warmgray-600 text-center">
                 Aus Sicherheitsgründen ist eine CAPTCHA-Verifizierung erforderlich.
               </p>
-              <TurnstileWidget ref={turnstileRef} onVerify={handleTurnstileVerify} />
+              <TurnstileWidget ref={turnstileRef} onVerify={handleTurnstileVerify} onError={handleTurnstileError} />
               {turnstileToken && (
                 <p className="text-xs text-green-600 text-center flex items-center justify-center gap-1">
                   <CheckCircle2 className="w-3 h-3" />
                   Verifiziert
+                </p>
+              )}
+              {turnstileErrorCode && (
+                <p className="text-xs text-red-700 text-center">
+                  CAPTCHA-Ladefehler: {turnstileErrorCode}
                 </p>
               )}
             </div>

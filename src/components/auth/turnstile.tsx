@@ -8,6 +8,7 @@ export interface TurnstileWidgetRef {
 
 interface TurnstileWidgetProps {
   onVerify: (token: string) => void
+  onError?: (code: string) => void
   ref?: React.Ref<TurnstileWidgetRef>
 }
 
@@ -19,7 +20,10 @@ declare global {
         options: {
           sitekey: string
           callback: (token: string) => void
+          size?: 'normal' | 'compact' | 'flexible'
           theme?: 'light' | 'dark' | 'auto'
+          retry?: 'auto' | 'never'
+          'error-callback'?: (errorCode: string | number) => boolean | void
         }
       ) => string
       reset: (widgetId: string) => void
@@ -29,7 +33,7 @@ declare global {
   }
 }
 
-function TurnstileWidget({ onVerify, ref }: TurnstileWidgetProps & { ref?: React.Ref<TurnstileWidgetRef> }) {
+function TurnstileWidget({ onVerify, onError, ref }: TurnstileWidgetProps & { ref?: React.Ref<TurnstileWidgetRef> }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const widgetIdRef = useRef<string | null>(null)
   const scriptLoadedRef = useRef(false)
@@ -55,7 +59,13 @@ function TurnstileWidget({ onVerify, ref }: TurnstileWidgetProps & { ref?: React
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
         callback: onVerify,
+        size: 'normal',
         theme: 'light',
+        retry: 'never',
+        'error-callback': (errorCode) => {
+          onError?.(String(errorCode))
+          return true
+        },
       })
       return
     }
@@ -78,7 +88,13 @@ function TurnstileWidget({ onVerify, ref }: TurnstileWidgetProps & { ref?: React
         widgetIdRef.current = window.turnstile.render(containerRef.current, {
           sitekey: siteKey,
           callback: onVerify,
+          size: 'normal',
           theme: 'light',
+          retry: 'never',
+          'error-callback': (errorCode) => {
+            onError?.(String(errorCode))
+            return true
+          },
         })
       }
       return
@@ -97,7 +113,13 @@ function TurnstileWidget({ onVerify, ref }: TurnstileWidgetProps & { ref?: React
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
         callback: onVerify,
+        size: 'normal',
         theme: 'light',
+        retry: 'never',
+        'error-callback': (errorCode) => {
+          onError?.(String(errorCode))
+          return true
+        },
       })
     }
 
@@ -106,6 +128,9 @@ function TurnstileWidget({ onVerify, ref }: TurnstileWidgetProps & { ref?: React
       'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad'
     script.async = true
     script.defer = true
+    script.onerror = () => {
+      onError?.('script-load-failed')
+    }
     document.head.appendChild(script)
 
     return () => {
@@ -114,7 +139,7 @@ function TurnstileWidget({ onVerify, ref }: TurnstileWidgetProps & { ref?: React
         widgetIdRef.current = null
       }
     }
-  }, [onVerify])
+  }, [onError, onVerify])
 
   return (
     <div className="flex justify-center py-3">
