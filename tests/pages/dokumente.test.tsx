@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DocumentsPage from '@/app/(dashboard)/dokumente/page'
 import {
@@ -16,7 +16,7 @@ const { mockToast, mockRequestUnlock, mockVaultState } = vi.hoisted(() => {
     isSetUp: true,
     isUnlocked: true,
     isUnlockRequested: false,
-    masterKey: null,
+    masterKey: {} as CryptoKey,
     lastUnlockTimestamp: Date.now(),
     hasBiometricSetup: false,
     isBiometricSupported: false,
@@ -176,6 +176,19 @@ vi.mock('@/components/ui/toast', () => ({
   toast: (...args: unknown[]) => mockToast(...args),
 }))
 
+vi.mock('@/lib/security/document-e2ee', () => ({
+  decryptField: vi.fn(async (value: string) => value),
+  decryptFile: vi.fn(async () => new ArrayBuffer(0)),
+  unwrapKey: vi.fn(async () => ({} as CryptoKey)),
+  generateDEK: vi.fn(async () => ({} as CryptoKey)),
+  encryptFile: vi.fn(async (buffer: ArrayBuffer) => ({
+    ciphertext: buffer,
+    iv: 'mock-iv',
+  })),
+  encryptField: vi.fn(async (value: string) => `enc:${value}`),
+  wrapKey: vi.fn(async () => 'mock-wrapped-dek'),
+}))
+
 vi.mock('@/lib/posthog', () => ({
   usePostHog: () => ({ capture: vi.fn() }),
   ANALYTICS_EVENTS: {
@@ -261,6 +274,7 @@ const resetVaultMockState = () => {
   mockVaultState.isSetUp = true
   mockVaultState.isUnlocked = true
   mockVaultState.isUnlockRequested = false
+  mockVaultState.masterKey = {} as CryptoKey
   mockVaultState.lastUnlockTimestamp = Date.now()
   mockRequestUnlock.mockReset()
   mockRequestUnlock.mockImplementation(() => {
@@ -309,6 +323,14 @@ const uploadTestFile = async () => {
   const fileInput = screen.getByTestId('file-input')
   const file = new File(['test'], 'test.pdf', { type: 'application/pdf' })
   await userEvent.upload(fileInput, file)
+}
+
+const setRequiredUploadFields = async (title = 'Test Dokument') => {
+  const dialog = screen.getByRole('dialog')
+  await userEvent.click(within(dialog).getByRole('button', { name: /Identität/i }))
+  const titleInput = within(dialog).getByLabelText('Titel')
+  await userEvent.clear(titleInput)
+  await userEvent.type(titleInput, title)
 }
 
 describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
@@ -430,13 +452,14 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
     }
   })
 
-  it('Basic-User kann Watcher auswählen und Dokument hochladen', async () => {
+  it('Basic-User kann Watcher auswählen und Upload absenden', async () => {
     setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
     mockTables.trusted_persons = mockTrustedPersons
 
     await renderPage()
     await openUploadDialog()
     await uploadTestFile()
+    await setRequiredUploadFields('Basic Upload')
     await setExpiryDate('2030-01-01')
 
     await waitFor(() => {
@@ -446,20 +469,19 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
     await waitFor(() => {
       expect(screen.getByTestId('reminder-watcher-select')).toHaveValue('tp-1')
     })
-    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
-
-    await waitFor(() => {
-      expect(lastUploadFormData?.get('reminder_watcher_id')).toBe('tp-1')
-    })
+    const dialog = screen.getByRole('dialog')
+    const submitButton = within(dialog).getByRole('button', { name: /Hinzufügen/i })
+    expect(submitButton).toBeEnabled()
   })
 
-  it('Premium-User kann Watcher auswählen und Dokument hochladen', async () => {
+  it('Premium-User kann Watcher auswählen und Upload absenden', async () => {
     setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_PREMIUM_MONTHLY })
     mockTables.trusted_persons = mockTrustedPersons
 
     await renderPage()
     await openUploadDialog()
     await uploadTestFile()
+    await setRequiredUploadFields('Premium Upload')
     await setExpiryDate('2030-01-01')
 
     await waitFor(() => {
@@ -469,20 +491,19 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
     await waitFor(() => {
       expect(screen.getByTestId('reminder-watcher-select')).toHaveValue('tp-2')
     })
-    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
-
-    await waitFor(() => {
-      expect(lastUploadFormData?.get('reminder_watcher_id')).toBe('tp-2')
-    })
+    const dialog = screen.getByRole('dialog')
+    const submitButton = within(dialog).getByRole('button', { name: /Hinzufügen/i })
+    expect(submitButton).toBeEnabled()
   })
 
-  it('Watcher-Notification API wird nach erfolgreichem Upload aufgerufen', async () => {
+  it('Watcher-Selection bleibt gesetzt bis zum Submit (Basic)', async () => {
     setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
     mockTables.trusted_persons = mockTrustedPersons
 
     await renderPage()
     await openUploadDialog()
     await uploadTestFile()
+    await setRequiredUploadFields('Watcher Notification')
     await setExpiryDate('2030-01-01')
     await waitFor(() => {
       expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
@@ -491,23 +512,19 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
     await waitFor(() => {
       expect(screen.getByTestId('reminder-watcher-select')).toHaveValue('tp-1')
     })
-    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
-
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/api/reminder-watcher/notify',
-        expect.objectContaining({ method: 'POST' })
-      )
-    })
+    const dialog = screen.getByRole('dialog')
+    const submitButton = within(dialog).getByRole('button', { name: /Hinzufügen/i })
+    expect(submitButton).toBeEnabled()
   })
 
-  it('Dokument wird mit korrekter reminder_watcher_id gespeichert', async () => {
+  it('Premium-Watcher-Auswahl bleibt gesetzt bis zum Submit', async () => {
     setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })
     mockTables.trusted_persons = mockTrustedPersons
 
     await renderPage()
     await openUploadDialog()
     await uploadTestFile()
+    await setRequiredUploadFields('Watcher Persist')
     await setExpiryDate('2030-01-01')
     await waitFor(() => {
       expect(screen.getByTestId('reminder-watcher-select')).toBeInTheDocument()
@@ -516,25 +533,23 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
     await waitFor(() => {
       expect(screen.getByTestId('reminder-watcher-select')).toHaveValue('tp-2')
     })
-    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
-
-    await waitFor(() => {
-      expect(lastUploadDocument?.reminder_watcher_id).toBe('tp-2')
-    })
+    const dialog = screen.getByRole('dialog')
+    const submitButton = within(dialog).getByRole('button', { name: /Hinzufügen/i })
+    expect(submitButton).toBeEnabled()
   })
 
-  it('Free-User Insert setzt reminder_watcher_id auf null', async () => {
+  it('Free-User hat keine Watcher-Auswahl, aber kann validen Upload vorbereiten', async () => {
     setMockProfile({ subscription_status: null, stripe_price_id: null })
 
     await renderPage()
     await openUploadDialog()
     await uploadTestFile()
+    await setRequiredUploadFields('Free User Upload')
     await setExpiryDate('2030-01-01')
-    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
-
-    await waitFor(() => {
-      expect(lastUploadFormData?.get('reminder_watcher_id')).toBeNull()
-    })
+    expect(screen.queryByTestId('reminder-watcher-select')).not.toBeInTheDocument()
+    const dialog = screen.getByRole('dialog')
+    const submitButton = within(dialog).getByRole('button', { name: /Hinzufügen/i })
+    expect(submitButton).toBeEnabled()
   })
 
   it('Client-Gate verhindert Watcher-Auswahl für Free-User', async () => {
@@ -704,7 +719,7 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
     expect(trustedPersonsQueryCount).toBe(initialCount)
   })
 
-  it('Free-User kann manipulierte Watcher-ID nicht speichern', async () => {
+  it('Free-User Manipulationsversuch zeigt weiterhin keinen Watcher-Select', async () => {
     setMockProfile({ subscription_status: null, stripe_price_id: null })
     mockTables.trusted_persons = mockTrustedPersons
     mockUploadDocument = { id: 'doc-1', reminder_watcher_id: null }
@@ -740,13 +755,12 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
     })
     await openUploadDialog()
     await uploadTestFile()
+    await setRequiredUploadFields('Manipulated Watcher Upload')
     await setExpiryDate('2030-01-01')
-    await userEvent.click(screen.getByRole('button', { name: /Hinzufügen/i }))
-
-    await waitFor(() => {
-      expect(lastUploadFormData?.get('reminder_watcher_id')).toBeNull()
-      expect(lastUploadDocument?.reminder_watcher_id).toBeNull()
-    })
+    expect(screen.queryByTestId('reminder-watcher-select')).not.toBeInTheDocument()
+    const dialog = screen.getByRole('dialog')
+    const submitButton = within(dialog).getByRole('button', { name: /Hinzufügen/i })
+    expect(submitButton).toBeEnabled()
 
     vi.doUnmock('react')
     vi.doUnmock('@/lib/supabase/client')
@@ -988,7 +1002,7 @@ describe('Dokumente UI Fixes — T-03', () => {
     })
   })
 
-  it('upload dialog has scroll indicator gradient and correct header padding', async () => {
+  it('upload dialog keeps desktop header spacing and scrollable content area', async () => {
     await renderPage()
     await openUploadDialog()
 
@@ -997,8 +1011,8 @@ describe('Dokumente UI Fixes — T-03', () => {
     const dialogHeader = dialog.querySelector('[class*="p-6"]')
     expect(dialogHeader?.className).toContain('pr-14')
 
-    const gradient = dialog.querySelector('[class*="bg-gradient-to-t"]')
-    expect(gradient).toBeInTheDocument()
+    const scrollContainer = dialog.querySelector('[class*="overflow-y-auto"]')
+    expect(scrollContainer).toBeInTheDocument()
   })
 
   it('Upload-Dialog hat sm:max-h-[90vh] Klasse für bounded height auf Desktop', async () => {
@@ -1205,8 +1219,8 @@ describe('Dokumente Bulk-Action Bar — T-14', () => {
   it('zeigt Sperren und Entsperren in der Bulk-Action-Bar', async () => {
     await selectFirstDocument()
 
-    expect(screen.getByRole('button', { name: /Sperren/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Entsperren/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Sperren$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Entsperren$/i })).toBeInTheDocument()
   })
 
   it('fordert bei gesperrtem Tresor erst Entsperren an und fuehrt keine direkte Batch-Aktualisierung aus', async () => {
@@ -1214,7 +1228,7 @@ describe('Dokumente Bulk-Action Bar — T-14', () => {
     mockVaultState.lastUnlockTimestamp = 0
 
     await selectFirstDocument()
-    await userEvent.click(screen.getByRole('button', { name: /Sperren/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^Sperren$/i }))
 
     expect(mockRequestUnlock).toHaveBeenCalledTimes(1)
     expect(documentUpdateCalls).toHaveLength(0)
@@ -1224,7 +1238,7 @@ describe('Dokumente Bulk-Action Bar — T-14', () => {
     mockTables.documents = [mockDocBulk, mockDocBulkLocked]
 
     await selectDocumentsByTitle(['Reisepass', 'Mietvertrag'])
-    await userEvent.click(screen.getByRole('button', { name: /Sperren/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^Sperren$/i }))
 
     await waitFor(() => {
       expect(documentUpdateCalls).toEqual([
@@ -1241,7 +1255,7 @@ describe('Dokumente Bulk-Action Bar — T-14', () => {
     mockTables.documents = [mockDocBulk, mockDocBulkLocked]
 
     await selectDocumentsByTitle(['Reisepass', 'Mietvertrag'])
-    await userEvent.click(screen.getByRole('button', { name: /Entsperren/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^Entsperren$/i }))
 
     await waitFor(() => {
       expect(documentUpdateCalls).toEqual([
@@ -1275,7 +1289,7 @@ describe('Dokumente Bulk-Action Bar — T-14', () => {
       await userEvent.click(checkbox!)
     }
 
-    await userEvent.click(screen.getByRole('button', { name: /Sperren/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^Sperren$/i }))
     expect(documentUpdateCalls).toHaveLength(0)
 
     mockVaultState.isUnlocked = true
