@@ -24,6 +24,30 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 23:00 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Added recovery-hash session handling on `src/app/(auth)/anmelden/page.tsx`:
+  - reads `#access_token`, `#refresh_token`, `type=recovery` from URL fragment
+  - hydrates Supabase browser session via `auth.setSession(...)`
+  - redirects to `/passwort-reset` so users can set a new password
+  - falls back to `/anmelden?error=callback` if token hydration fails.
+
+Why:
+- Password reset emails can return fragment-based recovery tokens; server `/auth/callback` only handles `?code=` exchange and redirected users to login without showing the reset-password form.
+
+Risk / Regression Watch:
+- Login page now performs one additional client-side hash parse on mount; monitor for unexpected redirects if malformed fragments are present.
+
+Verification:
+- `npm run type-check`
+- `npm test -- --run tests/api/password-reset.test.ts`
+
+Rollback:
+- Revert `src/app/(auth)/anmelden/page.tsx` and this changelog entry.
+
+Open Issues:
+- none
+
 ## 2026-03-03 22:47 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Fixed password-reset Supabase URL normalization in `src/app/api/auth/password-reset/request/route.ts` by preserving URL path segments (e.g. `/supabase`) instead of collapsing to origin-only host.

@@ -40,6 +40,44 @@ export default function LoginPage() {
   const { capture, identify } = usePostHog()
   const turnstileRef = useRef<TurnstileWidgetRef>(null)
 
+  useEffect(() => {
+    const hash = window.location.hash
+    if (!hash.startsWith('#')) return
+
+    const params = new URLSearchParams(hash.slice(1))
+    const accessToken = params.get('access_token')
+    const refreshToken = params.get('refresh_token')
+    const recoveryType = params.get('type')
+
+    if (!accessToken || !refreshToken || recoveryType !== 'recovery') return
+
+    let cancelled = false
+
+    const hydrateRecoverySession = async () => {
+      const recoveryClient = createClient()
+      const { error: setSessionError } = await recoveryClient.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      })
+
+      if (cancelled) return
+
+      if (!setSessionError) {
+        router.replace('/passwort-reset')
+        return
+      }
+
+      // Clean URL when token hydration fails to avoid repeated attempts on refresh.
+      window.history.replaceState(null, '', '/anmelden?error=callback')
+    }
+
+    void hydrateRecoverySession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [router])
+
   // Countdown timer for rate limiting
   useEffect(() => {
     if (countdown <= 0) return
