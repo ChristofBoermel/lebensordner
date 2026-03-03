@@ -170,7 +170,7 @@ describe('audit-log', () => {
         logSecurityEvent({
           event_type: EVENT_LOGIN_SUCCESS,
         })
-      ).resolves.toBeUndefined()
+      ).resolves.toEqual({ ok: false, error: 'DB error' })
     })
   })
 

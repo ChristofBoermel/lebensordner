@@ -24,6 +24,27 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 15:05 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Fixed CI unit-test regressions in:
+- `tests/lib/security/audit-log.test.ts` (updated failure expectation to returned result object).
+- `tests/components/dokumente/ExpiryDashboardWidget.test.tsx` (replaced fake-timer-sensitive userEvent click with fireEvent).
+
+Why:
+- Latest `main` CI run failed on these two test cases and blocked deploy.
+
+Risk / Regression Watch:
+- Test-only changes; runtime behavior unchanged.
+
+Verification:
+- `npm run test -- --run tests/lib/security/audit-log.test.ts tests/components/dokumente/ExpiryDashboardWidget.test.tsx`
+
+Rollback:
+- Revert the two test files.
+
+Open Issues:
+- none
+
 ## 2026-03-03 14:53 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Stabilized `tests/pages/dokumente.test.tsx` by aligning assertions to current UploadDialog/Bulk-Action behavior.

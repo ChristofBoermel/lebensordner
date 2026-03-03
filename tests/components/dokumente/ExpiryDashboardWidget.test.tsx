@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { ExpiryDashboardWidget } from "@/components/dokumente/ExpiryDashboardWidget";
 import type { Document } from "@/types/database";
 
@@ -65,7 +64,6 @@ describe("ExpiryDashboardWidget", () => {
 
   it("groups expiring documents and calls open handler", async () => {
     const onOpenDocument = vi.fn();
-    const user = userEvent.setup();
     const soonDoc = createDocument({
       id: "soon",
       title: "Reisepass",
@@ -103,7 +101,7 @@ describe("ExpiryDashboardWidget", () => {
     expect(screen.getByText("Reisepass")).toBeInTheDocument();
     expect(screen.getByText("3 Tage")).toBeInTheDocument();
 
-    await user.click(screen.getAllByRole("button", { name: "Öffnen" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Öffnen" })[0]);
     expect(onOpenDocument).toHaveBeenCalledWith(soonDoc);
   });
 });
