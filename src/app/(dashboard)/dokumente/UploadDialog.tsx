@@ -73,6 +73,7 @@ interface UploadDialogProps {
   vaultState: "unlocked" | "locked" | "not-setup";
   tags: string[];
   onTagsChange: (tags: string[]) => void;
+  tagSuggestions?: string[];
   lockAfterUpload: boolean;
   onLockAfterUploadChange: (value: boolean) => void;
   vault: {
@@ -292,6 +293,7 @@ function UploadDialogRoot({
   vaultState,
   tags,
   onTagsChange,
+  tagSuggestions,
   lockAfterUpload,
   onLockAfterUploadChange,
   vault,
@@ -457,6 +459,7 @@ function UploadDialogRoot({
             value={tags}
             onChange={(newTags) => onTagsChange(newTags.slice(0, 10))}
             placeholder="z.B. wichtig, 2024, steuer"
+            suggestions={tagSuggestions}
           />
           <p className="text-xs text-warmgray-500">{tags.length}/10 Tags</p>
         </div>
