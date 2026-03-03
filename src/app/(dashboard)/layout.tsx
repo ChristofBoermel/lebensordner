@@ -5,6 +5,7 @@ import { DashboardNav } from '@/components/layout/dashboard-nav'
 import { getUserTier } from '@/lib/auth/tier-guard'
 import { VaultClientWrapper } from './vault-client-wrapper'
 import { ToastProvider, ToastViewport } from '@/components/ui/toast'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 // Wrapper to stream tier data
 async function NavWithTier({ user }: { user: any }) {
@@ -74,20 +75,22 @@ export default async function DashboardLayout({
   // Note: Profile and Tier fetching is now handled in NavWithTier to avoid blocking the initial shell render
 
   return (
-    <div className="min-h-screen bg-cream-50 dark:bg-warmgray-950">
-      <Suspense fallback={<NavSkeleton />}>
-        <NavWithTier user={user} />
-      </Suspense>
+    <TooltipProvider>
+      <div className="min-h-screen bg-cream-50 dark:bg-warmgray-950">
+        <Suspense fallback={<NavSkeleton />}>
+          <NavWithTier user={user} />
+        </Suspense>
 
-      {/* Main Content */}
-      <main className="lg:pl-64">
-        <div className="py-8 px-4 sm:px-6 lg:px-8">
-          <ToastProvider duration={6000}>
-            <VaultClientWrapper>{children}</VaultClientWrapper>
-            <ToastViewport />
-          </ToastProvider>
-        </div>
-      </main>
-    </div>
+        {/* Main Content */}
+        <main className="lg:pl-64">
+          <div className="py-8 px-4 sm:px-6 lg:px-8">
+            <ToastProvider duration={6000}>
+              <VaultClientWrapper>{children}</VaultClientWrapper>
+              <ToastViewport />
+            </ToastProvider>
+          </div>
+        </main>
+      </div>
+    </TooltipProvider>
   )
 }

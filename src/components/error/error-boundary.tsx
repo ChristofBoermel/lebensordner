@@ -29,7 +29,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo)
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('ErrorBoundary caught an error:', error, errorInfo)
+    }
 
     // Track error in PostHog if available
     if (typeof window !== 'undefined' && (window as any).posthog) {
@@ -47,10 +49,16 @@ export class ErrorBoundary extends Component<Props, State> {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            error_type: 'client',
             error_message: error.message,
             component_stack: errorInfo.componentStack,
+            stack: error.stack,
             timestamp: new Date().toISOString(),
             user_agent: navigator.userAgent,
+            pathname: window.location.pathname,
+            href: window.location.href,
+            release: process.env.NEXT_PUBLIC_APP_VERSION ?? process.env.NEXT_PUBLIC_COMMIT_SHA,
+            source: 'error_boundary',
             error_id: this.state.errorId,
           }),
         }).catch(() => {

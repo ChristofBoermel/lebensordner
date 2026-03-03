@@ -18,6 +18,7 @@ interface StructuredErrorParams {
   queue?: string
   error_id?: string
   stack?: string
+  metadata?: Record<string, unknown>
 }
 
 const DEFAULT_WINDOW_MS = 60_000
@@ -144,7 +145,7 @@ export function emitStructuredLog(params: StructuredLogParams): void {
 }
 
 export function emitStructuredError(params: StructuredErrorParams): void {
-  const { error_type, error_message, endpoint, queue, error_id, stack } = params
+  const { error_type, error_message, endpoint, queue, error_id, stack, metadata } = params
 
   emitStructuredLog({
     level: 'error',
@@ -154,6 +155,7 @@ export function emitStructuredError(params: StructuredErrorParams): void {
     queue,
     event_id: error_id,
     stack,
+    metadata,
   })
 }
 

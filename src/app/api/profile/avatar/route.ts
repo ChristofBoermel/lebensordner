@@ -113,6 +113,91 @@ export async function POST(request: Request) {
   }
 }
 
+export async function GET() {
+  try {
+    const supabase = await createServerSupabaseClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 })
+    }
+
+    const { data: profileData, error: profileLoadError } = await supabase
+      .from('profiles')
+      .select('profile_picture_url')
+      .eq('id', user.id)
+      .single()
+
+    if (profileLoadError) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Failed to load profile avatar for GET: ${profileLoadError.message}`,
+        endpoint: '/api/profile/avatar',
+      })
+      return NextResponse.json(
+        { error: 'Profilbild konnte nicht geladen werden' },
+        { status: 500 }
+      )
+    }
+
+    const avatarPath = extractAvatarStoragePath(profileData?.profile_picture_url)
+    if (!avatarPath) {
+      return NextResponse.json({ error: 'Kein Profilbild vorhanden' }, { status: 404 })
+    }
+
+    if (!avatarPath.startsWith(`${user.id}/`)) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Avatar path ownership mismatch for user ${user.id}`,
+        endpoint: '/api/profile/avatar',
+      })
+      return NextResponse.json(
+        { error: 'Profilbild konnte nicht geladen werden' },
+        { status: 403 }
+      )
+    }
+
+    const serviceClient = createServiceClient()
+    const { data: fileData, error: downloadError } = await serviceClient.storage
+      .from('avatars')
+      .download(avatarPath)
+
+    if (downloadError || !fileData) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Avatar download failed: ${downloadError?.message ?? 'missing file data'}`,
+        endpoint: '/api/profile/avatar',
+      })
+      return NextResponse.json(
+        { error: 'Profilbild konnte nicht geladen werden' },
+        { status: 404 }
+      )
+    }
+
+    const contentType = fileData.type || 'application/octet-stream'
+    return new NextResponse(fileData, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'private, max-age=300',
+      },
+    })
+  } catch (error) {
+    emitStructuredError({
+      error_type: 'api',
+      error_message: `Unexpected avatar GET error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: '/api/profile/avatar',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
+    return NextResponse.json(
+      { error: 'Profilbild konnte nicht geladen werden' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function DELETE() {
   try {
     const supabase = await createServerSupabaseClient()

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getRedis } from '@/lib/redis/client'
+import { emitStructuredError, emitStructuredWarn, emitStructuredInfo } from '@/lib/errors/structured-logger'
 
 type TelegramCallbackQuery = {
   id?: string
@@ -22,9 +23,15 @@ type AlertContext = {
   error_id?: string
   stack?: string
   endpoint?: string
+  pathname?: string
+  release?: string
+  source?: string
   count: number
   window_minutes: number
   timestamp: string
+  first_seen?: string
+  last_seen?: string
+  examples?: string[]
   grafana_url?: string
 }
 
@@ -88,8 +95,17 @@ function isSyntheticValidationContext(context: AlertContext): boolean {
 
 function buildIssueBody(context: AlertContext): string {
   const endpointOrQueue = context.endpoint?.trim() || 'n/a'
+  const pathname = context.pathname?.trim() || 'n/a'
+  const release = context.release?.trim() || 'n/a'
+  const source = context.source?.trim() || 'n/a'
+  const firstSeen = context.first_seen?.trim() || 'n/a'
+  const lastSeen = context.last_seen?.trim() || 'n/a'
   const stackSnippet = clipStack(context.stack)
   const messageSnippet = clipText(context.error_message || 'No message', 500)
+  const topExamples = (context.examples ?? [])
+    .slice(0, 3)
+    .map((example) => `- ${clipText(example, 180)}`)
+    .join('\n')
   const grafanaUrl = context.grafana_url || GRAFANA_DASHBOARD_URL
   const detectedAt = context.timestamp || new Date().toISOString()
   const environment = isSyntheticValidationContext(context) ? 'synthetic validation test' : 'production'
@@ -102,8 +118,17 @@ function buildIssueBody(context: AlertContext): string {
     `| Error type | ${context.error_type || 'unknown'} |`,
     `| Total errors | ${context.count} in the last ${context.window_minutes || 5} minutes |`,
     `| Endpoint / Queue | ${endpointOrQueue} |`,
+    `| Pathname | ${pathname} |`,
+    `| Source | ${source} |`,
+    `| Release | ${release} |`,
     `| Detected at | ${detectedAt} |`,
+    `| First seen | ${firstSeen} |`,
+    `| Last seen | ${lastSeen} |`,
     `| Environment | ${environment} |`,
+    '',
+    '## Similar Error Samples',
+    '',
+    topExamples || '- n/a',
     '',
     '## Most Recent Error',
     '',
@@ -127,7 +152,11 @@ function buildIssueBody(context: AlertContext): string {
 async function postTelegramMethod(method: string, payload: Record<string, unknown>): Promise<void> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN
   if (!botToken) {
-    console.warn('[TelegramBotWebhook] TELEGRAM_BOT_TOKEN is not configured')
+    emitStructuredWarn({
+      event_type: 'telegram_bot_webhook',
+      event_message: 'TELEGRAM_BOT_TOKEN is not configured',
+      endpoint: '/api/webhooks/telegram-bot',
+    })
     return
   }
 
@@ -146,7 +175,11 @@ async function postTelegramMethod(method: string, payload: Record<string, unknow
 
 async function sendTelegramMessage(chatId: number | string | undefined, text: string): Promise<void> {
   if (chatId === undefined || chatId === null) {
-    console.warn('[TelegramBotWebhook] Chat id missing; cannot send Telegram message')
+    emitStructuredWarn({
+      event_type: 'telegram_bot_webhook',
+      event_message: 'Chat id missing; cannot send Telegram message',
+      endpoint: '/api/webhooks/telegram-bot',
+    })
     return
   }
 
@@ -161,7 +194,9 @@ async function createGitHubIssue(context: AlertContext): Promise<{ number: numbe
     throw new Error('Missing GITHUB_PAT or GITHUB_REPO configuration')
   }
 
-  const title = `[Error Spike] ${context.error_type || 'unknown'} — ${context.count} errors in 5 min`
+  const pathSuffix = context.pathname?.trim() ? ` @ ${clipText(context.pathname.trim(), 40)}` : ''
+  const title =
+    `[Error Spike] ${context.error_type || 'unknown'}${pathSuffix} — ${context.count} errors in 5 min`
   const body = buildIssueBody(context)
 
   const response = await fetch(`https://api.github.com/repos/${repo}/issues`, {
@@ -201,11 +236,25 @@ async function processCallbackInBackground(callbackQuery: TelegramCallbackQuery)
   try {
     await postTelegramMethod('answerCallbackQuery', { callback_query_id: callbackQuery.id })
   } catch (error) {
-    console.warn('[TelegramBotWebhook] Failed to answer callback query:', error)
+    emitStructuredWarn({
+      event_type: 'telegram_bot_webhook',
+      event_message: 'Failed to answer Telegram callback query',
+      endpoint: '/api/webhooks/telegram-bot',
+      metadata: {
+        reason: error instanceof Error ? error.message : 'unknown',
+      },
+    })
   }
 
   if (!markCallbackAsProcessing(callbackQuery.id)) {
-    console.warn('[TelegramBotWebhook] Duplicate callback delivery ignored:', callbackQuery.id)
+    emitStructuredInfo({
+      event_type: 'telegram_bot_webhook',
+      event_message: 'Duplicate callback delivery ignored',
+      endpoint: '/api/webhooks/telegram-bot',
+      metadata: {
+        callback_id: callbackQuery.id,
+      },
+    })
     return
   }
 
@@ -227,7 +276,15 @@ async function processCallbackInBackground(callbackQuery: TelegramCallbackQuery)
 
     context = JSON.parse(rawContext) as AlertContext
   } catch (error) {
-    console.warn('[TelegramBotWebhook] Redis context retrieval failed:', error)
+    emitStructuredWarn({
+      event_type: 'telegram_bot_webhook',
+      event_message: 'Redis context retrieval failed for callback',
+      endpoint: '/api/webhooks/telegram-bot',
+      metadata: {
+        alert_id: alertId,
+        reason: error instanceof Error ? error.message : 'unknown',
+      },
+    })
     await sendTelegramMessage(chatId, expiredContextMessage)
     return
   }
@@ -246,7 +303,11 @@ export async function POST(req: Request) {
   const incomingSecret = req.headers.get('X-Telegram-Bot-Api-Secret-Token')
 
   if (!expectedSecret || incomingSecret !== expectedSecret) {
-    console.warn('[TelegramBotWebhook] Ignoring request with invalid secret token')
+    emitStructuredWarn({
+      event_type: 'telegram_bot_webhook',
+      event_message: 'Ignoring request with invalid secret token',
+      endpoint: '/api/webhooks/telegram-bot',
+    })
     return NextResponse.json({ ok: true }, { status: 200 })
   }
 
@@ -259,10 +320,25 @@ export async function POST(req: Request) {
     }
 
     void processCallbackInBackground(callbackQuery).catch((error) => {
-      console.warn('[TelegramBotWebhook] Background processing failed:', error)
+      emitStructuredError({
+        error_type: 'telegram_bot_webhook',
+        error_message: 'Background callback processing failed',
+        endpoint: '/api/webhooks/telegram-bot',
+        stack: error instanceof Error ? error.stack : undefined,
+        metadata: {
+          reason: error instanceof Error ? error.message : 'unknown',
+        },
+      })
     })
   } catch (error) {
-    console.warn('[TelegramBotWebhook] Fallback path used:', error)
+    emitStructuredWarn({
+      event_type: 'telegram_bot_webhook',
+      event_message: 'Fallback path used while parsing Telegram webhook request',
+      endpoint: '/api/webhooks/telegram-bot',
+      metadata: {
+        reason: error instanceof Error ? error.message : 'unknown',
+      },
+    })
   }
 
   return NextResponse.json({ ok: true }, { status: 200 })

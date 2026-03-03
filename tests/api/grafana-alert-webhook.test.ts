@@ -46,12 +46,33 @@ describe('Grafana Alert Webhook Handler', () => {
               {
                 values: [
                   [
-                    '1700000000000000000',
+                    '1700000200000000000',
                     JSON.stringify({
                       error_type: 'db_timeout',
                       error_message: 'Database timeout in query',
                       endpoint: '/api/profile',
                       stack: 'Error: timeout',
+                      timestamp: '2026-03-03T16:00:00.000Z',
+                      metadata: {
+                        pathname: '/dokumente',
+                        release: '2026.03.03-main',
+                        source: 'error_boundary',
+                      },
+                    }),
+                  ],
+                  [
+                    '1700000100000000000',
+                    JSON.stringify({
+                      error_type: 'db_timeout',
+                      error_message: 'Database timeout in query',
+                      endpoint: '/api/profile',
+                      stack: 'Error: timeout',
+                      timestamp: '2026-03-03T15:59:00.000Z',
+                      metadata: {
+                        pathname: '/dokumente',
+                        release: '2026.03.03-main',
+                        source: 'error_boundary',
+                      },
                     }),
                   ],
                 ],
@@ -96,6 +117,42 @@ describe('Grafana Alert Webhook Handler', () => {
       'EX',
       86400
     )
+    expect(redisSetMock).toHaveBeenCalledWith(
+      'alert:context:alert-id-123',
+      expect.stringContaining('"pathname":"/dokumente"'),
+      'EX',
+      86400
+    )
+    expect(redisSetMock).toHaveBeenCalledWith(
+      'alert:context:alert-id-123',
+      expect.stringContaining('"release":"2026.03.03-main"'),
+      'EX',
+      86400
+    )
+    expect(redisSetMock).toHaveBeenCalledWith(
+      'alert:context:alert-id-123',
+      expect.stringContaining('"source":"error_boundary"'),
+      'EX',
+      86400
+    )
+    expect(redisSetMock).toHaveBeenCalledWith(
+      'alert:context:alert-id-123',
+      expect.stringContaining('"first_seen":"2026-03-03T15:59:00.000Z"'),
+      'EX',
+      86400
+    )
+    expect(redisSetMock).toHaveBeenCalledWith(
+      'alert:context:alert-id-123',
+      expect.stringContaining('"last_seen":"2026-03-03T16:00:00.000Z"'),
+      'EX',
+      86400
+    )
+    expect(redisSetMock).toHaveBeenCalledWith(
+      'alert:context:alert-id-123',
+      expect.stringContaining('"examples":["Database timeout in query"]'),
+      'EX',
+      86400
+    )
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     const telegramCall = fetchMock.mock.calls[1]
@@ -103,6 +160,8 @@ describe('Grafana Alert Webhook Handler', () => {
 
     const telegramBody = JSON.parse(String(telegramCall[1]?.body))
     expect(telegramBody.text).toContain('<b>Count:</b> 27 errors in 5 min')
+    expect(telegramBody.text).toContain('<b>Path:</b> /dokumente')
+    expect(telegramBody.text).toContain('<b>Release:</b> 2026.03.03-main')
     expect(telegramBody.reply_markup.inline_keyboard[0][0].url).toBe(
       'https://grafana.lebensordner.org/d/errors-dashboard'
     )

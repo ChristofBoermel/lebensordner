@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getRedis } from '@/lib/redis/client'
+import { emitStructuredError, emitStructuredInfo, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
 type GrafanaAlert = {
   status?: 'firing' | 'resolved' | string
@@ -44,6 +45,10 @@ type ParsedErrorLog = {
   error_id?: string
   stack: string
   endpoint: string
+  timestamp?: string
+  pathname?: string
+  release?: string
+  source?: string
 }
 
 const GRAFANA_DASHBOARD_URL = 'https://grafana.lebensordner.org/d/errors-dashboard'
@@ -62,6 +67,19 @@ function escapeHtml(value: string): string {
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+}
+
+function lokiNsToIso(value: string): string | undefined {
+  const asNumber = Number(value)
+  if (!Number.isFinite(asNumber)) {
+    return undefined
+  }
+  const milliseconds = Math.floor(asNumber / 1_000_000)
+  return Number.isFinite(milliseconds) ? new Date(milliseconds).toISOString() : undefined
 }
 
 function buildLokiQueryUrl(baseUrl: string): string {
@@ -151,15 +169,26 @@ async function fetchLokiLogs(lokiBaseUrl?: string): Promise<ParsedErrorLog[]> {
       .sort((a, b) => Number(b[0]) - Number(a[0]))
       .slice(0, 5)
 
-    return values.map(([, logLine]) => {
+    return values.map(([lokiTimestampNs, logLine]) => {
       try {
         const parsed = JSON.parse(logLine) as Record<string, unknown>
+        const parsedMetadata = parsed.metadata
+        const metadata =
+          parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata)
+            ? (parsedMetadata as Record<string, unknown>)
+            : undefined
+        const endpoint = asOptionalString(parsed.endpoint) ?? asOptionalString(parsed.queue) ?? ''
+        const pathname = asOptionalString(metadata?.pathname) ?? asOptionalString(metadata?.href)
         return {
           error_type: String(parsed.error_type ?? 'unknown'),
           error_message: String(parsed.error_message ?? parsed.message ?? ''),
           error_id: typeof parsed.error_id === 'string' ? parsed.error_id : undefined,
           stack: String(parsed.stack ?? ''),
-          endpoint: String(parsed.endpoint ?? parsed.queue ?? ''),
+          endpoint,
+          timestamp: asOptionalString(parsed.timestamp) ?? lokiNsToIso(lokiTimestampNs),
+          pathname,
+          release: asOptionalString(metadata?.release),
+          source: asOptionalString(metadata?.source),
         }
       } catch {
         return {
@@ -167,12 +196,50 @@ async function fetchLokiLogs(lokiBaseUrl?: string): Promise<ParsedErrorLog[]> {
           error_message: logLine,
           stack: '',
           endpoint: '',
+          timestamp: lokiNsToIso(lokiTimestampNs),
         }
       }
     })
   } catch (error) {
-    console.warn('[GrafanaWebhook] Loki query failed:', error)
+    emitStructuredWarn({
+      event_type: 'grafana_webhook',
+      event_message: 'Loki query failed while enriching Grafana alert',
+      endpoint: '/api/webhooks/grafana-alert',
+      metadata: {
+        reason: error instanceof Error ? error.message : 'unknown',
+      },
+    })
     return []
+  }
+}
+
+function extractExamples(logs: ParsedErrorLog[], maxItems: number): string[] {
+  const unique = new Set<string>()
+  for (const log of logs) {
+    const message = log.error_message.trim()
+    if (!message) continue
+    unique.add(message)
+    if (unique.size >= maxItems) break
+  }
+  return [...unique]
+}
+
+function extractWindow(logs: ParsedErrorLog[]): { firstSeen?: string; lastSeen?: string } {
+  const timestamps = logs
+    .map((entry) => entry.timestamp)
+    .filter((value): value is string => !!value)
+    .map((value) => Date.parse(value))
+    .filter((value) => Number.isFinite(value))
+
+  if (timestamps.length === 0) {
+    return {}
+  }
+
+  const firstSeenMs = Math.min(...timestamps)
+  const lastSeenMs = Math.max(...timestamps)
+  return {
+    firstSeen: new Date(firstSeenMs).toISOString(),
+    lastSeen: new Date(lastSeenMs).toISOString(),
   }
 }
 
@@ -218,7 +285,11 @@ async function sendTelegramMessage(payload: Record<string, unknown>): Promise<vo
   const chatId = process.env.TELEGRAM_CHAT_ID
 
   if (!botToken || !chatId) {
-    console.warn('[GrafanaWebhook] Missing Telegram configuration')
+    emitStructuredWarn({
+      event_type: 'grafana_webhook',
+      event_message: 'Telegram configuration missing for Grafana alert webhook',
+      endpoint: '/api/webhooks/grafana-alert',
+    })
     return
   }
 
@@ -234,7 +305,14 @@ async function sendTelegramMessage(payload: Record<string, unknown>): Promise<vo
       throw new Error(`Telegram API failed with status ${response.status}`)
     }
   } catch (error) {
-    console.warn('[GrafanaWebhook] Telegram send failed:', error)
+    emitStructuredWarn({
+      event_type: 'grafana_webhook',
+      event_message: 'Telegram send failed for Grafana alert notification',
+      endpoint: '/api/webhooks/grafana-alert',
+      metadata: {
+        reason: error instanceof Error ? error.message : 'unknown',
+      },
+    })
   }
 }
 
@@ -267,6 +345,11 @@ export async function POST(req: Request) {
     const alertId = crypto.randomUUID()
 
     if (status === 'resolved') {
+      emitStructuredInfo({
+        event_type: 'grafana_webhook',
+        event_message: `Grafana alert resolved: ${alertName}`,
+        endpoint: '/api/webhooks/grafana-alert',
+      })
       await sendTelegramMessage({
         text: `✅ <b>${escapeHtml(alertName)} resolved</b>`,
       })
@@ -276,6 +359,11 @@ export async function POST(req: Request) {
     // "DatasourceNoData" is not a concrete app failure context.
     // Avoid noisy issue prompts for this technical alert state.
     if (isDatasourceNoData) {
+      emitStructuredInfo({
+        event_type: 'grafana_webhook',
+        event_message: `Grafana datasource no data state received: ${alertName}`,
+        endpoint: '/api/webhooks/grafana-alert',
+      })
       await sendTelegramMessage({
         text:
           `ℹ️ <b>${escapeHtml(alertName)}</b>\n\n` +
@@ -291,8 +379,13 @@ export async function POST(req: Request) {
     const errorMessage = latest?.error_message || alertSummary
     const endpoint = latest?.endpoint || ''
     const stack = latest?.stack || ''
+    const pathname = latest?.pathname || ''
+    const release = latest?.release || ''
+    const source = latest?.source || ''
     const grafanaCount = extractGrafanaAlertCount(payload)
     const count = grafanaCount ?? lokiLogs.length
+    const examples = extractExamples(lokiLogs, 3)
+    const { firstSeen, lastSeen } = extractWindow(lokiLogs)
 
     const hasConcreteContext = count > 0 || lokiLogs.length > 0
 
@@ -303,9 +396,15 @@ export async function POST(req: Request) {
       error_id: latest?.error_id,
       stack,
       endpoint,
+      pathname,
+      release,
+      source,
       count,
       window_minutes: 5,
       timestamp: new Date().toISOString(),
+      first_seen: firstSeen,
+      last_seen: lastSeen,
+      examples,
       grafana_url: GRAFANA_DASHBOARD_URL,
     }
 
@@ -318,7 +417,15 @@ export async function POST(req: Request) {
           500
         )
       } catch (error) {
-        console.warn('[GrafanaWebhook] Redis context store failed:', error)
+        emitStructuredWarn({
+          event_type: 'grafana_webhook',
+          event_message: 'Redis context store failed for Grafana alert',
+          endpoint: '/api/webhooks/grafana-alert',
+          metadata: {
+            alert_id: alertId,
+            reason: error instanceof Error ? error.message : 'unknown',
+          },
+        })
       }
     })()
 
@@ -334,7 +441,9 @@ export async function POST(req: Request) {
         `🚨 <b>${escapeHtml(alertName)}</b>\n\n` +
         `<b>Count:</b> ${count} errors in 5 min\n` +
         `<b>Type:</b> ${escapeHtml(errorType)}\n` +
-        `<b>Endpoint:</b> ${escapeHtml(endpoint || 'n/a')}\n\n` +
+        `<b>Endpoint:</b> ${escapeHtml(endpoint || 'n/a')}\n` +
+        `<b>Path:</b> ${escapeHtml(pathname || 'n/a')}\n` +
+        `<b>Release:</b> ${escapeHtml(release || 'n/a')}\n\n` +
         `<code>${escapeHtml(errorMessage).slice(0, 350)}</code>` +
         (hasConcreteContext ? '' : '\n\nNo concrete error context was found for issue creation.'),
       reply_markup: {
@@ -344,7 +453,15 @@ export async function POST(req: Request) {
 
     await Promise.allSettled([redisTask, telegramTask])
   } catch (error) {
-    console.warn('[GrafanaWebhook] Handler fallback path used:', error)
+    emitStructuredError({
+      error_type: 'grafana_webhook',
+      error_message: 'Grafana alert webhook handler fallback path used',
+      endpoint: '/api/webhooks/grafana-alert',
+      stack: error instanceof Error ? error.stack : undefined,
+      metadata: {
+        reason: error instanceof Error ? error.message : 'unknown',
+      },
+    })
   }
 
   return NextResponse.json({ received: true }, { status: 200 })

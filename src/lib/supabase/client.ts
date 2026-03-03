@@ -39,6 +39,10 @@ type AuthErrorTelemetry = {
   error_type: 'client'
   error_message: string
   endpoint?: string
+  pathname?: string
+  href?: string
+  release?: string
+  source?: string
 }
 
 const AUTH_ERROR_THROTTLE_MS = 10_000
@@ -66,6 +70,10 @@ function reportAuthFailure(endpoint: string, status: number): void {
     error_type: 'client',
     error_message: `HTTP ${status} from Supabase request`,
     endpoint,
+    pathname: window.location.pathname,
+    href: window.location.href,
+    release: process.env.NEXT_PUBLIC_APP_VERSION ?? process.env.NEXT_PUBLIC_COMMIT_SHA,
+    source: 'supabase_client',
   }
 
   fetch('/api/errors/log', {

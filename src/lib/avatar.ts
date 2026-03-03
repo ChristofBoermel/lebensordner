@@ -19,7 +19,7 @@ export function extractAvatarStoragePath(value?: string | null): string | null {
 }
 
 export async function resolveAvatarUrl(
-  supabase: any,
+  _supabase: any,
   value?: string | null,
   _expiresInSeconds = 3600
 ): Promise<string | null> {
@@ -30,10 +30,5 @@ export async function resolveAvatarUrl(
     return value
   }
 
-  const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-  if (!data?.publicUrl) {
-    return null
-  }
-
-  return data.publicUrl
+  return `/api/profile/avatar?v=${encodeURIComponent(path)}`
 }

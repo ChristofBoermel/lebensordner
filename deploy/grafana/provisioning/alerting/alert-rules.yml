@@ -166,8 +166,10 @@ groups:
         execErrState: Error
         annotations:
           summary: "More than 3 application errors detected in the last 5 minutes"
+          runbook_url: "https://github.com/ChristofBoermel/lebensordner/blob/main/docs/ops/incident-playbook.md"
         labels:
           severity: warning
+          signal: app_error_spike
         data:
           - refId: A
             relativeTimeRange:

@@ -21,6 +21,10 @@ export function UnhandledRejectionProvider() {
           error_id: `ERR-${Date.now()}`,
           timestamp: new Date().toISOString(),
           user_agent: navigator.userAgent,
+          pathname: window.location.pathname,
+          href: window.location.href,
+          release: process.env.NEXT_PUBLIC_APP_VERSION ?? process.env.NEXT_PUBLIC_COMMIT_SHA,
+          source: 'unhandled_rejection',
         }),
       }).catch(() => {})
     }

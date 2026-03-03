@@ -62,9 +62,18 @@ describe('Telegram Bot Callback Webhook Handler', () => {
         error_id: 'SPIKE-VAL-1',
         stack: 'TypeError: Cannot read properties of undefined\nat POST /api/documents/upload',
         endpoint: 'POST /api/documents/upload',
+        pathname: '/dokumente',
+        release: '2026.03.03-main',
+        source: 'error_boundary',
         count: 7,
         window_minutes: 5,
         timestamp: '2026-02-28T14:23:01Z',
+        first_seen: '2026-02-28T14:20:00Z',
+        last_seen: '2026-02-28T14:23:01Z',
+        examples: [
+          "TypeError: Cannot read properties of undefined (reading 'userId')",
+          'TypeError: Failed to fetch',
+        ],
         grafana_url: 'https://grafana.lebensordner.org/d/errors-dashboard',
       })
     )
@@ -109,10 +118,17 @@ describe('Telegram Bot Callback Webhook Handler', () => {
     const githubCall = fetchMock.mock.calls[1]
     expect(String(githubCall[0])).toBe('https://api.github.com/repos/christofboermel/lebensordner/issues')
     const githubBody = JSON.parse(String(githubCall[1]?.body))
-    expect(githubBody.title).toBe('[Error Spike] server — 7 errors in 5 min')
+    expect(githubBody.title).toBe('[Error Spike] server @ /dokumente — 7 errors in 5 min')
     expect(githubBody.labels).toEqual(['bug', 'auto-detected'])
     expect(githubBody.body).toContain('Suggested Traycer Prompt')
     expect(githubBody.body).toContain('POST /api/documents/upload')
+    expect(githubBody.body).toContain('| Pathname | /dokumente |')
+    expect(githubBody.body).toContain('| Source | error_boundary |')
+    expect(githubBody.body).toContain('| Release | 2026.03.03-main |')
+    expect(githubBody.body).toContain('| First seen | 2026-02-28T14:20:00Z |')
+    expect(githubBody.body).toContain('| Last seen | 2026-02-28T14:23:01Z |')
+    expect(githubBody.body).toContain('## Similar Error Samples')
+    expect(githubBody.body).toContain('TypeError: Failed to fetch')
     expect(githubBody.body).toContain('| Environment | synthetic validation test |')
 
     const confirmationBody = JSON.parse(String(fetchMock.mock.calls[2][1]?.body))

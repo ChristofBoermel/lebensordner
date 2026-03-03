@@ -24,6 +24,59 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 16:15 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Fixed dashboard tooltip provider gap by wrapping `src/app/(dashboard)/layout.tsx` with `TooltipProvider`, covering `dokumente/page.tsx` tooltips.
+- Improved client error telemetry context in `src/components/error/error-boundary.tsx`, `src/components/error/unhandled-rejection-provider.tsx`, and `src/lib/supabase/client.ts` to include source, path, URL, and release markers.
+- Hardened `/api/errors/log` ingestion (`src/app/api/errors/log/route.ts`) with payload normalization/fallbacks and structured warn logging for malformed or incomplete client payloads.
+- Enhanced alert enrichment and issue quality pipeline in `src/app/api/webhooks/grafana-alert/route.ts` and `src/app/api/webhooks/telegram-bot/route.ts`:
+- replaced ad-hoc webhook `console.warn` calls with structured logger usage,
+- persisted richer context (`pathname`, `release`, `source`, first/last seen, examples),
+- expanded GitHub issue body/title content for faster root-cause triage.
+- Added runbook metadata + signal label to Grafana Error Spike rule (`deploy/grafana/provisioning/alerting/alert-rules.yml`).
+- Extended structured logger error helper to accept metadata (`src/lib/errors/structured-logger.ts`) so error logs can carry sanitized context consistently.
+
+Why:
+- Resolve production `Tooltip` provider runtime crash immediately and make future auto-created incident issues significantly more actionable.
+
+Risk / Regression Watch:
+- Webhook log event types/metadata changed; verify downstream dashboards parsing webhook-specific warning text are not tightly coupled to old strings.
+- Dashboard layout now introduces a global tooltip provider for all dashboard routes; nested local providers remain and should be behaviorally safe.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/grafana-alert-webhook.test.ts tests/api/telegram-bot-webhook.test.ts`
+
+Rollback:
+- Revert `src/app/(dashboard)/layout.tsx`, `src/components/error/error-boundary.tsx`, `src/components/error/unhandled-rejection-provider.tsx`, `src/lib/supabase/client.ts`, `src/app/api/errors/log/route.ts`, `src/app/api/webhooks/grafana-alert/route.ts`, `src/app/api/webhooks/telegram-bot/route.ts`, `src/lib/errors/structured-logger.ts`, and `deploy/grafana/provisioning/alerting/alert-rules.yml`.
+
+Open Issues:
+- none
+
+## 2026-03-03 16:02 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Added `GET /api/profile/avatar` in `src/app/api/profile/avatar/route.ts` to serve avatar image bytes through the app backend (authenticated, ownership-checked, service-role storage download).
+- Updated `src/lib/avatar.ts` `resolveAvatarUrl()` to return same-origin API image URLs (`/api/profile/avatar?v=<path>`) instead of direct `/supabase/storage/v1/object/public/...` URLs.
+
+Why:
+- Direct browser requests to storage public object URLs were returning `401 Unauthorized` in production despite successful upload/profile updates.
+
+Risk / Regression Watch:
+- Avatar image rendering now depends on authenticated app session cookies to load `/api/profile/avatar`.
+- Cache lifetime is set to `private, max-age=300`; avatar changes should still bust cache via the `v` query path token.
+
+Verification:
+- `npm run type-check`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/app/api/profile/avatar/route.ts`, `src/lib/avatar.ts`, and this changelog entry.
+
+Open Issues:
+- none
+
 ## 2026-03-03 15:50 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Traced avatar upload end-to-end and removed the remaining two-step upload blocker path.
