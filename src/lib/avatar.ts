@@ -21,7 +21,7 @@ export function extractAvatarStoragePath(value?: string | null): string | null {
 export async function resolveAvatarUrl(
   supabase: any,
   value?: string | null,
-  expiresInSeconds = 3600
+  _expiresInSeconds = 3600
 ): Promise<string | null> {
   if (!value) return null
 
@@ -30,25 +30,10 @@ export async function resolveAvatarUrl(
     return value
   }
 
-  const { data, error } = await supabase.storage
-    .from('avatars')
-    .createSignedUrl(path, expiresInSeconds)
-
-  if (error || !data?.signedUrl) {
-    // Avoid reusing stale signed URLs (they cause repeated 401 image fetches).
-    // Only keep direct public object URLs as fallback.
-    if (/^https?:\/\//i.test(value)) {
-      try {
-        const parsed = new URL(value)
-        if (parsed.pathname.includes('/object/public/avatars/')) {
-          return value
-        }
-      } catch {
-        return null
-      }
-    }
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+  if (!data?.publicUrl) {
     return null
   }
 
-  return data.signedUrl
+  return data.publicUrl
 }

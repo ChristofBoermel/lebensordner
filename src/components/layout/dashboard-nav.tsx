@@ -347,7 +347,13 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
               <DropdownMenuTrigger asChild>
                 <button className="flex w-full items-center gap-3 rounded-lg px-3 py-3 hover:bg-warmgray-50 dark:hover:bg-warmgray-800 transition-colors">
                   <Avatar className="h-10 w-10 flex-shrink-0">
-                    {resolvedAvatarUrl && <AvatarImage src={resolvedAvatarUrl} alt={user.full_name || 'Profilbild'} />}
+                    {resolvedAvatarUrl && (
+                      <AvatarImage
+                        src={resolvedAvatarUrl}
+                        alt={user.full_name || 'Profilbild'}
+                        onError={() => setResolvedAvatarUrl(null)}
+                      />
+                    )}
                     <AvatarFallback>{initials}</AvatarFallback>
                   </Avatar>
                   <span className="flex-1 min-w-0 text-left block">
@@ -427,7 +433,13 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
           <DropdownMenuTrigger asChild>
             <button className="p-1 flex-shrink-0">
               <Avatar className="h-8 w-8">
-                {resolvedAvatarUrl && <AvatarImage src={resolvedAvatarUrl} alt={user.full_name || 'Profilbild'} />}
+                {resolvedAvatarUrl && (
+                  <AvatarImage
+                    src={resolvedAvatarUrl}
+                    alt={user.full_name || 'Profilbild'}
+                    onError={() => setResolvedAvatarUrl(null)}
+                  />
+                )}
                 <AvatarFallback className="text-sm">{initials}</AvatarFallback>
               </Avatar>
             </button>

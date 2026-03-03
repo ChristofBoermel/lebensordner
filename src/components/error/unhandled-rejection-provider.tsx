@@ -7,12 +7,17 @@ export function UnhandledRejectionProvider() {
     if (process.env.NODE_ENV !== 'production') return
 
     const handler = (event: PromiseRejectionEvent) => {
+      const message = event.reason?.message ?? String(event.reason)
+      if (message.includes('A listener indicated an asynchronous response by returning true')) {
+        return
+      }
+
       fetch('/api/errors/log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           error_type: 'unhandled_rejection',
-          error_message: event.reason?.message ?? String(event.reason),
+          error_message: message,
           error_id: `ERR-${Date.now()}`,
           timestamp: new Date().toISOString(),
           user_agent: navigator.userAgent,

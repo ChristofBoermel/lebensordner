@@ -24,6 +24,55 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 15:50 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Traced avatar upload end-to-end and removed the remaining two-step upload blocker path.
+- Extended `src/app/api/profile/avatar/route.ts` with `POST` to validate avatar files, upload with service-role storage client, atomically persist `profiles.profile_picture_url`, and best-effort clean previous avatar objects.
+- Updated `src/app/(dashboard)/einstellungen/page.tsx` upload handler to call `POST /api/profile/avatar` directly instead of `/api/documents/upload` plus client-side profile update.
+- Reset file input value after upload attempt so retrying the same file triggers change handling.
+
+Why:
+- Avatar uploads could still fail due to split responsibilities between upload route and client-side profile update; consolidating server-side removes that failure mode.
+
+Risk / Regression Watch:
+- Avatar upload now depends on valid `SUPABASE_SERVICE_ROLE_KEY` in runtime for both upload and profile update.
+- API now enforces image types `image/jpeg`, `image/png`, and `image/webp` with 5 MB limit.
+
+Verification:
+- `npm run type-check`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/app/api/profile/avatar/route.ts`, `src/app/(dashboard)/einstellungen/page.tsx`, and this changelog entry.
+
+Open Issues:
+- none
+
+## 2026-03-03 15:46 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Switched avatar URL resolution in `src/lib/avatar.ts` from signed URLs to public URLs for the public `avatars` bucket.
+- Added `DELETE /api/profile/avatar` in `src/app/api/profile/avatar/route.ts` for server-side avatar deletion and profile URL cleanup.
+- Updated `src/app/(dashboard)/einstellungen/page.tsx` to use the new delete API and clear local avatar URL state.
+- Added avatar image error fallbacks in `src/app/(dashboard)/einstellungen/page.tsx` and `src/components/layout/dashboard-nav.tsx`.
+- Filtered extension-specific unhandled promise noise in `src/components/error/unhandled-rejection-provider.tsx`.
+
+Why:
+- Avatar upload/delete UX was failing with repeated `401` image fetches and noisy client-side errors.
+
+Risk / Regression Watch:
+- Avatar rendering now depends on public-read `avatars` bucket behavior.
+- Server-side storage cleanup for delete depends on valid `SUPABASE_SERVICE_ROLE_KEY`.
+
+Verification:
+- `npm run type-check`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert the five files above and remove this changelog entry.
+
+Open Issues:
+- none
+
 ## 2026-03-03 15:05 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Fixed CI unit-test regressions in:

@@ -61,7 +61,7 @@ import Link from 'next/link'
 import { SecurityActivityLog } from '@/components/settings/security-activity-log'
 import { DocumentAuditLog } from '@/components/settings/document-audit-log'
 import { useVault } from '@/lib/vault/VaultContext'
-import { extractAvatarStoragePath, resolveAvatarUrl } from '@/lib/avatar'
+import { resolveAvatarUrl } from '@/lib/avatar'
 
 const GDPRExportDialog = dynamic(
   () => import('@/components/settings/gdpr-export-dialog').then((mod) => ({ default: mod.GDPRExportDialog })),
@@ -435,35 +435,21 @@ export default function EinstellungenPage() {
     setError(null)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Nicht angemeldet')
-
-      // 1. Upload via Server-Side API
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('path', 'profile')
-      formData.append('bucket', 'avatars')
 
-      const uploadRes = await fetch('/api/documents/upload', {
+      const uploadRes = await fetch('/api/profile/avatar', {
         method: 'POST',
         body: formData,
       })
 
       if (!uploadRes.ok) {
-        const errorData = await uploadRes.json()
+        const errorData = await uploadRes.json().catch(() => null)
         throw new Error(errorData.error || 'Upload fehlgeschlagen')
       }
 
       const uploadData = await uploadRes.json()
       const { path: filePath } = uploadData
-
-      // Update profile
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ profile_picture_url: filePath })
-        .eq('id', user.id)
-
-      if (updateError) throw updateError
 
       setProfile({ ...profile, profile_picture_url: filePath })
       setSaveSuccess(true)
@@ -472,6 +458,7 @@ export default function EinstellungenPage() {
       setError(err.message || 'Fehler beim Hochladen des Bildes')
       console.error('Upload error:', err)
     } finally {
+      e.target.value = ''
       setIsUploadingPicture(false)
     }
   }
@@ -486,20 +473,17 @@ export default function EinstellungenPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nicht angemeldet')
 
-      const filePath = extractAvatarStoragePath(profile.profile_picture_url)
-      if (filePath) {
-        await supabase.storage.from('avatars').remove([filePath])
+      const response = await fetch('/api/profile/avatar', {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(payload?.error || 'Profilbild konnte nicht entfernt werden')
       }
 
-      // Update profile
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ profile_picture_url: null })
-        .eq('id', user.id)
-
-      if (updateError) throw updateError
-
       setProfile({ ...profile, profile_picture_url: null })
+      setResolvedProfilePictureUrl(null)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err: any) {
@@ -827,7 +811,12 @@ export default function EinstellungenPage() {
                   <div className="flex flex-col sm:flex-row items-center gap-4">
                     <div className="relative">
                       {resolvedProfilePictureUrl ? (
-                        <img src={resolvedProfilePictureUrl} alt="Profilbild" className="w-20 h-20 rounded-full object-cover border-2 border-warmgray-200" />
+                        <img
+                          src={resolvedProfilePictureUrl}
+                          alt="Profilbild"
+                          className="w-20 h-20 rounded-full object-cover border-2 border-warmgray-200"
+                          onError={() => setResolvedProfilePictureUrl(null)}
+                        />
                       ) : (
                         <div className="w-20 h-20 rounded-full bg-sage-100 flex items-center justify-center border-2 border-warmgray-200">
                           <User className="w-8 h-8 text-sage-600" />
@@ -1218,6 +1207,7 @@ export default function EinstellungenPage() {
                     src={resolvedProfilePictureUrl}
                     alt="Profilbild"
                     className="w-20 h-20 rounded-full object-cover border-2 border-warmgray-200"
+                    onError={() => setResolvedProfilePictureUrl(null)}
                   />
                 ) : (
                   <div className="w-20 h-20 rounded-full bg-sage-100 flex items-center justify-center border-2 border-warmgray-200">
