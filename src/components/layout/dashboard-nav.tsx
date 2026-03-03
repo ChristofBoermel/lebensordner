@@ -94,12 +94,10 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [healthConsentGranted, setHealthConsentGranted] = useState<boolean | null>(null)
   const [resolvedAvatarUrl, setResolvedAvatarUrl] = useState<string | null>(null)
-  const [avatarPath, setAvatarPath] = useState<string | null>(user.profile_picture_url ?? null)
+  const [avatarPathOverride, setAvatarPathOverride] = useState<string | null | undefined>(undefined)
+  const avatarPath =
+    avatarPathOverride === undefined ? (user.profile_picture_url ?? null) : avatarPathOverride
   const { theme, setTheme, resolvedTheme, fontSize, setFontSize, seniorMode, setSeniorMode } = useTheme()
-
-  useEffect(() => {
-    setAvatarPath(user.profile_picture_url ?? null)
-  }, [user.profile_picture_url])
 
   const openGlobalSearch = () => {
     setSearchOpenCycle((prev) => prev + 1)
@@ -164,7 +162,7 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
   useEffect(() => {
     const handleAvatarUpdated = (event: Event) => {
       const customEvent = event as CustomEvent<ProfileAvatarUpdatedDetail>
-      setAvatarPath(customEvent.detail?.path ?? null)
+      setAvatarPathOverride(customEvent.detail?.path ?? null)
     }
 
     window.addEventListener(PROFILE_AVATAR_UPDATED_EVENT, handleAvatarUpdated)

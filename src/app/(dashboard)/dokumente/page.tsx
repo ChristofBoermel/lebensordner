@@ -937,11 +937,8 @@ export default function DocumentsPage() {
     });
   };
 
-  const isCategoryLocked = useCallback(
-    (categoryKey: string) =>
-      securedCategories.includes(categoryKey) && !vaultContext.isUnlocked,
-    [securedCategories, vaultContext.isUnlocked],
-  );
+  const isCategoryLocked = (categoryKey: string) =>
+    securedCategories.includes(categoryKey) && !vaultContext.isUnlocked;
 
   const handleCategoryClick = (categoryKey: string) => {
     const lockedByTime = isCategoryLocked(categoryKey);
@@ -1080,7 +1077,8 @@ export default function DocumentsPage() {
         const targetCategoryKey = targetDoc.custom_category_id
           ? `custom:${targetDoc.custom_category_id}`
           : targetDoc.category;
-        const categoryIsLocked = isCategoryLocked(targetCategoryKey);
+        const categoryIsLocked =
+          securedCategories.includes(targetCategoryKey) && !vaultContext.isUnlocked;
         if (categoryIsLocked || isDocumentLocked(targetDoc)) {
           setPendingUnlockCategory(targetCategoryKey);
           setPendingUnlockDocumentId(targetDoc.id);
@@ -1111,7 +1109,8 @@ export default function DocumentsPage() {
     highlightedDoc,
     documents,
     isDocumentLocked,
-    isCategoryLocked,
+    securedCategories,
+    vaultContext.isUnlocked,
     vaultContext,
   ]);
 
