@@ -24,6 +24,26 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 20:28 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Fixed `scripts/ops/verify-deploy.sh` smoke-check regression by moving `check_auth_public_urls()` outside the `node <<'NODE'` heredoc in `check_runtime_public_config_from_nextjs()`.
+
+Why:
+- Deploy workflow run `22640786779` failed in `smoke-check` due shell/Node parse error (`Unexpected token '{'`) caused by function definition accidentally embedded in the Node script block.
+
+Risk / Regression Watch:
+- Shell script structure changed around heredoc boundaries; monitor next deploy smoke-check step for syntax regressions.
+
+Verification:
+- `gh run view 22640786779 --log-failed` (confirmed failure cause before fix)
+- Local bash syntax check could not run in this Windows sandbox (`Access is denied` for `bash`).
+
+Rollback:
+- Revert `scripts/ops/verify-deploy.sh` and this changelog entry.
+
+Open Issues:
+- none
+
 ## 2026-03-03 20:09 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Hardened password-reset redirect origin resolution in `src/app/api/auth/password-reset/request/route.ts` by adding validated fallback order: `AUTH_PUBLIC_BASE_URL` -> `NEXT_PUBLIC_APP_URL` -> `SITE_URL` -> request `Origin`; `redirectTo` now uses `new URL(...)`, and invalid/missing public origin returns a controlled config error.

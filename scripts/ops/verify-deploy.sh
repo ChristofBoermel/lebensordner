@@ -125,23 +125,6 @@ if (!expectedUrl) {
   process.exit(1)
 }
 
-check_auth_public_urls() {
-  local auth_container_id="$1"
-  local api_external_url
-  local gotrue_site_url
-
-  api_external_url="$(docker inspect "$auth_container_id" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^API_EXTERNAL_URL=' | head -n1 | cut -d= -f2-)"
-  gotrue_site_url="$(docker inspect "$auth_container_id" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^GOTRUE_SITE_URL=' | head -n1 | cut -d= -f2-)"
-
-  [[ -n "$api_external_url" ]] || fail "supabase-auth API_EXTERNAL_URL is empty"
-  [[ -n "$gotrue_site_url" ]] || fail "supabase-auth GOTRUE_SITE_URL is empty"
-
-  [[ "$api_external_url" =~ ^https:// ]] || fail "supabase-auth API_EXTERNAL_URL must start with https:// (got: $api_external_url)"
-  [[ "$gotrue_site_url" =~ ^https:// ]] || fail "supabase-auth GOTRUE_SITE_URL must start with https:// (got: $gotrue_site_url)"
-
-  pass "supabase-auth public URLs are configured (${api_external_url}, ${gotrue_site_url})"
-}
-
 async function main() {
   const response = await fetch('http://127.0.0.1:3000')
   if (!response.ok) {
@@ -188,6 +171,23 @@ main().catch((error) => {
   process.exit(1)
 })
 NODE
+}
+
+check_auth_public_urls() {
+  local auth_container_id="$1"
+  local api_external_url
+  local gotrue_site_url
+
+  api_external_url="$(docker inspect "$auth_container_id" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^API_EXTERNAL_URL=' | head -n1 | cut -d= -f2-)"
+  gotrue_site_url="$(docker inspect "$auth_container_id" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^GOTRUE_SITE_URL=' | head -n1 | cut -d= -f2-)"
+
+  [[ -n "$api_external_url" ]] || fail "supabase-auth API_EXTERNAL_URL is empty"
+  [[ -n "$gotrue_site_url" ]] || fail "supabase-auth GOTRUE_SITE_URL is empty"
+
+  [[ "$api_external_url" =~ ^https:// ]] || fail "supabase-auth API_EXTERNAL_URL must start with https:// (got: $api_external_url)"
+  [[ "$gotrue_site_url" =~ ^https:// ]] || fail "supabase-auth GOTRUE_SITE_URL must start with https:// (got: $gotrue_site_url)"
+
+  pass "supabase-auth public URLs are configured (${api_external_url}, ${gotrue_site_url})"
 }
 
 check_http_status() {
