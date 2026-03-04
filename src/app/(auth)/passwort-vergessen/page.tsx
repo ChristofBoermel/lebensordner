@@ -105,7 +105,7 @@ export default function PasswordForgotPage() {
 
   if (isSuccess) {
     return (
-      <Card className="w-full max-w-md">
+      <Card key="success" className="w-full max-w-md animate-fade-in">
         <CardHeader className="text-center">
           <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-4">
             <Mail className="w-8 h-8 text-sage-600" />
@@ -129,7 +129,7 @@ export default function PasswordForgotPage() {
   }
 
   return (
-    <Card className="w-full max-w-md">
+    <Card key="forgot" className="w-full max-w-md animate-fade-in">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Passwort vergessen?</CardTitle>
         <CardDescription>

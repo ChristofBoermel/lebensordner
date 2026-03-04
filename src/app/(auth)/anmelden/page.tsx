@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient, setSessionPersistence, clearSupabaseLocalStorage } from '@/lib/supabase/client'
@@ -9,9 +9,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Loader2, Shield, ArrowLeft, Mail, CheckCircle2, ShieldAlert, Clock } from 'lucide-react'
+import { Loader2, Shield, ArrowLeft, Mail, CheckCircle2, ShieldAlert, Clock, Eye, EyeOff } from 'lucide-react'
 import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
 import TurnstileWidget, { TurnstileWidgetRef } from '@/components/auth/turnstile'
+import { OTPInput } from '@/components/auth/otp-input'
 
 type LoginStep = 'credentials' | '2fa' | 'email_not_confirmed'
 
@@ -35,13 +36,15 @@ export default function LoginPage() {
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null)
   const [countdown, setCountdown] = useState<number>(0)
   const [rememberMe, setRememberMe] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const router = useRouter()
   const supabase = createClient()
   const { capture, identify } = usePostHog()
+  // allowed: imperative-sync - imperative turnstile widget reset API
   const turnstileRef = useRef<TurnstileWidgetRef>(null)
 
-  // Countdown timer for rate limiting
+  // allowed: imperative-sync - manage countdown interval lifecycle with cleanup
   useEffect(() => {
     const hash = window.location.hash
     if (hash.startsWith('#')) {
@@ -83,10 +86,10 @@ export default function LoginPage() {
     return () => clearInterval(timer)
   }, [countdown, router])
 
-  const handleTurnstileVerify = useCallback((token: string) => {
+  function handleTurnstileVerify(token: string) {
     setTurnstileToken(token)
     setTurnstileErrorCode(null)
-  }, [])
+  }
 
   function handleTurnstileError(errorCode: string) {
     setTurnstileToken(null)
@@ -375,7 +378,7 @@ export default function LoginPage() {
   // Email Not Confirmed Screen
   if (step === 'email_not_confirmed') {
     return (
-      <Card className="w-full max-w-md">
+      <Card key="email_not_confirmed" className="w-full max-w-md animate-fade-in">
         <CardHeader className="text-center">
           <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
             <Mail className="w-8 h-8 text-amber-600" />
@@ -452,7 +455,7 @@ export default function LoginPage() {
   // 2FA Code Input Screen
   if (step === '2fa') {
     return (
-      <Card className="w-full max-w-md">
+      <Card key="2fa" className="w-full max-w-md animate-fade-in">
         <CardHeader className="text-center">
           <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-4">
             <Shield className="w-8 h-8 text-sage-600" />
@@ -471,18 +474,9 @@ export default function LoginPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="2fa-code">Bestätigungscode</Label>
-              <Input
-                id="2fa-code"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                placeholder="000000"
+              <OTPInput
                 value={twoFactorCode}
-                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
-                className="text-center text-2xl tracking-[0.5em] font-mono"
-                autoFocus
+                onChange={setTwoFactorCode}
                 disabled={isLoading}
               />
             </div>
@@ -516,7 +510,7 @@ export default function LoginPage() {
 
   // Normal Login Screen
   return (
-    <Card className="w-full max-w-md">
+    <Card key="credentials" className="w-full max-w-md animate-fade-in">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Willkommen zurück</CardTitle>
         <CardDescription>
@@ -587,15 +581,26 @@ export default function LoginPage() {
                 Passwort vergessen?
               </Link>
             </div>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={isLoading || isLocked}
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isLoading || isLocked}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-warmgray-400 hover:text-warmgray-600 focus:outline-none"
+                aria-label={showPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           {/* Remember Me Checkbox */}
