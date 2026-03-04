@@ -99,14 +99,6 @@ export default function LoginPage() {
     )
   }
 
-  function handleTurnstileError(errorCode: string) {
-    setTurnstileToken(null)
-    setTurnstileErrorCode(errorCode)
-    setError(
-      `CAPTCHA konnte nicht geladen werden (Code: ${errorCode}). Bitte Seite neu laden oder später erneut versuchen.`,
-    )
-  }
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
