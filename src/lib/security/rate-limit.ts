@@ -20,7 +20,7 @@ export interface RateLimitResult {
 // Intentional deviations from Core Flows §1.3 spec are documented inline.
 
 export const RATE_LIMIT_LOGIN = { maxRequests: 5, windowMs: 15 * 60 * 1000 }
-export const RATE_LIMIT_PASSWORD_RESET = { maxRequests: 3, windowMs: 60 * 60 * 1000 }
+export const RATE_LIMIT_PASSWORD_RESET = { maxRequests: 5, windowMs: 60 * 60 * 1000 }
 export const RATE_LIMIT_API = { maxRequests: 100, windowMs: 60 * 60 * 1000 }
 export const RATE_LIMIT_UPLOAD = { maxRequests: 10, windowMs: 60 * 1000 } // 1 minute per product spec
 export const RATE_LIMIT_2FA = { maxRequests: 5, windowMs: 15 * 60 * 1000 } // Not in spec, intentional: 5/15min for security

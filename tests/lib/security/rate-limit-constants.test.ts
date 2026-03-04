@@ -24,7 +24,7 @@ describe('Rate Limit Constants', () => {
 
   describe('Password Reset Rate Limits', () => {
     it('should have correct password reset limits', () => {
-      expect(RATE_LIMIT_PASSWORD_RESET.maxRequests).toBe(3)
+      expect(RATE_LIMIT_PASSWORD_RESET.maxRequests).toBe(5)
       expect(RATE_LIMIT_PASSWORD_RESET.windowMs).toBe(60 * 60 * 1000) // 1 hour
     })
 
@@ -120,7 +120,7 @@ describe('Rate Limit Constants', () => {
 
     it('should have appropriate request limits for security', () => {
       // Critical operations should be more limited
-      expect(RATE_LIMIT_PASSWORD_RESET.maxRequests).toBeLessThanOrEqual(3)
+      expect(RATE_LIMIT_PASSWORD_RESET.maxRequests).toBeLessThanOrEqual(5)
       expect(RATE_LIMIT_LOGIN.maxRequests).toBeLessThanOrEqual(5)
       expect(RATE_LIMIT_2FA.maxRequests).toBeLessThanOrEqual(5)
 

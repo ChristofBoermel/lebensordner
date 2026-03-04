@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import {
   checkRateLimit,
   incrementRateLimit,
@@ -14,6 +14,55 @@ import { emitStructuredError, emitStructuredInfo, emitStructuredWarn } from "@/l
 // --- Constants ---
 
 const CAPTCHA_THRESHOLD = 2;
+
+const normalizeOrigin = (value: string | undefined | null): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return null;
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return null;
+  }
+};
+
+const normalizeUrlWithPath = (value: string | undefined | null): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return null;
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    const normalizedPath = parsed.pathname.replace(/\/+$/, "");
+    return normalizedPath && normalizedPath !== "/"
+      ? `${parsed.origin}${normalizedPath}`
+      : parsed.origin;
+  } catch {
+    return null;
+  }
+};
+
+const resolvePublicOrigin = (request: NextRequest): string | null => {
+  const fromEnv =
+    normalizeOrigin(process.env.AUTH_PUBLIC_BASE_URL) ??
+    normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL) ??
+    normalizeOrigin(process.env.SITE_URL);
+
+  if (fromEnv) return fromEnv;
+
+  return normalizeOrigin(request.headers.get("origin"));
+};
+
+const resolvePublicSupabaseUrl = (): string | null => {
+  return (
+    normalizeUrlWithPath(process.env.NEXT_PUBLIC_SUPABASE_URL) ??
+    normalizeUrlWithPath(process.env.API_EXTERNAL_URL) ??
+    normalizeUrlWithPath(process.env.SUPABASE_URL)
+  );
+};
 
 // --- Turnstile Verification ---
 
@@ -250,13 +299,65 @@ export async function POST(request: NextRequest) {
 
     // --- Send Password Reset Email ---
 
-    const supabase = await createServerSupabaseClient();
-    const origin =
-      request.headers.get("origin") || process.env.NEXT_PUBLIC_SITE_URL || "";
+    const publicSupabaseUrl = resolvePublicSupabaseUrl();
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+    if (!publicSupabaseUrl || !supabaseAnonKey) {
+      emitStructuredError({
+        error_type: "config",
+        error_message: "Password reset Supabase client config is missing",
+        endpoint: "/api/auth/password-reset/request",
+      });
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 },
+      );
+    }
 
-    await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: `${origin}/auth/callback?next=/passwort-reset`,
+    const supabase = createClient(publicSupabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
     });
+    const publicOrigin = resolvePublicOrigin(request);
+    if (!publicOrigin) {
+      emitStructuredError({
+        error_type: "config",
+        error_message: "Password reset public origin resolution failed",
+        endpoint: "/api/auth/password-reset/request",
+      });
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 },
+      );
+    }
+
+    const redirectTo = new URL(
+      "/auth/callback?next=/passwort-reset",
+      publicOrigin,
+    ).toString();
+
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo,
+    });
+
+    if (resetError) {
+      emitStructuredError({
+        error_type: "auth",
+        error_message: `Password reset email dispatch failed: ${resetError.message}`,
+        endpoint: "/api/auth/password-reset/request",
+        metadata: {
+          code: "code" in resetError ? String(resetError.code) : undefined,
+          status: "status" in resetError ? Number(resetError.status) : undefined,
+        },
+      });
+    } else {
+      emitStructuredInfo({
+        event_type: "auth",
+        event_message: "Password reset email dispatch requested successfully",
+        endpoint: "/api/auth/password-reset/request",
+      });
+    }
 
     // --- Audit Logging ---
 

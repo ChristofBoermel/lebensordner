@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DOCUMENT_CATEGORIES, type DocumentCategory } from '@/types/database'
+import { highlightText } from '@/lib/utils/highlight'
 
 interface SearchResult {
   id: string
@@ -254,11 +255,11 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                   </span>
                   <span className="flex-1 min-w-0 block">
                     <span className="font-medium text-warmgray-900 truncate block">
-                      {result.title}
+                      {highlightText(result.title, query)}
                     </span>
                     {result.subtitle && (
                       <span className="text-sm text-warmgray-500 truncate block">
-                        {result.subtitle}
+                        {highlightText(result.subtitle, query)}
                       </span>
                     )}
                   </span>

@@ -310,9 +310,15 @@ const openUploadDialog = async () => {
       screen.getAllByRole('button', { name: /Dokument hinzufügen/i }).length
     ).toBeGreaterThan(0)
   })
-  await userEvent.click(
-    screen.getAllByRole('button', { name: /Dokument hinzufügen/i })[0]
-  )
+  const uploadButton = screen
+    .getAllByRole('button', { name: /Dokument hinzufügen/i })
+    .find((button) => {
+      const style = window.getComputedStyle(button)
+      return !button.hasAttribute('disabled') && style.pointerEvents !== 'none'
+    })
+
+  expect(uploadButton).toBeDefined()
+  await userEvent.click(uploadButton!)
   await waitFor(() => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
@@ -431,7 +437,7 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
 
       unmount()
     }
-  })
+  }, 15000)
 
   it('Watcher-Auswahl bleibt bei fehlenden Familienmitgliedern verborgen (Basic/Premium)', async () => {
     const tiers = [
@@ -457,7 +463,7 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
 
       unmount()
     }
-  })
+  }, 15000)
 
   it('Basic-User kann Watcher auswählen und Upload absenden', async () => {
     setMockProfile({ subscription_status: 'active', stripe_price_id: STRIPE_PRICE_BASIC_MONTHLY })

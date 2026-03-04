@@ -24,6 +24,183 @@ Rollback:
 Open Issues:
 - none
 
+## 2026-03-03 23:27 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Hardened Turnstile client integration in `src/components/auth/turnstile.tsx` by adding explicit widget `size`, error callback propagation, and script-load failure callback.
+- Added visible CAPTCHA load-failure UX in auth screens:
+  - `src/app/(auth)/passwort-vergessen/page.tsx`
+  - `src/app/(auth)/anmelden/page.tsx`
+  so users get actionable feedback (including Turnstile error code) instead of a hidden/blank challenge state.
+
+Why:
+- Password reset flow showed CAPTCHA-required state while the Turnstile widget failed client-side (`400020`) and did not render, leaving users blocked without useful UI feedback.
+
+Risk / Regression Watch:
+- Auth pages now surface Turnstile error codes to end users; if error volume spikes, review Turnstile widget/site-key/domain configuration in Cloudflare.
+
+Verification:
+- `python scripts/ops/hook-discipline-audit.py`
+- `npm run type-check`
+
+Rollback:
+- Revert `src/components/auth/turnstile.tsx`, `src/app/(auth)/passwort-vergessen/page.tsx`, `src/app/(auth)/anmelden/page.tsx`, and this changelog entry.
+
+Open Issues:
+- `npm run lint` timed out in local sandbox due large `.worktrees/.../.next` artifacts; CI lint remains source of truth.
+
+## 2026-03-03 23:00 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Added recovery-hash session handling on `src/app/(auth)/anmelden/page.tsx`:
+  - reads `#access_token`, `#refresh_token`, `type=recovery` from URL fragment
+  - hydrates Supabase browser session via `auth.setSession(...)`
+  - redirects to `/passwort-reset` so users can set a new password
+  - falls back to `/anmelden?error=callback` if token hydration fails.
+
+Why:
+- Password reset emails can return fragment-based recovery tokens; server `/auth/callback` only handles `?code=` exchange and redirected users to login without showing the reset-password form.
+
+Risk / Regression Watch:
+- Login page now performs one additional client-side hash parse on mount; monitor for unexpected redirects if malformed fragments are present.
+
+Verification:
+- `npm run type-check`
+- `npm test -- --run tests/api/password-reset.test.ts`
+
+Rollback:
+- Revert `src/app/(auth)/anmelden/page.tsx` and this changelog entry.
+
+Open Issues:
+- none
+
+## 2026-03-03 22:47 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Fixed password-reset Supabase URL normalization in `src/app/api/auth/password-reset/request/route.ts` by preserving URL path segments (e.g. `/supabase`) instead of collapsing to origin-only host.
+- Added regression assertions in `tests/api/password-reset.test.ts` to verify the reset route creates the Supabase client with `https://lebensordner.org/supabase` (including trailing-slash normalization).
+
+Why:
+- Reset email dispatch client was built from `.origin`, which dropped `/supabase` and could route reset requests to the wrong auth endpoint in production.
+
+Risk / Regression Watch:
+- Password reset route now treats path-bearing Supabase URLs as canonical; if env values intentionally rely on root-only host behavior, monitor for config mismatches.
+
+Verification:
+- `npm test -- --run tests/api/password-reset.test.ts`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/app/api/auth/password-reset/request/route.ts`, `tests/api/password-reset.test.ts`, and this changelog entry.
+
+Open Issues:
+- none
+
+## 2026-03-03 21:26 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Increased password-reset rate limit from `3/hour` to `5/hour` in shared security constants.
+- Updated security constant tests to assert the new `5/hour` policy.
+
+Risk / Regression Watch:
+- Slightly higher reset request throughput; monitor for abuse spikes and SMTP reputation impact.
+
+Verification:
+- `npm test -- --run tests/api/password-reset.test.ts tests/lib/security/rate-limit-constants.test.ts`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/lib/security/rate-limit.ts` and `tests/lib/security/rate-limit-constants.test.ts` to restore `3/hour`.
+
+## 2026-03-03 21:04 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Added explicit reset-email dispatch result handling in `src/app/api/auth/password-reset/request/route.ts`:
+  - logs structured `error` when `supabase.auth.resetPasswordForEmail()` returns an error
+  - logs structured `info` when dispatch request succeeds
+  - preserves anti-enumeration behavior (always returns success response to caller on dispatch errors).
+- Added regression test in `tests/api/password-reset.test.ts` to verify dispatch-failure path still returns `200 { success: true }` while emitting structured error telemetry.
+
+Why:
+- User reported no reset email delivery; previous route did not log non-throwing Supabase dispatch errors, making SMTP/provider failures opaque.
+
+Risk / Regression Watch:
+- Additional auth-route logs may increase volume on repeated delivery failures; rate limiting in structured logger remains active.
+- User-facing behavior intentionally unchanged for anti-enumeration.
+
+Verification:
+- `npm test -- --run tests/api/password-reset.test.ts`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/app/api/auth/password-reset/request/route.ts`, `tests/api/password-reset.test.ts`, and this changelog entry.
+
+Open Issues:
+- none
+
+## 2026-03-03 20:48 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Updated `src/app/api/auth/password-reset/request/route.ts` to use a dedicated public-URL Supabase client (`createClient`) for `resetPasswordForEmail()` so recovery email links are generated from the public gateway URL without changing the global internal `SUPABASE_URL`.
+- Added `resolvePublicSupabaseUrl()` fallback chain (`NEXT_PUBLIC_SUPABASE_URL` -> `API_EXTERNAL_URL` -> `SUPABASE_URL`) and retained existing guarded public callback origin resolution.
+- Updated `tests/api/password-reset.test.ts` Supabase JS mock and env defaults to cover the new public-client reset path.
+
+Why:
+- Production still emitted `http://kong/.../verify` recovery links even with correct GoTrue public URL envs; targeted route-level public client avoids internal-host leakage while preserving internal service-to-service config.
+
+Risk / Regression Watch:
+- Password reset now depends on `SUPABASE_ANON_KEY` plus a resolvable public Supabase URL in app env; missing vars will fail fast with config error.
+- This change is scoped to password-reset request route only; other API flows still use existing internal client behavior.
+
+Verification:
+- `npm test -- --run tests/api/password-reset.test.ts`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/app/api/auth/password-reset/request/route.ts`, `tests/api/password-reset.test.ts`, and this changelog entry.
+
+Open Issues:
+- none
+
+## 2026-03-03 20:28 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Fixed `scripts/ops/verify-deploy.sh` smoke-check regression by moving `check_auth_public_urls()` outside the `node <<'NODE'` heredoc in `check_runtime_public_config_from_nextjs()`.
+
+Why:
+- Deploy workflow run `22640786779` failed in `smoke-check` due shell/Node parse error (`Unexpected token '{'`) caused by function definition accidentally embedded in the Node script block.
+
+Risk / Regression Watch:
+- Shell script structure changed around heredoc boundaries; monitor next deploy smoke-check step for syntax regressions.
+
+Verification:
+- `gh run view 22640786779 --log-failed` (confirmed failure cause before fix)
+- Local bash syntax check could not run in this Windows sandbox (`Access is denied` for `bash`).
+
+Rollback:
+- Revert `scripts/ops/verify-deploy.sh` and this changelog entry.
+
+Open Issues:
+- none
+
+## 2026-03-03 20:09 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Hardened password-reset redirect origin resolution in `src/app/api/auth/password-reset/request/route.ts` by adding validated fallback order: `AUTH_PUBLIC_BASE_URL` -> `NEXT_PUBLIC_APP_URL` -> `SITE_URL` -> request `Origin`; `redirectTo` now uses `new URL(...)`, and invalid/missing public origin returns a controlled config error.
+- Expanded `tests/api/password-reset.test.ts` with explicit coverage for env-priority redirect selection and invalid-origin failure behavior; stabilized test mock lifecycle for rate-limit mocks.
+- Extended deploy smoke checks in `scripts/ops/verify-deploy.sh` with `check_auth_public_urls` to fail when `supabase-auth` lacks valid `API_EXTERNAL_URL` / `GOTRUE_SITE_URL` HTTPS values.
+- Updated deployment docs/config templates: added `AUTH_PUBLIC_BASE_URL` and clearer URL intent in `deploy/.env.example`, wired `AUTH_PUBLIC_BASE_URL` through `deploy/docker-compose.yml` `nextjs` env, and added runbook troubleshooting for `http://kong/...` reset links in `docs/ops/deploy-runbook.md`.
+
+Why:
+- Password reset emails were still producing internal-host verify links (`http://kong/...`) under proxy/env drift conditions; this change fixes root-cause detection in deploy checks and hardens app redirect generation.
+
+Risk / Regression Watch:
+- If `AUTH_PUBLIC_BASE_URL` is set to an invalid value, reset requests now fail fast with a 500 configuration response instead of silently generating a bad callback URL.
+- `verify-deploy.sh` now enforces HTTPS for auth public URLs; intentionally non-HTTPS dev-like production configs will fail smoke checks.
+
+Verification:
+- `npm test -- --run tests/api/password-reset.test.ts`
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+
+Rollback:
+- Revert `src/app/api/auth/password-reset/request/route.ts`, `tests/api/password-reset.test.ts`, `scripts/ops/verify-deploy.sh`, `deploy/.env.example`, `deploy/docker-compose.yml`, `docs/ops/deploy-runbook.md`, and this changelog entry.
+
+Open Issues:
+- none
+
 ## 2026-03-03 17:03 UTC | Agent: Codex | Commit: uncommitted
 Change:
 - Implemented category-security UX hardening in `src/app/(dashboard)/dokumente/page.tsx` and added `src/app/(dashboard)/dokumente/DisableCategoryLockDialog.tsx`.

@@ -173,6 +173,23 @@ main().catch((error) => {
 NODE
 }
 
+check_auth_public_urls() {
+  local auth_container_id="$1"
+  local api_external_url
+  local gotrue_site_url
+
+  api_external_url="$(docker inspect "$auth_container_id" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^API_EXTERNAL_URL=' | head -n1 | cut -d= -f2-)"
+  gotrue_site_url="$(docker inspect "$auth_container_id" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^GOTRUE_SITE_URL=' | head -n1 | cut -d= -f2-)"
+
+  [[ -n "$api_external_url" ]] || fail "supabase-auth API_EXTERNAL_URL is empty"
+  [[ -n "$gotrue_site_url" ]] || fail "supabase-auth GOTRUE_SITE_URL is empty"
+
+  [[ "$api_external_url" =~ ^https:// ]] || fail "supabase-auth API_EXTERNAL_URL must start with https:// (got: $api_external_url)"
+  [[ "$gotrue_site_url" =~ ^https:// ]] || fail "supabase-auth GOTRUE_SITE_URL must start with https:// (got: $gotrue_site_url)"
+
+  pass "supabase-auth public URLs are configured (${api_external_url}, ${gotrue_site_url})"
+}
+
 check_http_status() {
   local url="$1"
   shift
@@ -208,6 +225,7 @@ echo "Checking running images..."
 NEXTJS_IMAGE="$(docker inspect "$(docker compose ps -q nextjs)" --format '{{.Config.Image}}')"
 WORKER_IMAGE="$(docker inspect "$(docker compose ps -q worker)" --format '{{.Config.Image}}')"
 NEXTJS_CONTAINER_ID="$(docker compose ps -q nextjs)"
+AUTH_CONTAINER_ID="$(docker compose ps -q auth)"
 
 [[ "$NEXTJS_IMAGE" == ghcr.io/christofboermel/lebensordner/nextjs:* ]] || fail "unexpected nextjs image: $NEXTJS_IMAGE"
 [[ "$WORKER_IMAGE" == ghcr.io/christofboermel/lebensordner/worker:* ]] || fail "unexpected worker image: $WORKER_IMAGE"
@@ -248,6 +266,9 @@ check_runtime_public_config_from_nextjs "$NEXTJS_CONTAINER_ID"
 
 echo "Checking internal Supabase probes from nextjs..."
 check_internal_supabase_from_nextjs "$NEXTJS_CONTAINER_ID"
+
+echo "Checking Supabase Auth public URL configuration..."
+check_auth_public_urls "$AUTH_CONTAINER_ID"
 
 REST_WITH_KEY_STATUS="$(curl -sS -o /tmp/rest_openapi_with_key.json -w '%{http_code}' \
   -H "apikey: ${ANON_KEY}" \

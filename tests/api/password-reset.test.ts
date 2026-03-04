@@ -57,12 +57,17 @@ const createAdminTableDispatch = () =>
     }
   })
 
-const adminClient = {
+const supabaseJsClient = {
+  auth: {
+    resetPasswordForEmail: mockResetPasswordForEmail,
+  },
   from: createAdminTableDispatch(),
 }
 
+const mockCreateClient = vi.fn(() => supabaseJsClient)
+
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => adminClient),
+  createClient: (...args: unknown[]) => mockCreateClient(...args),
 }))
 
 // --- Mock: isAccountLocked ---
@@ -94,6 +99,14 @@ vi.mock('@/lib/security/audit-log', () => ({
   EVENT_PASSWORD_RESET_REQUESTED: 'password_reset_requested',
 }))
 
+const mockEmitStructuredError = vi.fn()
+
+vi.mock('@/lib/errors/structured-logger', () => ({
+  emitStructuredError: (...args: unknown[]) => mockEmitStructuredError(...args),
+  emitStructuredInfo: vi.fn(),
+  emitStructuredWarn: vi.fn(),
+}))
+
 // --- Mock: next/headers (cookies) ---
 vi.mock('next/headers', () => ({
   cookies: vi.fn().mockResolvedValue({
@@ -102,7 +115,7 @@ vi.mock('next/headers', () => ({
 }))
 
 // --- beforeEach defaults ---
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks()
 
   mockIsAccountLocked.mockResolvedValue(false)
@@ -111,8 +124,17 @@ beforeEach(() => {
   mockExchangeCodeForSession.mockResolvedValue({ data: { user: null }, error: new Error('not configured') })
   mockAdminProfileSingle = vi.fn().mockResolvedValue({ data: null, error: null })
 
+  const { checkRateLimit, incrementRateLimit } = await import('@/lib/security/rate-limit')
+  vi.mocked(checkRateLimit).mockResolvedValue({
+    allowed: true,
+    remaining: 10,
+    resetAt: new Date(Date.now() + 60_000),
+  })
+  vi.mocked(incrementRateLimit).mockResolvedValue(undefined)
+
   // Rebuild admin dispatch so mockAdminProfileSingle is picked up
-  adminClient.from = createAdminTableDispatch()
+  supabaseJsClient.from = createAdminTableDispatch()
+  mockCreateClient.mockReturnValue(supabaseJsClient)
 })
 
 afterEach(() => {
@@ -124,6 +146,38 @@ afterEach(() => {
 // ======================================================================
 
 describe('Password reset request', () => {
+  const originalAuthPublicBaseUrl = process.env.AUTH_PUBLIC_BASE_URL
+  const originalNextPublicAppUrl = process.env.NEXT_PUBLIC_APP_URL
+  const originalSiteUrl = process.env.SITE_URL
+
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://lebensordner.org/supabase'
+    process.env.SUPABASE_ANON_KEY = 'anon-test-key'
+    delete process.env.AUTH_PUBLIC_BASE_URL
+    delete process.env.NEXT_PUBLIC_APP_URL
+    delete process.env.SITE_URL
+  })
+
+  afterEach(() => {
+    if (originalAuthPublicBaseUrl === undefined) {
+      delete process.env.AUTH_PUBLIC_BASE_URL
+    } else {
+      process.env.AUTH_PUBLIC_BASE_URL = originalAuthPublicBaseUrl
+    }
+
+    if (originalNextPublicAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = originalNextPublicAppUrl
+    }
+
+    if (originalSiteUrl === undefined) {
+      delete process.env.SITE_URL
+    } else {
+      process.env.SITE_URL = originalSiteUrl
+    }
+  })
+
   it("sets redirectTo to /auth/callback?next=/passwort-reset", async () => {
     vi.resetModules()
     const { POST } = await import('@/app/api/auth/password-reset/request/route')
@@ -143,6 +197,146 @@ describe('Password reset request', () => {
       'user@example.com',
       { redirectTo: expect.stringContaining('/auth/callback?next=/passwort-reset') }
     )
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      'https://lebensordner.org/supabase',
+      'anon-test-key',
+      expect.any(Object)
+    )
+  })
+
+  it('preserves path segments in NEXT_PUBLIC_SUPABASE_URL when creating reset client', async () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://lebensordner.org/supabase/'
+
+    const { POST } = await import('@/app/api/auth/password-reset/request/route')
+
+    const request = new Request('http://localhost/api/auth/password-reset/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    })
+
+    const response = await POST(request as any)
+    expect(response.status).toBe(200)
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      'https://lebensordner.org/supabase',
+      'anon-test-key',
+      expect.any(Object)
+    )
+  })
+
+  it('prefers AUTH_PUBLIC_BASE_URL for redirectTo', async () => {
+    process.env.AUTH_PUBLIC_BASE_URL = 'https://lebensordner.org/'
+    process.env.NEXT_PUBLIC_APP_URL = 'https://wrong.example'
+    process.env.SITE_URL = 'https://wrong2.example'
+
+    const { POST } = await import('@/app/api/auth/password-reset/request/route')
+
+    const request = new Request('http://localhost/api/auth/password-reset/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'origin': 'http://localhost',
+      },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    })
+
+    const response = await POST(request as any)
+    if (response.status !== 200) {
+      const payload = await response.json()
+      throw new Error(
+        `Unexpected status ${response.status}: ${JSON.stringify(payload)} | logger=${JSON.stringify(mockEmitStructuredError.mock.calls)}`
+      )
+    }
+
+    expect(mockResetPasswordForEmail).toHaveBeenCalledWith(
+      'user@example.com',
+      { redirectTo: 'https://lebensordner.org/auth/callback?next=/passwort-reset' }
+    )
+  })
+
+  it('falls back to NEXT_PUBLIC_APP_URL when AUTH_PUBLIC_BASE_URL is missing', async () => {
+    process.env.NEXT_PUBLIC_APP_URL = 'https://lebensordner.org'
+    process.env.SITE_URL = 'https://wrong.example'
+
+    const { POST } = await import('@/app/api/auth/password-reset/request/route')
+
+    const request = new Request('http://localhost/api/auth/password-reset/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'origin': 'http://localhost',
+      },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    })
+
+    const response = await POST(request as any)
+    if (response.status !== 200) {
+      const payload = await response.json()
+      throw new Error(
+        `Unexpected status ${response.status}: ${JSON.stringify(payload)} | logger=${JSON.stringify(mockEmitStructuredError.mock.calls)}`
+      )
+    }
+
+    expect(mockResetPasswordForEmail).toHaveBeenCalledWith(
+      'user@example.com',
+      { redirectTo: 'https://lebensordner.org/auth/callback?next=/passwort-reset' }
+    )
+  })
+
+  it('returns 500 when no valid public origin is available', async () => {
+    process.env.AUTH_PUBLIC_BASE_URL = 'notaurl'
+
+    const { POST } = await import('@/app/api/auth/password-reset/request/route')
+
+    const request = new Request('http://localhost/api/auth/password-reset/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'origin': 'notaurl',
+      },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    })
+
+    const response = await POST(request as any)
+    const payload = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(payload.error).toBe('Server configuration error')
+    expect(mockResetPasswordForEmail).not.toHaveBeenCalled()
+    expect(mockEmitStructuredError).toHaveBeenCalled()
+  })
+
+  it('still returns success when reset email dispatch fails, while logging error', async () => {
+    mockResetPasswordForEmail.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'SMTP transport failed', status: 500, code: 'smtp_error' },
+    })
+
+    const { POST } = await import('@/app/api/auth/password-reset/request/route')
+
+    const request = new Request('http://localhost/api/auth/password-reset/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    })
+
+    const response = await POST(request as any)
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.success).toBe(true)
+    expect(mockEmitStructuredError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_type: 'auth',
+        error_message: expect.stringContaining('Password reset email dispatch failed'),
+      })
+    )
   })
 })
 
@@ -160,7 +354,7 @@ describe('Auth callback — existing user, onboarding complete', () => {
       data: { id: 'uid', onboarding_completed: true },
       error: null,
     })
-    adminClient.from = createAdminTableDispatch()
+    supabaseJsClient.from = createAdminTableDispatch()
   })
 
   it("redirects to /passwort-reset when next=/passwort-reset", async () => {
@@ -200,7 +394,7 @@ describe('Auth callback — new user', () => {
       data: null,
       error: { code: 'PGRST116' },
     })
-    adminClient.from = createAdminTableDispatch()
+    supabaseJsClient.from = createAdminTableDispatch()
 
     vi.resetModules()
     const { GET } = await import('@/app/auth/callback/route')
