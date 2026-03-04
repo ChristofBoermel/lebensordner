@@ -19,7 +19,9 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState(invitedEmail ?? '')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
@@ -48,6 +50,12 @@ export default function RegisterPage() {
     // Validation
     if (password.length < 8) {
       setError('Das Passwort muss mindestens 8 Zeichen lang sein.')
+      setIsLoading(false)
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError('Die Passwörter stimmen nicht überein.')
       setIsLoading(false)
       return
     }
@@ -230,6 +238,34 @@ export default function RegisterPage() {
               </button>
             </div>
             <PasswordStrength password={password} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Passwort bestätigen</Label>
+            <div className="relative">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Passwort wiederholen"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                disabled={isLoading}
+                minLength={8}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-warmgray-400 hover:text-warmgray-600 focus:outline-none"
+                aria-label={showConfirmPassword ? 'Bestätigung verbergen' : 'Bestätigung anzeigen'}
+              >
+                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {confirmPassword.length > 0 && password !== confirmPassword && (
+              <p className="text-xs text-red-600">Die Passwörter stimmen nicht überein.</p>
+            )}
           </div>
 
           <p className="text-sm text-warmgray-500">
