@@ -18,6 +18,7 @@ export default function PasswordForgotPage() {
   // Security states
   const [showCaptcha, setShowCaptcha] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileErrorCode, setTurnstileErrorCode] = useState<string | null>(null)
   const [captchaKey, setCaptchaKey] = useState(0)
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null)
   const [countdown, setCountdown] = useState<number>(0)
@@ -39,7 +40,16 @@ export default function PasswordForgotPage() {
 
   const handleTurnstileVerify = useCallback((token: string) => {
     setTurnstileToken(token)
+    setTurnstileErrorCode(null)
   }, [])
+
+  const handleTurnstileError = (errorCode: string) => {
+    setTurnstileToken(null)
+    setTurnstileErrorCode(errorCode)
+    setError(
+      `CAPTCHA konnte nicht geladen werden (Code: ${errorCode}). Bitte Seite neu laden oder später erneut versuchen.`,
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -73,6 +83,7 @@ export default function PasswordForgotPage() {
 
       if (response.status === 400 && data.requiresCaptcha) {
         setShowCaptcha(true)
+        setTurnstileErrorCode(null)
         setError('Aus Sicherheitsgründen ist eine CAPTCHA-Verifizierung erforderlich.')
         return
       }
@@ -94,7 +105,7 @@ export default function PasswordForgotPage() {
 
   if (isSuccess) {
     return (
-      <Card className="w-full max-w-md">
+      <Card key="success" className="w-full max-w-md animate-fade-in">
         <CardHeader className="text-center">
           <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-4">
             <Mail className="w-8 h-8 text-sage-600" />
@@ -118,7 +129,7 @@ export default function PasswordForgotPage() {
   }
 
   return (
-    <Card className="w-full max-w-md">
+    <Card key="forgot" className="w-full max-w-md animate-fade-in">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Passwort vergessen?</CardTitle>
         <CardDescription>
@@ -167,11 +178,20 @@ export default function PasswordForgotPage() {
               <p className="text-sm text-warmgray-600 text-center">
                 Aus Sicherheitsgründen ist eine CAPTCHA-Verifizierung erforderlich.
               </p>
-              <TurnstileWidget key={captchaKey} onVerify={handleTurnstileVerify} />
+              <TurnstileWidget
+                key={captchaKey}
+                onVerify={handleTurnstileVerify}
+                onError={handleTurnstileError}
+              />
               {turnstileToken && (
                 <p className="text-xs text-green-600 text-center flex items-center justify-center gap-1">
                   <CheckCircle2 className="w-3 h-3" />
                   Verifiziert
+                </p>
+              )}
+              {turnstileErrorCode && (
+                <p className="text-xs text-red-700 text-center">
+                  CAPTCHA-Ladefehler: {turnstileErrorCode}
                 </p>
               )}
             </div>

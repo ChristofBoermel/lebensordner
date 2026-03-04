@@ -994,3 +994,53 @@ Rollback:
 
 Open Issues:
 - none
+
+## 2026-03-04 00:27 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Restored password-recovery hash handling on login (`/anmelden`) so `type=recovery` fragment tokens hydrate session and route to `/passwort-reset`.
+- Hardened Turnstile client integration with explicit widget error callbacks and script-load failure handling.
+- Added visible CAPTCHA load error messaging on login and forgot-password screens to prevent silent blocking when Turnstile widget render fails.
+
+Why:
+- Auth redesign worktree had regressed two production-critical fixes: reset-link recovery routing and actionable CAPTCHA failure UX.
+
+Risk / Regression Watch:
+- Auth pages now surface Turnstile error codes to users; monitor for repeated `400020` spikes indicating Cloudflare widget configuration drift.
+
+Verification:
+- `python scripts/ops/hook-discipline-audit.py`
+- `npm run type-check`
+- `npm test -- --run tests/api/password-reset.test.ts`
+- `npm run lint`
+
+Rollback:
+- Revert `src/app/(auth)/anmelden/page.tsx`, `src/app/(auth)/passwort-vergessen/page.tsx`, `src/components/auth/turnstile.tsx`, and this changelog entry.
+
+Open Issues:
+- none
+
+## 2026-03-03 23:16 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Hid passkey functionality for this release by removing passkey login CTA from `/anmelden` and removing dashboard passkey nudge rendering.
+- Disabled passkey API endpoints (`/api/auth/passkey/check`, `/challenge`, `/authenticate`) with safe non-operational responses.
+- Improved auth accessibility by restoring keyboard tab access to password visibility toggle buttons on login/register/reset forms.
+- Fixed `PasskeyNudge` timeout cleanup to correctly clear timers on unmount.
+
+Why:
+- Passkey rollout is deferred; current deployment should avoid exposing incomplete auth paths while preserving stable password/2FA login.
+
+Risk / Regression Watch:
+- Passkey is intentionally unavailable until next implementation phase.
+- New auth visual enhancements remain in place; verify final UX copy and spacing on mobile auth screens.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/lib/auth/guards.test.ts`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert `src/app/(auth)/anmelden/page.tsx`, `src/app/(dashboard)/layout.tsx`, and `src/app/api/auth/passkey/*/route.ts` to re-enable passkey rollout work.
+
+Open Issues:
+- none
