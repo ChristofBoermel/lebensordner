@@ -50,6 +50,7 @@ import {
   Eye,
   Lock,
   Camera,
+  X,
 } from "lucide-react";
 import {
   SUBSCRIPTION_TIERS,
@@ -61,6 +62,7 @@ import { useRouter } from "next/navigation";
 import { useVault } from "@/lib/vault/VaultContext";
 import type { Medication } from "@/types/medication";
 import { BmpScanDialog } from "@/components/notfall/BmpScanDialog";
+import { emitHealthConsentGranted } from "@/lib/consent/consent-events";
 
 interface EmergencyContact {
   id: string;
@@ -540,6 +542,7 @@ export default function NotfallPage() {
     null,
   );
   const [showConsentModal, setShowConsentModal] = useState(false);
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(true);
   const [consentToast, setConsentToast] = useState<{
     type: "success" | "error" | "info";
     message: string;
@@ -868,6 +871,7 @@ export default function NotfallPage() {
       setHasHealthConsent(true);
       hasHealthConsentRef.current = true;
       setShowConsentModal(false);
+      emitHealthConsentGranted();
       pushConsentToast(
         "success",
         "Einwilligung gespeichert. Sie können jetzt Gesundheitsdaten hinterlegen.",
@@ -1502,7 +1506,7 @@ export default function NotfallPage() {
     return (
       <div className="max-w-4xl mx-auto space-y-6 px-4 sm:px-0">
         {consentToast ? (
-          <div className="fixed top-6 right-6 z-50 w-[320px] rounded-lg border border-warmgray-200 bg-white p-4 shadow-lg">
+          <div className="consent-toast-popup fixed top-6 right-6 z-50 w-[320px] rounded-lg border border-warmgray-200 bg-white p-4 shadow-lg">
             <p className="text-sm text-warmgray-700">{consentToast.message}</p>
           </div>
         ) : null}
@@ -1539,6 +1543,22 @@ export default function NotfallPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 px-4 sm:px-0">
+      {showWelcomeBanner && (
+        <div className="flex items-start gap-3 rounded-lg border border-sage-200 bg-sage-50 p-4 print:hidden">
+          <Info className="w-5 h-5 text-sage-600 mt-0.5 flex-shrink-0" />
+          <div className="flex-1 text-sm text-sage-800">
+            Willkommen im Notfall & Vorsorge Bereich. Hinterlegen Sie hier Ihre
+            Notfallkontakte, Gesundheitsdaten und Vorsorgedokumente.
+          </div>
+          <button
+            onClick={() => setShowWelcomeBanner(false)}
+            className="text-sage-500 hover:text-sage-700 flex-shrink-0"
+            aria-label="Schließen"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <ConsentModal
         key={showConsentModal ? 'open' : 'closed'}
         isOpen={showConsentModal}
@@ -1554,7 +1574,7 @@ export default function NotfallPage() {
         <ConsentModal.Footer />
       </ConsentModal>
       {consentToast ? (
-        <div className="fixed top-6 right-6 z-50 w-[320px] rounded-lg border border-warmgray-200 bg-white p-4 shadow-lg">
+        <div className="consent-toast-popup fixed top-6 right-6 z-50 w-[320px] rounded-lg border border-warmgray-200 bg-white p-4 shadow-lg">
           <p className="text-sm text-warmgray-700">{consentToast.message}</p>
         </div>
       ) : null}

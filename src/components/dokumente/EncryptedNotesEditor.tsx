@@ -24,12 +24,15 @@ function EncryptedNotesEditorLocked({ onClose: _onClose }: LockedProps) {
   if (!vault) throw new Error('EncryptedNotesEditor must be used within VaultProvider')
 
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
-      <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+    <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+      <div className="rounded-full bg-amber-50 border border-amber-200 w-14 h-14 flex items-center justify-center">
         <Lock className="w-6 h-6 text-amber-600" />
       </div>
-      <p className="text-sm text-warmgray-600">
+      <p className="font-medium text-warmgray-800">
         Tresor entsperren um Notiz anzuzeigen
+      </p>
+      <p className="text-sm text-warmgray-500">
+        Ihre Notizen sind durch den Tresor geschützt.
       </p>
       <Button
         variant="outline"
@@ -118,15 +121,17 @@ function EncryptedNotesEditorUnlocked({ doc, onClose, onSaveSuccess }: UnlockedP
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Notiz hinzufügen..."
-        rows={6}
-        className="w-full resize-none rounded-md border border-warmgray-200 bg-white px-3 py-2 text-sm text-warmgray-900 placeholder:text-warmgray-400 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
-      />
-      <div className="flex justify-end gap-2">
+    <div className="flex flex-col gap-4 h-full">
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Notiz hinzufügen..."
+          rows={6}
+          className="w-full h-full resize-none rounded-md border border-warmgray-200 bg-white px-3 py-2 text-sm text-warmgray-900 placeholder:text-warmgray-400 focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent"
+        />
+      </div>
+      <div className="flex justify-end gap-2 flex-shrink-0">
         <Button variant="outline" onClick={onClose} disabled={isSaving}>
           Abbrechen
         </Button>

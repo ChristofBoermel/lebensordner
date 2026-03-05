@@ -171,10 +171,13 @@
 
   .document-item {
     @apply flex items-center justify-between p-4 rounded-lg bg-cream-50 border border-cream-200 transition-colors;
+    border-left: 2px solid transparent;
+    transition: border-color 150ms ease, background-color 150ms ease;
   }
 
   .document-item:hover {
     @apply bg-cream-100 border-cream-300;
+    border-left-color: #7a9a7a;
   }
 
   /* Dark mode component overrides */
@@ -193,6 +196,17 @@
 
   .dark .document-item:hover {
     @apply bg-muted border-muted-foreground/20;
+    border-left-color: #627362;
+  }
+
+  /* Clickable card micro-interaction */
+  .card-interactive {
+    cursor: pointer;
+    transition: transform 150ms ease, box-shadow 150ms ease;
+  }
+
+  .card-interactive:hover {
+    transform: translateY(-1px);
   }
 
   /* Dark mode text color overrides */
@@ -322,6 +336,16 @@
 
   .dark .text-blue-600 {
     @apply text-blue-400;
+  }
+
+  /* Onboarding step cards and other bg-white surfaces */
+  .dark .onboarding-step-card {
+    @apply bg-secondary border-border text-foreground shadow-md;
+  }
+
+  /* Consent toast popup dark mode */
+  .dark .consent-toast-popup {
+    @apply bg-secondary border-border text-foreground shadow-md;
   }
 }
 

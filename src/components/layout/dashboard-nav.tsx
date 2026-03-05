@@ -42,6 +42,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTheme } from '@/components/theme/theme-provider'
 import { resolveAvatarUrl } from '@/lib/avatar'
 import { PROFILE_AVATAR_UPDATED_EVENT, type ProfileAvatarUpdatedDetail } from '@/lib/profile-events'
+import { HEALTH_CONSENT_GRANTED_EVENT } from '@/lib/consent/consent-events'
 
 import { TierConfig, hasFeatureAccess } from '@/lib/subscription-tiers'
 
@@ -129,7 +130,8 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
         if (!response.ok) throw new Error('Consent check failed')
         const data = await response.json()
         if (!isMounted) return
-        setHealthConsentGranted(Boolean(data?.granted))
+        const granted = Boolean(data?.granted)
+        setHealthConsentGranted((previous) => (previous === true ? true : granted))
       } catch (error) {
         if (!isMounted) return
         setHealthConsentGranted(null)
@@ -167,6 +169,24 @@ export function DashboardNav({ user, tier }: DashboardNavProps) {
 
     window.addEventListener(PROFILE_AVATAR_UPDATED_EVENT, handleAvatarUpdated)
     return () => window.removeEventListener(PROFILE_AVATAR_UPDATED_EVENT, handleAvatarUpdated)
+  }, [])
+
+  useEffect(() => {
+    const handleHealthConsentGranted = () => {
+      setHealthConsentGranted(true)
+    }
+
+    window.addEventListener(HEALTH_CONSENT_GRANTED_EVENT, handleHealthConsentGranted)
+    return () => window.removeEventListener(HEALTH_CONSENT_GRANTED_EVENT, handleHealthConsentGranted)
+  }, [])
+
+  useEffect(() => {
+    const handleSearchOpen = () => {
+      openGlobalSearch()
+    }
+
+    window.addEventListener('search:open', handleSearchOpen)
+    return () => window.removeEventListener('search:open', handleSearchOpen)
   }, [])
 
   const handleLogout = async () => {

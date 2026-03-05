@@ -16,7 +16,8 @@ import {
   Calendar,
   Phone,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Bell
 } from 'lucide-react'
 import Link from 'next/link'
 import { DOCUMENT_CATEGORIES, type DocumentCategory } from '@/types/database'
@@ -358,9 +359,14 @@ export function DashboardContent({ profile, documents, trustedPersons, reminders
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-warmgray-500 text-center py-4">
-                  Keine anstehenden Erinnerungen
-                </p>
+                <div className="flex flex-col items-center text-center py-6 gap-3">
+                  <Bell className="w-8 h-8 text-warmgray-300" />
+                  <p className="text-sm font-medium text-warmgray-700">Noch keine Erinnerungen</p>
+                  <p className="text-xs text-warmgray-500">Fälligkeiten und Fristen hier hinterlegen</p>
+                  <Link href="/erinnerungen" className="text-xs text-sage-600 hover:text-sage-700 underline underline-offset-2">
+                    Erinnerung hinzufügen
+                  </Link>
+                </div>
               )}
             </CardContent>
           </Card>

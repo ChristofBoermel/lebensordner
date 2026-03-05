@@ -61,7 +61,10 @@
       "WebFetch(domain:github.blog)",
       "WebFetch(domain:www.w3.org)",
       "WebFetch(domain:docs.expo.dev)",
-      "WebFetch(domain:tamagui.dev)"
+      "WebFetch(domain:tamagui.dev)",
+      "Bash(pnpm install:*)",
+      "Bash(/c/Users/chris/AppData/Roaming/npm/pnpm install:*)",
+      "WebFetch(domain:www.authgear.com)"
     ]
   }
 }

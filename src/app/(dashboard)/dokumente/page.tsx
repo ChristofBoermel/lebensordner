@@ -105,7 +105,6 @@ import {
   type CustomCategory,
 } from "@/types/database";
 import { formatFileSize, formatDate } from "@/lib/utils";
-import { highlightText } from "@/lib/utils/highlight";
 import { usePostHog, ANALYTICS_EVENTS } from "@/lib/posthog";
 import {
   SUBSCRIPTION_TIERS,
@@ -413,7 +412,6 @@ export default function DocumentsPage() {
   const [uploadSubcategory, setUploadSubcategory] = useState<string | null>(
     null,
   );
-  const [searchQuery, setSearchQuery] = useState("");
   const [activeTagFilters, setActiveTagFilters] = useState<Set<string>>(
     () => (tagParam ? new Set(tagParam.split(",").filter(Boolean)) : new Set()),
   );
@@ -1069,7 +1067,47 @@ export default function DocumentsPage() {
   ]);
 
   useEffect(() => {
-    setHighlightedDoc(searchParams.get("highlight"));
+    const categoryParam = searchParams.get("kategorie");
+    const highlightParam = searchParams.get("highlight");
+
+    if (categoryParam === "overview") {
+      setActiveTab("overview");
+      setSelectedCategory(null);
+      setSelectedCustomCategory(null);
+      setCurrentFolder(null);
+    } else if (categoryParam) {
+      const targetDoc = highlightParam
+        ? documents.find((doc) => doc.id === highlightParam)
+        : null;
+      const targetCategoryKey =
+        targetDoc?.custom_category_id
+          ? `custom:${targetDoc.custom_category_id}`
+          : categoryParam;
+      const categoryIsLocked =
+        securedCategories.includes(targetCategoryKey) && !vaultContext.isUnlocked;
+      const documentNeedsUnlock = targetDoc ? isDocumentLocked(targetDoc) : false;
+
+      if (categoryIsLocked || documentNeedsUnlock) {
+        setPendingUnlockCategory(targetCategoryKey);
+        setPendingUnlockDocumentId(targetDoc?.id ?? highlightParam ?? null);
+        if (!isUnlockRequested) {
+          vaultContext.requestUnlock();
+        }
+      } else if (targetCategoryKey.startsWith("custom:")) {
+        const customId = targetCategoryKey.replace("custom:", "");
+        setActiveTab(`custom:${customId}`);
+        setSelectedCustomCategory(customId);
+        setSelectedCategory(null);
+        setCurrentFolder(null);
+      } else {
+        setActiveTab(targetCategoryKey);
+        setSelectedCategory(targetCategoryKey as DocumentCategory);
+        setSelectedCustomCategory(null);
+        setCurrentFolder(null);
+      }
+    }
+    setHighlightedDoc(highlightParam);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   // Handle document highlighting from search
@@ -1090,11 +1128,17 @@ export default function DocumentsPage() {
         }
       }
 
+      let pulseTimer: ReturnType<typeof setTimeout> | null = null;
+
       // Scroll to the highlighted document after a short delay
       const timer = setTimeout(() => {
         const element = document.getElementById(`document-${highlightedDoc}`);
         if (element) {
           element.scrollIntoView({ behavior: "smooth", block: "center" });
+          element.classList.add("highlight-pulse");
+          pulseTimer = setTimeout(() => {
+            element.classList.remove("highlight-pulse");
+          }, 2500);
         }
       }, 500);
 
@@ -1106,6 +1150,9 @@ export default function DocumentsPage() {
       return () => {
         clearTimeout(timer);
         clearTimeout(clearTimer);
+        if (pulseTimer) {
+          clearTimeout(pulseTimer);
+        }
       };
     }
   }, [
@@ -1206,15 +1253,6 @@ export default function DocumentsPage() {
     };
     decryptTitles();
   }, [vaultContext.isUnlocked, vaultContext.masterKey, documents]);
-
-  useEffect(() => {
-    if (searchQuery.trim().length > 0) {
-      setActiveTab("overview");
-      setSelectedCategory(null);
-      setSelectedCustomCategory(null);
-      setCurrentFolder(null);
-    }
-  }, [searchQuery]);
 
   const validateAndSetFile = (file: File) => {
     if (file.size > MAX_FILE_SIZE) {
@@ -2433,30 +2471,10 @@ export default function DocumentsPage() {
 
   const filteredDocuments = validatedDocuments
     .filter((doc) => {
-      const matchesSearchQuery = (d: Document) => {
-        if (!searchQuery) return true;
-        const q = searchQuery.toLowerCase();
-
-        if (d.title.toLowerCase().includes(q)) return true;
-
-        const decryptedTitle = decryptedTitles[d.id];
-        if (decryptedTitle && decryptedTitle.toLowerCase().includes(q))
-          return true;
-
-        if (d.notes?.toLowerCase().includes(q)) return true;
-
-        if (d.metadata) {
-          return Object.values(d.metadata).some(
-            (val) => typeof val === "string" && val.toLowerCase().includes(q),
-          );
-        }
-        return false;
-      };
-
       if (selectedCustomCategory) {
         const matchesCustomCategory =
           doc.custom_category_id === selectedCustomCategory;
-        return matchesCustomCategory && matchesSearchQuery(doc);
+        return matchesCustomCategory;
       }
 
       const matchesCategory =
@@ -2464,8 +2482,7 @@ export default function DocumentsPage() {
       const notInCustomCategory = !doc.custom_category_id;
       return (
         matchesCategory &&
-        (selectedCategory ? notInCustomCategory : true) &&
-        matchesSearchQuery(doc)
+        (selectedCategory ? notInCustomCategory : true)
       );
     })
     .filter(
@@ -2567,9 +2584,7 @@ export default function DocumentsPage() {
           </div>
           <div className="flex-1 min-w-0 overflow-hidden">
             <p className="font-medium text-warmgray-900 truncate leading-tight">
-              {searchQuery
-                ? highlightText(getDisplayTitle(doc), searchQuery)
-                : getDisplayTitle(doc)}
+              {getDisplayTitle(doc)}
             </p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-warmgray-500 mt-0.5">
               <span className="truncate">{category.name}</span>
@@ -3073,74 +3088,19 @@ export default function DocumentsPage() {
         />
       )}
       {/* Search and View Toggle */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warmgray-400" />
-          <Input
-            type="search"
-            placeholder="Dokumente durchsuchen..."
-            className="pl-12"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {availableTags.length > 0 && (
-            <div className="mt-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-warmgray-500 uppercase tracking-wide">
-                  Tags
-                  {activeTagFilters.size > 0 && (
-                    <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold bg-sage-500 text-white rounded-full">
-                      {activeTagFilters.size}
-                    </span>
-                  )}
-                </span>
-                {activeTagFilters.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => updateTagFilters(new Set())}
-                    className="text-xs text-warmgray-500 hover:text-warmgray-700 transition-colors"
-                  >
-                    Alle zurücksetzen
-                  </button>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {availableTags.map((tag) => {
-                  const count = tagCounts.get(tag) ?? 0;
-                  const isActive = activeTagFilters.has(tag);
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() =>
-                        updateTagFilters((prev) => {
-                          const next = new Set(prev);
-                          next.has(tag) ? next.delete(tag) : next.add(tag);
-                          return next;
-                        })
-                      }
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                        isActive
-                          ? "bg-sage-500 text-white border-sage-500 shadow-sm"
-                          : count === 0
-                            ? "bg-white text-warmgray-400 border-warmgray-200 cursor-default opacity-50"
-                            : "bg-white text-warmgray-700 border-warmgray-300 hover:border-sage-400 hover:bg-sage-50"
-                      }`}
-                      disabled={count === 0 && !isActive}
-                    >
-                      {tag}
-                      <span className={`text-[10px] px-1 py-0.5 rounded-full font-bold ${
-                        isActive ? "bg-white/20" : "bg-warmgray-100 text-warmgray-500"
-                      }`}>
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("search:open"))}
+            className="flex-1 flex items-center gap-3 px-4 py-2.5 rounded-lg border border-warmgray-200 bg-warmgray-50 text-warmgray-500 hover:bg-warmgray-100 transition-colors"
+          >
+            <Search className="w-4 h-4" />
+            <span className="flex-1 text-left text-sm">Dokumente suchen…</span>
+            <kbd className="hidden sm:inline-flex px-1.5 py-0.5 text-xs rounded bg-warmgray-200 text-warmgray-600">
+              ⌘K
+            </kbd>
+          </button>
         <Button
           type="button"
           variant={privacyModeEnabled ? "default" : "outline"}
@@ -3164,6 +3124,68 @@ export default function DocumentsPage() {
           <Upload className="mr-2 h-5 w-5" />
           Dokument hinzufügen
         </Button>
+        </div>
+        {availableTags.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-warmgray-500 uppercase tracking-wide">
+                Tags
+                {activeTagFilters.size > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold bg-sage-500 text-white rounded-full">
+                    {activeTagFilters.size}
+                  </span>
+                )}
+              </span>
+              {activeTagFilters.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => updateTagFilters(new Set())}
+                  className="text-xs text-warmgray-500 hover:text-warmgray-700 transition-colors"
+                >
+                  Alle zurücksetzen
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {availableTags.map((tag) => {
+                const count = tagCounts.get(tag) ?? 0;
+                const isActive = activeTagFilters.has(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() =>
+                      updateTagFilters((prev) => {
+                        const next = new Set(prev);
+                        next.has(tag) ? next.delete(tag) : next.add(tag);
+                        return next;
+                      })
+                    }
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                      isActive
+                        ? "bg-sage-500 text-white border-sage-500 shadow-sm"
+                        : count === 0
+                          ? "bg-white text-warmgray-400 border-warmgray-200 cursor-default opacity-50"
+                          : "bg-white text-warmgray-700 border-warmgray-300 hover:border-sage-400 hover:bg-sage-50"
+                    }`}
+                    disabled={count === 0 && !isActive}
+                  >
+                    {tag}
+                    <span
+                      className={`text-[10px] px-1 py-0.5 rounded-full font-bold ${
+                        isActive
+                          ? "bg-white/20"
+                          : "bg-warmgray-100 text-warmgray-500"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
       {/* Category Tabs */}
       <Tabs
@@ -3184,7 +3206,10 @@ export default function DocumentsPage() {
           setCurrentFolder(null); // Reset folder when changing category
         }}
       >
-        <TabsList className="w-full h-auto flex-wrap justify-start bg-transparent gap-2 p-0">
+        <TabsList
+          className="w-full h-auto justify-start bg-transparent gap-2 p-0 overflow-x-auto"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           {/* Overview Tab - First */}
           <TabsTrigger
             value="overview"
@@ -3257,7 +3282,7 @@ export default function DocumentsPage() {
               />
 
               {/* Recent Documents Section */}
-              {recentDocuments.length > 0 && !searchQuery && (
+              {recentDocuments.length > 0 && (
                 <section>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold text-warmgray-900 flex items-center gap-2">
@@ -3372,21 +3397,15 @@ export default function DocumentsPage() {
                 <FileText className="w-8 h-8 text-warmgray-400" />
               </div>
               <h3 className="text-lg font-medium text-warmgray-900 mb-2">
-                {searchQuery
-                  ? "Keine Dokumente gefunden"
-                  : "Noch keine Dokumente"}
+                Noch keine Dokumente
               </h3>
               <p className="text-warmgray-500 mb-4">
-                {searchQuery
-                  ? "Versuchen Sie eine andere Suche"
-                  : "Fügen Sie Ihr erstes Dokument hinzu, um zu beginnen"}
+                Fügen Sie Ihr erstes Dokument hinzu, um zu beginnen
               </p>
-              {!searchQuery && (
-                <Button onClick={() => openUploadDialog("identitaet")}>
-                  <Upload className="mr-2 h-5 w-5" />
-                  Dokument hinzufügen
-                </Button>
-              )}
+              <Button onClick={() => openUploadDialog("identitaet")}>
+                <Upload className="mr-2 h-5 w-5" />
+                Dokument hinzufügen
+              </Button>
             </div>
           )}
         </TabsContent>
@@ -4035,7 +4054,7 @@ export default function DocumentsPage() {
         open={!!notesEditorDoc}
         onOpenChange={(open) => { if (!open) setNotesEditorDoc(null); }}
       >
-        <DialogContent>
+        <DialogContent className="flex flex-col max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>Notiz</DialogTitle>
             <DialogDescription>
@@ -4062,7 +4081,7 @@ export default function DocumentsPage() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="flex flex-col max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>
               Zugriffsprotokoll - {auditLogDocumentTitle}

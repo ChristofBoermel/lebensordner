@@ -266,7 +266,6 @@ export default function OnboardingPage() {
   const router = useRouter()
   const supabase = createClient()
   const stepContentRef = useRef<HTMLDivElement>(null)
-  const resumeDialogRef = useRef<HTMLDivElement>(null)
   const { capture } = usePostHog()
 
   // Time tracking state
@@ -406,42 +405,6 @@ export default function OnboardingPage() {
       root.classList.remove('onboarding-accessible')
     }
   }, [])
-
-  useEffect(() => {
-    if (!showResumeDialog) return
-    const dialog = resumeDialogRef.current
-    if (!dialog) return
-
-    const getFocusable = () =>
-      Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-      ).filter(el => !el.hasAttribute('disabled'))
-
-    const focusable = getFocusable()
-    if (focusable[0]) {
-      focusable[0].focus()
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return
-      const items = getFocusable()
-      if (items.length === 0) return
-      const first = items[0]
-      const last = items[items.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [showResumeDialog])
 
   useEffect(() => {
     if (showResumeDialog) return
@@ -1172,17 +1135,17 @@ export default function OnboardingPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-              <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300">
+              <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300 onboarding-step-card">
                 <Shield className="w-8 h-8 text-sage-700 mx-auto mb-2" />
                 <p className="font-medium text-warmgray-900">Sicher</p>
                 <p className="text-base text-warmgray-700">Ende-zu-Ende verschlüsselt</p>
               </div>
-              <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300">
+              <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300 onboarding-step-card">
                 <FileText className="w-8 h-8 text-sage-700 mx-auto mb-2" />
                 <p className="font-medium text-warmgray-900">Organisiert</p>
                 <p className="text-base text-warmgray-700">Alle Dokumente strukturiert</p>
               </div>
-              <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300">
+              <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300 onboarding-step-card">
                 <Users className="w-8 h-8 text-sage-700 mx-auto mb-2" />
                 <p className="font-medium text-warmgray-900">Vorgesorgt</p>
                 <p className="text-base text-warmgray-700">Familie informiert</p>
@@ -1418,7 +1381,7 @@ export default function OnboardingPage() {
                   return (
                     <div
                       key={catKey}
-                      className="p-3 sm:p-5 rounded-lg bg-white border-2 border-warmgray-300 min-h-[140px] flex flex-col items-center overflow-hidden"
+                      className="p-3 sm:p-5 rounded-lg bg-white border-2 border-warmgray-300 min-h-[140px] flex flex-col items-center overflow-hidden onboarding-step-card"
                     >
                       <div className="bg-sage-50 rounded-full p-3 mb-2">
                         <IconComponent className="w-8 h-8 text-sage-700" />
@@ -1675,7 +1638,7 @@ export default function OnboardingPage() {
 
             {/* Optional welcome note */}
             <div className="max-w-md mx-auto text-left">
-              <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300">
+              <div className="p-4 rounded-lg bg-white border-2 border-warmgray-300 onboarding-step-card">
                 <Label htmlFor="welcome_note" className={onboardingLabelClass}>
                   Pers&ouml;nliche Notiz f&uuml;r Ihre Angeh&ouml;rigen
                 </Label>
@@ -1698,7 +1661,7 @@ export default function OnboardingPage() {
                 Ihre Ressourcen
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="p-6 rounded-lg bg-white border-2 border-warmgray-200 flex flex-col items-center gap-4 hover:border-sage-300 transition-colors shadow-sm">
+                <div className="p-6 rounded-lg bg-white border-2 border-warmgray-200 flex flex-col items-center gap-4 hover:border-sage-300 transition-colors shadow-sm onboarding-step-card">
                   <div className="w-12 h-12 rounded-full bg-sage-50 flex items-center justify-center">
                     <Printer className="w-6 h-6 text-sage-600" />
                   </div>
@@ -1709,7 +1672,7 @@ export default function OnboardingPage() {
                     onPrint={() => capture('onboarding_step_printed', { step: 'complete', type: 'guide' })}
                   />
                 </div>
-                <div className="p-6 rounded-lg bg-white border-2 border-warmgray-200 flex flex-col items-center gap-4 hover:border-sage-300 transition-colors shadow-sm">
+                <div className="p-6 rounded-lg bg-white border-2 border-warmgray-200 flex flex-col items-center gap-4 hover:border-sage-300 transition-colors shadow-sm onboarding-step-card">
                   <div className="w-12 h-12 rounded-full bg-sage-50 flex items-center justify-center">
                     <Mail className="w-6 h-6 text-sage-600" />
                   </div>
@@ -1733,7 +1696,7 @@ export default function OnboardingPage() {
                     <p className="text-sm text-sage-700 font-medium">An {userEmail}</p>
                   )}
                 </div>
-                <div className="p-6 rounded-lg bg-white border-2 border-warmgray-200 flex flex-col items-center gap-4 hover:border-sage-300 transition-colors shadow-sm">
+                <div className="p-6 rounded-lg bg-white border-2 border-warmgray-200 flex flex-col items-center gap-4 hover:border-sage-300 transition-colors shadow-sm onboarding-step-card">
                   <div className="w-12 h-12 rounded-full bg-sage-50 flex items-center justify-center">
                     <Download className="w-6 h-6 text-sage-600" />
                   </div>
@@ -1793,7 +1756,7 @@ export default function OnboardingPage() {
                     completeOnboarding()
                     router.push('/dokumente')
                   }}
-                  className="p-4 rounded-lg bg-white border-2 border-warmgray-300 text-left hover:border-sage-400 hover:bg-sage-50 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-4"
+                  className="p-4 rounded-lg bg-white border-2 border-warmgray-300 text-left hover:border-sage-400 hover:bg-sage-50 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-4 onboarding-step-card"
                 >
                   <FileText className="w-6 h-6 text-sage-700 mb-2" />
                   <p className="font-medium text-warmgray-900">Dokumente hochladen</p>
@@ -1805,7 +1768,7 @@ export default function OnboardingPage() {
                     completeOnboarding()
                     router.push('/zugriff')
                   }}
-                  className="p-4 rounded-lg bg-white border-2 border-warmgray-300 text-left hover:border-sage-400 hover:bg-sage-50 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-4"
+                  className="p-4 rounded-lg bg-white border-2 border-warmgray-300 text-left hover:border-sage-400 hover:bg-sage-50 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-4 onboarding-step-card"
                 >
                   <Users className="w-6 h-6 text-sage-700 mb-2" />
                   <p className="font-medium text-warmgray-900">Vertrauensperson einladen</p>
@@ -1817,7 +1780,7 @@ export default function OnboardingPage() {
                     completeOnboarding()
                     router.push('/einstellungen')
                   }}
-                  className="p-4 rounded-lg bg-white border-2 border-warmgray-300 text-left hover:border-sage-400 hover:bg-sage-50 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-4"
+                  className="p-4 rounded-lg bg-white border-2 border-warmgray-300 text-left hover:border-sage-400 hover:bg-sage-50 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-4 onboarding-step-card"
                 >
                   <HeartPulse className="w-6 h-6 text-sage-700 mb-2" />
                   <p className="font-medium text-warmgray-900">Profil vervollst&auml;ndigen</p>
@@ -1872,45 +1835,25 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-cream-50 py-8 px-4">
       {/* Resume Dialog */}
-      {showResumeDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card
-            className="max-w-md w-full border-2 border-warmgray-300 shadow-md"
-            ref={resumeDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="onboarding-resume-title"
-            aria-describedby="onboarding-resume-description"
-          >
-            <CardContent className="pt-6">
-              <div className="text-center space-y-6">
-                <div className="w-12 h-12 rounded-full bg-sage-100 flex items-center justify-center mx-auto">
-                  <ArrowRight className="w-6 h-6 text-sage-700" />
-                </div>
-                <h3 id="onboarding-resume-title" className="text-lg font-semibold text-warmgray-900">
-                  Einrichtung fortsetzen?
-                </h3>
-                <p id="onboarding-resume-description" className="text-warmgray-800 text-lg">
-                  Sie haben die Einrichtung beim letzten Mal nicht abgeschlossen.
-                  Möchten Sie dort weitermachen, wo Sie aufgehört haben?
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                  <Button onClick={resumeProgress} size="onboarding" className="flex-1">
-                    Fortsetzen
-                  </Button>
-                  <Button variant="outline" onClick={startFresh} size="onboarding" className="flex-1">
-                    Neu beginnen
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <Dialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
+        <DialogContent className="sm:max-w-lg" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Einrichtung fortsetzen?</DialogTitle>
+            <DialogDescription>
+              Sie haben die Einrichtung beim letzten Mal nicht abgeschlossen.
+              Möchten Sie dort weitermachen, wo Sie aufgehört haben?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Button onClick={resumeProgress} size="onboarding" className="flex-1">Fortsetzen</Button>
+            <Button variant="outline" onClick={startFresh} size="onboarding" className="flex-1">Neu beginnen</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Skip Confirmation Dialog */}
       <Dialog open={showSkipDialog} onOpenChange={setShowSkipDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-2xl font-serif">
               Schritt überspringen?
@@ -2006,7 +1949,7 @@ export default function OnboardingPage() {
 
       {/* Exit Survey Dialog */}
       <Dialog open={showExitSurvey} onOpenChange={setShowExitSurvey}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-2xl font-serif">
               Warum m&ouml;chten Sie sp&auml;ter weitermachen?

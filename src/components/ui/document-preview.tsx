@@ -210,7 +210,7 @@ export function DocumentPreview({ isOpen, onClose, document, decryptedBlob }: Do
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-4xl max-h-[95vh] overflow-hidden">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-4xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
@@ -336,7 +336,7 @@ export function DocumentPreview({ isOpen, onClose, document, decryptedBlob }: Do
               <StickyNote className="w-4 h-4 text-warmgray-400 mt-0.5 flex-shrink-0" />
               <div>
                 <p className="text-sm font-medium text-warmgray-700">Notizen</p>
-                <p className="text-sm text-warmgray-600 whitespace-pre-wrap">{document.notes}</p>
+                <p className="text-sm text-warmgray-600 whitespace-pre-wrap max-h-32 overflow-y-auto">{document.notes}</p>
               </div>
             </div>
           )}

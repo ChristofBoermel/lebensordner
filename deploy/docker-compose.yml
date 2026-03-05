@@ -95,6 +95,10 @@ services:
       GOTRUE_SMS_AUTOCONFIRM: false
 
       GOTRUE_RATE_LIMIT_HEADER: X-Forwarded-For
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: /templates/confirmation.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: /templates/recovery.html
+    volumes:
+      - ./supabase/email-templates:/templates
     depends_on:
       db:
         condition: service_healthy

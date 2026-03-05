@@ -2,6 +2,107 @@
 
 Rolling memory for major AI-driven changes. Newest entry first.
 
+## 2026-03-04 UTC — Traycer.AI — uncommitted
+**T6: Full UI audit — onboarding dialogs, card hierarchy, tab scroll, hover states, dark mode & dialog consistency**
+- A: Skip/Exit dialogs: `max-w-md` → `sm:max-w-lg`; Resume dialog migrated from raw Card to Dialog primitive; manual focus-trap useEffect removed (Radix native)
+- B: Dashboard reminders empty state upgraded to icon+headline+CTA; Notfall welcome banner added (dismissible, session-only useState)
+- C: Dokumente TabsList: removed flex-wrap, added overflow-x-auto + WebkitOverflowScrolling
+- D: globals.css: document-item left-border accent on hover; card-interactive micro-interaction class added
+- E: globals.css: .dark overrides for onboarding-step-card (bg-white → bg-secondary); consent-toast-popup dark class
+- F: DialogHeader pr-10 maintained at all viewports (removed sm:pr-0 reset)
+**Risk:** Resume dialog migration removes manual keyboard trap — verify Radix trap works in onboarding context. bg-white dark override scoped to .onboarding-step-card to avoid dialog backdrop regression.
+**Verify:** Visual review at 375px in both light/dark. Smoke test onboarding resume flow.
+**Rollback:** Revert dialog.tsx DialogHeader change; revert onboarding page.tsx resume dialog block.
+
+## 2026-03-04 09:52 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Removed `searchQuery` state and text-filter logic from `src/app/(dashboard)/dokumente/page.tsx` toolbar.
+- Replaced `<Input type="search">` with a styled `<button>` that dispatches `CustomEvent("search:open")`.
+- Added/kept dedicated `search:open` listener in `src/components/layout/dashboard-nav.tsx` that calls `openGlobalSearch()`.
+- Kept tag filter chips fully functional below the toolbar row.
+
+Risk / Regression Watch:
+- `renderDocumentItem` highlight path was removed; verify no unused `highlightText` import remains.
+- T4 runs in parallel touching notes/dialog sections of `dokumente/page.tsx`; this change only targets toolbar/search-filter/title hunks.
+
+Verification:
+- `pnpm build`
+- Click `Dokumente suchen…` button and verify global search dialog opens.
+- Press `⌘K` and verify global search dialog still opens.
+- Confirm tag filter chips still filter document list.
+- Confirm there is no `searchQuery` reference in console behavior.
+
+Rollback:
+- Revert the `dokumente/page.tsx` search/toolbar hunks and the `search:open` effect in `dashboard-nav.tsx`.
+
+## 2026-03-04 09:50 UTC | Agent: Traycer.AI | Commit: uncommitted
+Change:
+- Removed `searchQuery` state and text-filter logic from `src/app/(dashboard)/dokumente/page.tsx` toolbar flow.
+- Replaced the Dokumente `<Input type="search">` toolbar control with a styled `<button>` that dispatches `window.dispatchEvent(new CustomEvent("search:open"))`.
+- Added a dedicated `search:open` window listener in `src/components/layout/dashboard-nav.tsx` that calls `openGlobalSearch()`.
+- Kept tag filter chips intact and moved them below the toolbar row outside the removed search input wrapper.
+
+Risk / Regression Watch:
+- `renderDocumentItem` no longer calls `highlightText`; confirm there is no unused-import TypeScript error for `highlightText`.
+- Parallel edits in notes/dialog regions of `dokumente/page.tsx` may conflict if they touch the same toolbar/filter hunks.
+
+Verification:
+- `pnpm build`
+- Click `Dokumente suchen...` and verify global search dialog opens.
+- Press `⌘K` and verify global search dialog still opens.
+- Confirm tag chips still filter document list.
+- Confirm there is no `searchQuery` reference in browser console behavior.
+
+Rollback:
+- Revert the toolbar/filter/title hunks in `src/app/(dashboard)/dokumente/page.tsx` and remove the `search:open` `useEffect` in `src/components/layout/dashboard-nav.tsx`.
+
+## 2026-03-04 09:32 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- T5 — Created branded GoTrue email templates (`confirmation.html`, `recovery.html`) with fully inline CSS and Lebensordner sage-green branding; wired `GOTRUE_MAILER_TEMPLATES_CONFIRMATION`, `GOTRUE_MAILER_TEMPLATES_RECOVERY` env vars and `./supabase/email-templates:/templates` volume bind-mount to the `auth` service in `deploy/docker-compose.yml`.
+
+Risk / Regression Watch:
+- Deploy-only change; zero application code touched; `auth` container restart required; no schema or API change.
+
+Verification:
+- `docker compose -f deploy/docker-compose.yml up -d auth`
+- trigger a test signup to observe the branded email.
+
+Rollback:
+- remove the two env vars and `volumes:` entry from `docker-compose.yml` and restart `auth`.
+
+## 2026-03-04 09:32 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- Created `src/lib/consent/consent-events.ts`: exports HEALTH_CONSENT_GRANTED_EVENT,
+  HealthConsentGrantedDetail type, and emitHealthConsentGranted() — mirrors profile-events.ts.
+- Wired emitHealthConsentGranted() in `src/app/(dashboard)/notfall/page.tsx`
+  handleHealthConsentAccept after successful API response.
+- Added HEALTH_CONSENT_GRANTED_EVENT window listener in `src/components/layout/dashboard-nav.tsx`
+  (dedicated useEffect with cleanup); sets healthConsentGranted=true on receipt.
+- Added tosAccepted / tosError state to `src/app/(auth)/registrieren/page.tsx`.
+- Replaced passive ToS <p> text (lines 263-273) with active checkbox row linking /agb and
+  /datenschutz in new tabs.
+- Submit button now disabled={isLoading || !tosAccepted}; handleRegister guards !tosAccepted early.
+
+Why:
+- Nav "Notfall & Vorsorge" lock persisted after consent without reload (T3a).
+- Registration had no legal gate for ToS/Datenschutz (T3b).
+
+Risk / Regression Watch:
+- healthConsentGranted state in nav is now dual-source (fetch-on-mount + event); verify the
+  event fires before the fetch resolves in slow-network conditions (both paths set same state).
+- ToS gate only client-side — no server enforcement added (by design, per spec).
+
+Verification:
+- `npm run type-check`
+- `python scripts/ops/hook-discipline-audit.py`
+
+Rollback:
+- Delete src/lib/consent/consent-events.ts; revert notfall/page.tsx, dashboard-nav.tsx,
+  registrieren/page.tsx to their prior state.
+
+Open Issues:
+- none
+
 ## Entry Template
 ```
 ## YYYY-MM-DD HH:MM UTC | Agent: Codex|Gemini|Claude | Commit: <hash|uncommitted>
@@ -20,6 +121,29 @@ Verification:
 
 Rollback:
 - <short rollback instruction>
+
+Open Issues:
+- none
+
+## 2026-03-04 09:33 UTC | Agent: Traycer.AI | Commit: uncommitted
+Change:
+- T1: Extended the reactive `searchParams` effect in `src/app/(dashboard)/dokumente/page.tsx` so client-side query updates now re-sync `activeTab`/`selectedCategory` from `kategorie`, reset to `overview` when missing/`overview`, clear `selectedCustomCategory`, and still update `highlightedDoc`.
+- T1: Updated the document highlight effect to imperatively add `highlight-pulse` immediately after `scrollIntoView`, then remove it with a dedicated 2500ms timeout, including cleanup timeout clearing.
+- T1: Confirmed no element ID changes are needed because all document render paths already flow through `renderDocumentItem` with `id={"document-" + doc.id}`.
+- T1: Confirmed vault-gate and pending-unlock flow coverage already exists for locked secured categories and per-document extra security.
+
+Why:
+- Ensure same-route `router.push` query changes trigger correct tab/category synchronization and reliably fire highlight pulse timing after smooth scroll.
+
+Risk / Regression Watch:
+- Highlight synchronization effect runs on every `searchParams` change; when `highlight` is absent it sets `highlightedDoc` to `null`, which is expected and harmless.
+
+Verification:
+- `npm run type-check`
+- `python scripts/ops/hook-discipline-audit.py`
+
+Rollback:
+- Revert `src/app/(dashboard)/dokumente/page.tsx` (searchParams/highlight effect block around lines 1071–1118) and remove this changelog entry.
 
 Open Issues:
 - none
@@ -1171,3 +1295,36 @@ Rollback:
 
 Open Issues:
 - none
+
+## 2026-03-04 09:49 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- T4: Added `className="flex flex-col max-h-[80vh]"` on notes editor dialog content in `src/app/(dashboard)/dokumente/page.tsx`.
+- Updated `src/components/dokumente/EncryptedNotesEditor.tsx` unlocked layout: `h-full` root, textarea wrapper `flex-1 overflow-y-auto min-h-0`, textarea `h-full`, footer `flex-shrink-0`.
+- Refined locked state in `EncryptedNotesEditor`: `py-8`, amber icon badge (`bg-amber-50 border border-amber-200 rounded-full w-14 h-14`), heading weight/color update, added sub-text paragraph.
+- Updated notes rendering in `src/components/ui/document-preview.tsx` and `src/components/ui/document-viewer.tsx`: notes `<p>` now includes `max-h-32 overflow-y-auto`, dialog wrappers switched from `overflow-hidden` to `overflow-y-auto`.
+
+Risk / Regression Watch:
+- Layout-only CSS class changes; no logic, state, or data flow changes.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+
+Rollback:
+- Revert `src/app/(dashboard)/dokumente/page.tsx`, `src/components/dokumente/EncryptedNotesEditor.tsx`, `src/components/ui/document-preview.tsx`, `src/components/ui/document-viewer.tsx`.
+
+## 2026-03-04 09:52 UTC | Agent: Codex | Commit: uncommitted
+Change:
+- T4: Added `className="flex flex-col max-h-[80vh]"` to the notes editor `DialogContent` in `src/app/(dashboard)/dokumente/page.tsx`.
+- Ensured `src/components/dokumente/EncryptedNotesEditor.tsx` matches spec: unlocked layout uses `h-full`, textarea wrapper `flex-1 overflow-y-auto min-h-0`, textarea `h-full`, footer `flex-shrink-0`; locked layout uses `py-8`, amber badge `bg-amber-50 border border-amber-200 rounded-full w-14 h-14`, heading style update, and added protected-notes sub-text.
+- Ensured notes containers in `src/components/ui/document-preview.tsx` and `src/components/ui/document-viewer.tsx` include `max-h-32 overflow-y-auto`, and their dialog wrappers use `overflow-y-auto`.
+
+Risk / Regression Watch:
+- Layout-only class changes; no logic, state, API, or data flow impact.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+
+Rollback:
+- Revert `src/app/(dashboard)/dokumente/page.tsx`, `src/components/dokumente/EncryptedNotesEditor.tsx`, `src/components/ui/document-preview.tsx`, `src/components/ui/document-viewer.tsx`.

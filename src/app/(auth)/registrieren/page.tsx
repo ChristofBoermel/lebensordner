@@ -18,6 +18,8 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [tosAccepted, setTosAccepted] = useState(false)
+  const [tosError, setTosError] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [isCheckingSession, setIsCheckingSession] = useState(false)
   const router = useRouter()
@@ -62,6 +64,12 @@ export default function RegisterPage() {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
+
+    if (!tosAccepted) {
+      setTosError(true)
+      setIsLoading(false)
+      return
+    }
 
     // Validation
     if (password !== confirmPassword) {
@@ -260,21 +268,38 @@ export default function RegisterPage() {
             />
           </div>
 
-          <p className="text-sm text-warmgray-500">
-            Mit der Registrierung stimmen Sie unseren{' '}
-            <Link href="/agb" className="text-sage-600 hover:text-sage-700">
-              Nutzungsbedingungen
-            </Link>{' '}
-            und der{' '}
-            <Link href="/datenschutz" className="text-sage-600 hover:text-sage-700">
-              Datenschutzerklärung
-            </Link>{' '}
-            zu.
-          </p>
+          <div className="flex items-start gap-3 mt-2">
+            <input
+              type="checkbox"
+              id="tos-checkbox"
+              checked={tosAccepted}
+              onChange={(e) => {
+                setTosAccepted(e.target.checked)
+                setTosError(false)
+              }}
+              className="w-4 h-4 mt-0.5 flex-shrink-0 rounded border border-warmgray-400 accent-sage-600"
+              disabled={isLoading}
+            />
+            <label htmlFor="tos-checkbox" className="text-sm text-warmgray-600 leading-relaxed">
+              Ich akzeptiere die{' '}
+              <a href="/agb" target="_blank" rel="noopener noreferrer" className="text-sage-600 hover:text-sage-700 underline">
+                Nutzungsbedingungen
+              </a>{' '}
+              und die{' '}
+              <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="text-sage-600 hover:text-sage-700 underline">
+                Datenschutzerklärung
+              </a>
+            </label>
+          </div>
+          {tosError && (
+            <p className="text-sm text-red-600 mt-1">
+              Bitte akzeptieren Sie die Nutzungsbedingungen um fortzufahren.
+            </p>
+          )}
         </CardContent>
         
         <CardFooter className="flex flex-col gap-4">
-          <Button type="submit" className="w-full" disabled={isLoading}>
+          <Button type="submit" className="w-full" disabled={isLoading || !tosAccepted}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
