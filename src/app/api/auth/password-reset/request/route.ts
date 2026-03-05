@@ -155,8 +155,22 @@ export async function POST(request: NextRequest) {
     const ipRateLimit = await checkRateLimit({
       identifier: `password_reset_ip:${clientIp}`,
       endpoint: "/api/auth/password-reset/request",
+      failMode: "closed",
       ...RATE_LIMIT_PASSWORD_RESET,
     });
+
+    if (ipRateLimit.available === false) {
+      emitStructuredWarn({
+        event_type: "security",
+        event_message: "Password reset temporarily rejected because rate limiter is unavailable",
+        endpoint: "/api/auth/password-reset/request",
+        metadata: { clientIp, scope: "ip" },
+      });
+      return NextResponse.json(
+        { error: "Service temporarily unavailable. Please try again shortly." },
+        { status: 503 },
+      );
+    }
 
     if (!ipRateLimit.allowed) {
       const retryAfterSeconds = Math.ceil(
@@ -185,8 +199,22 @@ export async function POST(request: NextRequest) {
     const emailRateLimit = await checkRateLimit({
       identifier: `password_reset_email:${normalizedEmail}`,
       endpoint: "/api/auth/password-reset/request",
+      failMode: "closed",
       ...RATE_LIMIT_PASSWORD_RESET,
     });
+
+    if (emailRateLimit.available === false) {
+      emitStructuredWarn({
+        event_type: "security",
+        event_message: "Password reset temporarily rejected because rate limiter is unavailable",
+        endpoint: "/api/auth/password-reset/request",
+        metadata: { clientIp, scope: "email" },
+      });
+      return NextResponse.json(
+        { error: "Service temporarily unavailable. Please try again shortly." },
+        { status: 503 },
+      );
+    }
 
     if (!emailRateLimit.allowed) {
       const retryAfterSeconds = Math.ceil(

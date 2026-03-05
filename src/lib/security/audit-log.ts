@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { createHash } from 'crypto'
 import type { NextRequest } from 'next/server'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 
@@ -51,6 +52,51 @@ function createServiceClient() {
   )
 }
 
+const SENSITIVE_AUDIT_KEY_PATTERN = /(token|secret|password|authorization|cookie|session|jwt|bearer|apikey|api_key)/i
+const TOKEN_LIKE_VALUE_PATTERN = /(eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9._-]{10,}\.[A-Za-z0-9._-]{10,}|Bearer\s+[A-Za-z0-9._-]{10,}|[A-Za-z0-9_-]{24,})/i
+
+function hashTokenPrefix(value: string): string {
+  return createHash('sha256').update(value).digest('hex').slice(0, 12)
+}
+
+function scrubAuditData(value: unknown, depth = 0): unknown {
+  if (depth > 4) return '[REDACTED_DEPTH_LIMIT]'
+  if (value === null || value === undefined) return value
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+
+  if (typeof value === 'string') {
+    if (TOKEN_LIKE_VALUE_PATTERN.test(value)) {
+      return `[REDACTED_TOKEN:${hashTokenPrefix(value)}]`
+    }
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => scrubAuditData(entry, depth + 1))
+  }
+
+  if (typeof value === 'object') {
+    const source = value as Record<string, unknown>
+    const redacted: Record<string, unknown> = {}
+
+    for (const [key, entry] of Object.entries(source)) {
+      if (SENSITIVE_AUDIT_KEY_PATTERN.test(key)) {
+        if (typeof entry === 'string' && entry.length > 0) {
+          redacted[key] = `[REDACTED_TOKEN:${hashTokenPrefix(entry)}]`
+        } else {
+          redacted[key] = '[REDACTED]'
+        }
+        continue
+      }
+      redacted[key] = scrubAuditData(entry, depth + 1)
+    }
+
+    return redacted
+  }
+
+  return '[REDACTED_UNSUPPORTED]'
+}
+
 // --- Functions ---
 
 export function maskIpAddress(ip: string): string {
@@ -92,7 +138,7 @@ export async function logSecurityEvent(event: AuditLogEvent): Promise<AuditLogRe
       .insert({
         user_id: event.user_id || null,
         event_type: event.event_type,
-        event_data: event.event_data || null,
+        event_data: event.event_data ? scrubAuditData(event.event_data) : null,
         ip_address: maskedIp,
         user_agent: userAgent,
       })

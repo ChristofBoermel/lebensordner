@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import * as OTPAuth from 'otpauth'
 import { decrypt, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
 import { logSecurityEvent, EVENT_TWO_FACTOR_VERIFIED } from '@/lib/security/audit-log'
-import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
+import { consumePendingAuthChallenge, getPendingAuthChallenge } from '@/lib/security/pending-auth'
 
-// Use admin client to bypass RLS since user isn't authenticated yet
 const getSupabaseAdmin = () => {
   return createClient(
     process.env['SUPABASE_URL']!,
@@ -13,30 +13,48 @@ const getSupabaseAdmin = () => {
   )
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { userId, token } = await request.json()
+    const { challengeId, token } = await request.json()
 
-    console.log('2FA verify request:', { userId, tokenLength: token?.length })
+    if (!challengeId || !token) {
+      return NextResponse.json({ error: 'Challenge und Token erforderlich' }, { status: 400 })
+    }
 
-    if (!userId || !token) {
-      return NextResponse.json({ error: 'User ID und Token erforderlich' }, { status: 400 })
+    let pendingAuth
+    try {
+      pendingAuth = await getPendingAuthChallenge(challengeId)
+    } catch {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
+
+    if (!pendingAuth) {
+      return NextResponse.json({ error: 'Challenge ungültig oder abgelaufen' }, { status: 400 })
+    }
+
+    const forwarded = request.headers.get('x-forwarded-for') || ''
+    const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
+    const userAgent = request.headers.get('user-agent') || 'Unknown'
+
+    if (pendingAuth.clientIp !== clientIp || pendingAuth.userAgent !== userAgent) {
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: '2FA challenge rejected due to context mismatch',
+        endpoint: '/api/auth/2fa/verify',
+        metadata: { userId: pendingAuth.userId },
+      })
+      return NextResponse.json({ error: 'Challenge-Kontext ungültig' }, { status: 403 })
     }
 
     const supabase = getSupabaseAdmin()
-
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('two_factor_secret, two_factor_enabled, email, two_factor_secret_encrypted')
-      .eq('id', userId)
+      .eq('id', pendingAuth.userId)
       .single()
-
-    console.log('Profile lookup result:', { 
-      found: !!profile, 
-      error: profileError?.message,
-      has2FA: profile?.two_factor_enabled,
-      hasSecret: !!profile?.two_factor_secret
-    })
 
     if (profileError) {
       emitStructuredError({
@@ -57,12 +75,12 @@ export async function POST(request: Request) {
         const key = getEncryptionKey()
         const parsed: EncryptedData = JSON.parse(profile.two_factor_secret)
         secretBase32 = decrypt(parsed, key)
-      } catch (e) {
+      } catch (error) {
         emitStructuredError({
           error_type: 'auth',
-          error_message: `Failed to decrypt two_factor_secret: ${e instanceof Error ? e.message : String(e)}`,
+          error_message: `Failed to decrypt two_factor_secret: ${error instanceof Error ? error.message : String(error)}`,
           endpoint: '/api/auth/2fa/verify',
-          stack: e instanceof Error ? e.stack : undefined,
+          stack: error instanceof Error ? error.stack : undefined,
         })
         return NextResponse.json({ error: 'Fehler beim Entschlüsseln des 2FA-Secrets' }, { status: 500 })
       }
@@ -72,29 +90,45 @@ export async function POST(request: Request) {
 
     const totp = new OTPAuth.TOTP({
       issuer: 'Lebensordner',
-      label: profile.email || 'user',
+      label: profile.email || pendingAuth.email || 'user',
       algorithm: 'SHA1',
       digits: 6,
       period: 30,
       secret: OTPAuth.Secret.fromBase32(secretBase32),
     })
 
-    const delta = totp.validate({ token, window: 2 }) // Increased window for time drift
-
-    console.log('TOTP validation result:', { delta, isValid: delta !== null })
-
+    const delta = totp.validate({ token, window: 2 })
     if (delta === null) {
       return NextResponse.json({ error: 'Ungültiger Code' }, { status: 400 })
     }
 
-    logSecurityEvent({
-      user_id: userId,
+    let consumedChallenge
+    try {
+      consumedChallenge = await consumePendingAuthChallenge(challengeId)
+    } catch {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
+
+    if (!consumedChallenge) {
+      return NextResponse.json({ error: 'Challenge ungültig oder abgelaufen' }, { status: 400 })
+    }
+
+    await logSecurityEvent({
+      user_id: pendingAuth.userId,
       event_type: EVENT_TWO_FACTOR_VERIFIED,
       event_data: { method: 'totp' },
-      request: request as any,
+      request,
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      access_token: consumedChallenge.accessToken,
+      refresh_token: consumedChallenge.refreshToken,
+      rememberMe: consumedChallenge.rememberMe,
+    })
   } catch (error: any) {
     emitStructuredError({
       error_type: 'auth',

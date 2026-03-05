@@ -1,4 +1,5 @@
 import { getRedis } from '../redis/client'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // --- Interfaces ---
 
@@ -7,12 +8,14 @@ export interface RateLimitConfig {
   endpoint: string
   maxRequests: number
   windowMs: number
+  failMode?: 'open' | 'closed'
 }
 
 export interface RateLimitResult {
   allowed: boolean
   remaining: number
   resetAt: Date
+  available: boolean
 }
 
 // --- Default limit constants ---
@@ -30,6 +33,8 @@ export const RATE_LIMIT_DOWNLOAD_LINK = { maxRequests: 10, windowMs: 60 * 60 * 1
 // --- Rate Limiting Functions ---
 
 export async function checkRateLimit(config: RateLimitConfig): Promise<RateLimitResult> {
+  const failMode = config.failMode ?? 'open'
+
   try {
     const redis = getRedis()
     const key = `rate:${config.endpoint}:${config.identifier}`
@@ -47,21 +52,33 @@ export async function checkRateLimit(config: RateLimitConfig): Promise<RateLimit
     const resetAt = new Date(Date.now() + Math.max(ttl, 0) * 1000)
 
     if (count > config.maxRequests) {
-      return { allowed: false, remaining: 0, resetAt }
+      return { allowed: false, remaining: 0, resetAt, available: true }
     }
 
     return {
       allowed: true,
       remaining: config.maxRequests - count,
       resetAt,
+      available: true,
     }
   } catch (error) {
-    console.error('Rate limit check failed:', error)
-    // Fail open — allow request if Redis is unavailable
+    emitStructuredError({
+      error_type: 'security',
+      error_message: `Rate limit check failed: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: config.endpoint,
+      stack: error instanceof Error ? error.stack : undefined,
+      metadata: {
+        identifier: config.identifier,
+        failMode,
+      },
+    })
+
+    const failClosed = failMode === 'closed'
     return {
-      allowed: true,
-      remaining: config.maxRequests,
+      allowed: !failClosed,
+      remaining: failClosed ? 0 : config.maxRequests,
       resetAt: new Date(Date.now() + config.windowMs),
+      available: false,
     }
   }
 }

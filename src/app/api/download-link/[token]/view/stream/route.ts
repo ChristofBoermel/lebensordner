@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createHmac, timingSafeEqual } from 'crypto'
+import { createHash, createHmac, timingSafeEqual } from 'crypto'
 import { logSecurityEvent, EVENT_DOWNLOAD_LINK_VIEWED } from '@/lib/security/audit-log'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 
@@ -8,6 +8,10 @@ const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+function buildTokenHashPrefix(token: string): string {
+  return createHash('sha256').update(token).digest('hex').slice(0, 12)
+}
 
 // Secret for signing stream tokens (uses service role key as base)
 const getTokenSecret = () => {
@@ -139,7 +143,8 @@ export async function GET(
         recipient_email: downloadToken.recipient_email,
         file_type: document.file_type,
         action: 'stream',
-        download_link_token: downloadLinkToken,
+        download_token_id: downloadToken.id,
+        download_token_hash_prefix: buildTokenHashPrefix(downloadLinkToken),
       },
       request,
     })

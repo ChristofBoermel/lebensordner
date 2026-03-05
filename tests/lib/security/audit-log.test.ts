@@ -172,6 +172,29 @@ describe('audit-log', () => {
         })
       ).resolves.toEqual({ ok: false, error: 'DB error' })
     })
+
+    it('should redact token-like values in event_data before insert', async () => {
+      await logSecurityEvent({
+        event_type: EVENT_LOGIN_SUCCESS,
+        event_data: {
+          download_link_token: 'super-secret-download-token-value-1234567890',
+          nested: {
+            authToken: 'Bearer abcdefghijklmnopqrstuvwxyz0123456789',
+          },
+        },
+      })
+
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event_data: expect.objectContaining({
+            download_link_token: expect.stringMatching(/^\[REDACTED_TOKEN:/),
+            nested: expect.objectContaining({
+              authToken: expect.stringMatching(/^\[REDACTED_TOKEN:/),
+            }),
+          }),
+        })
+      )
+    })
   })
 
   describe('event type constants', () => {

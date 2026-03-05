@@ -12,6 +12,7 @@ import {
 import { isNewDevice } from '@/lib/security/device-detection'
 import { sendSecurityNotification } from '@/lib/email/security-notifications'
 import { emitStructuredError, emitStructuredWarn, emitStructuredInfo } from '@/lib/errors/structured-logger'
+import { createPendingAuthChallenge } from '@/lib/security/pending-auth'
 
 // --- Constants ---
 
@@ -86,8 +87,22 @@ export async function POST(request: NextRequest) {
     const ipRateLimit = await checkRateLimit({
       identifier: `login_ip:${clientIp}`,
       endpoint: '/api/auth/login',
+      failMode: 'closed',
       ...IP_RATE_LIMIT,
     })
+
+    if (ipRateLimit.available === false) {
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: 'Login temporarily rejected because rate limiter is unavailable',
+        endpoint: '/api/auth/login',
+        metadata: { clientIp, scope: 'ip' },
+      })
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
 
     if (!ipRateLimit.allowed) {
       const retryAfterSeconds = Math.ceil(
@@ -109,8 +124,22 @@ export async function POST(request: NextRequest) {
     const emailRateLimit = await checkRateLimit({
       identifier: `login_email:${normalizedEmail}`,
       endpoint: '/api/auth/login',
+      failMode: 'closed',
       ...EMAIL_RATE_LIMIT,
     })
+
+    if (emailRateLimit.available === false) {
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: 'Login temporarily rejected because rate limiter is unavailable',
+        endpoint: '/api/auth/login',
+        metadata: { clientIp, scope: 'email' },
+      })
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
 
     if (!emailRateLimit.allowed) {
       const retryAfterSeconds = Math.ceil(
@@ -307,6 +336,69 @@ export async function POST(request: NextRequest) {
         { error: 'Account locked during login. Reset password to unlock.' },
         { status: 403 }
       )
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('two_factor_enabled')
+      .eq('id', data.user?.id)
+      .maybeSingle()
+
+    if (profile?.two_factor_enabled) {
+      const accessToken = data.session?.access_token
+      const refreshToken = data.session?.refresh_token
+
+      if (!accessToken || !refreshToken || !data.user?.id) {
+        emitStructuredError({
+          error_type: 'auth',
+          error_message: 'Login created a 2FA pending state without a valid session payload',
+          endpoint: '/api/auth/login',
+        })
+        return NextResponse.json(
+          { error: 'An unexpected error occurred' },
+          { status: 500 }
+        )
+      }
+
+      try {
+        const challenge = await createPendingAuthChallenge({
+          userId: data.user.id,
+          email: normalizedEmail,
+          accessToken,
+          refreshToken,
+          rememberMe: persistSession,
+          clientIp,
+          userAgent: request.headers.get('user-agent') || 'Unknown',
+        })
+
+        await resetFailureCount(normalizedEmail)
+        await supabase.auth.signOut()
+
+        await logSecurityEvent({
+          event_type: 'login_success_pending_2fa',
+          user_id: data.user.id,
+          event_data: { email: normalizedEmail, rememberMe: persistSession },
+          request,
+        })
+
+        return NextResponse.json({
+          success: true,
+          requiresTwoFactor: true,
+          challengeId: challenge.challengeId,
+          expiresInSeconds: challenge.expiresInSeconds,
+        })
+      } catch (error) {
+        emitStructuredError({
+          error_type: 'auth',
+          error_message: `Failed to issue 2FA challenge: ${error instanceof Error ? error.message : String(error)}`,
+          endpoint: '/api/auth/login',
+          stack: error instanceof Error ? error.stack : undefined,
+        })
+        return NextResponse.json(
+          { error: 'Service temporarily unavailable. Please try again shortly.' },
+          { status: 503 }
+        )
+      }
     }
 
     // Reset failure count on successful login

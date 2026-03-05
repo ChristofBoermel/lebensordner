@@ -39,6 +39,7 @@ describe('Redis Rate Limiting', () => {
       const result = await checkRateLimit(defaultConfig)
       
       expect(result.allowed).toBe(true)
+      expect(result.available).toBe(true)
       expect(result.remaining).toBe(defaultConfig.maxRequests - 1)
       expect(result.resetAt).toBeInstanceOf(Date)
       expect(mockRedis.incr).toHaveBeenCalledWith('rate:/api/login:127.0.0.1')
@@ -52,6 +53,7 @@ describe('Redis Rate Limiting', () => {
       const result = await checkRateLimit(defaultConfig)
       
       expect(result.allowed).toBe(false)
+      expect(result.available).toBe(true)
       expect(result.remaining).toBe(0)
       expect(mockRedis.expire).not.toHaveBeenCalled() // Don't set TTL on subsequent requests
     })
@@ -63,6 +65,7 @@ describe('Redis Rate Limiting', () => {
       const result = await checkRateLimit(defaultConfig)
       
       expect(result.allowed).toBe(true)
+      expect(result.available).toBe(true)
       expect(result.remaining).toBe(defaultConfig.maxRequests - 3)
     })
 
@@ -82,13 +85,28 @@ describe('Redis Rate Limiting', () => {
       vi.useRealTimers()
     })
 
-    it('should return allowed=true on Redis failure (fail-open)', async () => {
+    it('should return allowed=true on Redis failure with fail-open mode', async () => {
       mockRedis.incr.mockRejectedValue(new Error('Redis connection failed'))
 
       const result = await checkRateLimit(defaultConfig)
       
       expect(result.allowed).toBe(true)
+      expect(result.available).toBe(false)
       expect(result.remaining).toBe(defaultConfig.maxRequests)
+      expect(result.resetAt).toBeInstanceOf(Date)
+    })
+
+    it('should return allowed=false on Redis failure with fail-closed mode', async () => {
+      mockRedis.incr.mockRejectedValue(new Error('Redis connection failed'))
+
+      const result = await checkRateLimit({
+        ...defaultConfig,
+        failMode: 'closed',
+      })
+
+      expect(result.allowed).toBe(false)
+      expect(result.available).toBe(false)
+      expect(result.remaining).toBe(0)
       expect(result.resetAt).toBeInstanceOf(Date)
     })
 

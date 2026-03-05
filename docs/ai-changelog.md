@@ -16,6 +16,33 @@ Rolling memory for major AI-driven changes. Newest entry first.
   **Verify:** Visual review at 375px in both light/dark. Smoke test onboarding resume flow.
   **Rollback:** Revert dialog.tsx DialogHeader change; revert onboarding page.tsx resume dialog block.
 
+## 2026-03-05 21:24 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+
+- Hardened auth login + 2FA flow: `/api/auth/login` now returns pending 2FA challenge metadata (no session tokens) for 2FA-enabled users; `/api/auth/2fa/verify` now requires challenge context and mints/returns credentials only after OTP verification.
+- Updated `src/app/(auth)/anmelden/page.tsx` to complete login via challenge-based 2FA verification and removed the second password re-login pattern.
+- Added explicit rate-limit fail mode in `src/lib/security/rate-limit.ts` and enforced fail-closed handling in security-sensitive routes (`/api/auth/login`, `/api/auth/password-reset/request`, `/api/auth/2fa`), including temporary 503 responses on limiter outages.
+- Locked down `/api/sms/send` to internal service auth only, added per-IP/per-actor limits and security audit events; added rate limits/audit events to `/api/sms/test`.
+- Removed raw download-link bearer tokens from audit event payloads in download-link routes and added recursive token-like redaction/hash-prefix scrubbing in `src/lib/security/audit-log.ts`.
+- Required authenticated POST for onboarding feedback (`/api/onboarding/feedback`), plus per-IP/per-user rate limits and comment-length validation.
+- Added/updated tests for 2FA login token suppression, rate-limiter-unavailable paths, audit-log token redaction, and onboarding feedback unauthenticated rejection.
+
+Risk / Regression Watch:
+
+- New 2FA challenge context currently binds on exact `x-forwarded-for` + `user-agent`; environments with unstable proxy chains may need header normalization tuning.
+- Internal systems calling `/api/sms/send` must now use `INTERNAL_API_KEY` auth exclusively.
+
+Verification:
+
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm test -- --run tests/integration/account-lockout-bypass.test.ts tests/lib/security/rate-limit-redis.test.ts tests/lib/security/audit-log.test.ts tests/api/password-reset.test.ts tests/api/auth-2fa-route.test.ts tests/api/onboarding-feedback.test.ts`
+
+Rollback:
+
+- Revert the touched auth/sms/download-link/onboarding route files, `src/lib/security/rate-limit.ts`, `src/lib/security/pending-auth.ts`, `src/lib/security/audit-log.ts`, related tests, and this changelog entry.
+
 ## 2026-03-04 09:52 UTC | Agent: Codex | Commit: uncommitted
 
 Change:

@@ -4,7 +4,7 @@ import * as OTPAuth from 'otpauth'
 import { encrypt, decrypt, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_2FA } from '@/lib/security/rate-limit'
 import { logSecurityEvent, EVENT_TWO_FACTOR_ENABLED, EVENT_TWO_FACTOR_DISABLED } from '@/lib/security/audit-log'
-import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
 export async function POST(request: Request) {
   try {
@@ -22,10 +22,23 @@ export async function POST(request: Request) {
     const ipRateLimitConfig = {
       identifier: `2fa_ip:${clientIp}`,
       endpoint: '/api/auth/2fa',
+      failMode: 'closed' as const,
       ...RATE_LIMIT_2FA,
     }
 
     const ipRateLimit = await checkRateLimit(ipRateLimitConfig)
+    if (ipRateLimit.available === false) {
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: '2FA endpoint temporarily rejected because rate limiter is unavailable',
+        endpoint: '/api/auth/2fa',
+        metadata: { scope: 'ip' },
+      })
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
     if (!ipRateLimit.allowed) {
       const retryAfterSeconds = Math.ceil(
         (ipRateLimit.resetAt.getTime() - Date.now()) / 1000
@@ -40,10 +53,23 @@ export async function POST(request: Request) {
     const rateLimitConfig = {
       identifier: `2fa:${user.id}`,
       endpoint: '/api/auth/2fa',
+      failMode: 'closed' as const,
       ...RATE_LIMIT_2FA,
     }
 
     const rateLimit = await checkRateLimit(rateLimitConfig)
+    if (rateLimit.available === false) {
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: '2FA endpoint temporarily rejected because rate limiter is unavailable',
+        endpoint: '/api/auth/2fa',
+        metadata: { scope: 'user', userId: user.id },
+      })
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
     if (!rateLimit.allowed) {
       const retryAfterSeconds = Math.ceil(
         (rateLimit.resetAt.getTime() - Date.now()) / 1000

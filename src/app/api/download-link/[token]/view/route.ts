@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createHmac } from 'crypto'
+import { createHash, createHmac } from 'crypto'
 import { logSecurityEvent, EVENT_DOWNLOAD_LINK_VIEWED } from '@/lib/security/audit-log'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 
@@ -8,6 +8,10 @@ const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+function buildTokenHashPrefix(token: string): string {
+  return createHash('sha256').update(token).digest('hex').slice(0, 12)
+}
 
 interface DocumentMetadata {
   id: string
@@ -121,7 +125,8 @@ export async function GET(
         owner_id: downloadToken.user_id,
         recipient_email: downloadToken.recipient_email,
         link_type: 'view',
-        download_link_token: token,
+        download_token_id: downloadToken.id,
+        download_token_hash_prefix: buildTokenHashPrefix(token),
       },
       request: request as NextRequest,
     })

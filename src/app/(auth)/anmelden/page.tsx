@@ -23,7 +23,7 @@ export default function LoginPage() {
   const [twoFactorCode, setTwoFactorCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [pendingUserId, setPendingUserId] = useState<string | null>(null)
+  const [pendingChallengeId, setPendingChallengeId] = useState<string | null>(null)
   const [resendSuccess, setResendSuccess] = useState(false)
 
   // Security states
@@ -120,6 +120,13 @@ export default function LoginPage() {
       const data = await response.json()
 
       if (response.status === 200 && data.success) {
+        if (data.requiresTwoFactor && data.challengeId) {
+          setPendingChallengeId(data.challengeId)
+          setStep('2fa')
+          setIsLoading(false)
+          return
+        }
+
         // Configure persistence based on rememberMe choice
         setSessionPersistence(rememberMe)
         if (!rememberMe) {
@@ -135,7 +142,7 @@ export default function LoginPage() {
           })
         }
 
-        // Successful login - now check for 2FA
+        // Successful login
         const { data: { user } } = await loginClient.auth.getUser()
 
         if (user) {
@@ -146,22 +153,6 @@ export default function LoginPage() {
             return
           }
 
-          // Check if user has 2FA enabled
-          const { data: profile } = await loginClient
-            .from('profiles')
-            .select('two_factor_enabled')
-            .eq('id', user.id)
-            .single()
-
-          if (profile?.two_factor_enabled) {
-            await loginClient.auth.signOut()
-            setPendingUserId(user.id)
-            setStep('2fa')
-            setIsLoading(false)
-            return
-          }
-
-          // No 2FA - proceed
           identify(user.id, { email: user.email })
           capture(ANALYTICS_EVENTS.USER_SIGNED_IN, { method: 'email' })
 
@@ -291,12 +282,19 @@ export default function LoginPage() {
     setError(null)
 
     try {
+      if (!pendingChallengeId) {
+        setError('Die Anmeldung ist abgelaufen. Bitte erneut anmelden.')
+        setStep('credentials')
+        setIsLoading(false)
+        return
+      }
+
       // Verify the 2FA code
       const verifyResponse = await fetch('/api/auth/2fa/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: pendingUserId,
+          challengeId: pendingChallengeId,
           token: twoFactorCode
         }),
       })
@@ -309,21 +307,6 @@ export default function LoginPage() {
         return
       }
 
-      // Code is valid - sign in again via server endpoint
-      const loginResponse = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password, rememberMe }),
-      })
-
-      const loginData = await loginResponse.json()
-
-      if (!loginResponse.ok || !loginData.success) {
-        setError('Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.')
-        setStep('credentials')
-        return
-      }
-
       // Configure persistence based on rememberMe choice
       setSessionPersistence(rememberMe)
       if (!rememberMe) {
@@ -332,10 +315,10 @@ export default function LoginPage() {
       const loginClient = createClient({ persist: rememberMe })
 
       // Hydrate the browser Supabase client with session tokens
-      if (loginData.access_token && loginData.refresh_token) {
+      if (verifyData.access_token && verifyData.refresh_token) {
         await loginClient.auth.setSession({
-          access_token: loginData.access_token,
-          refresh_token: loginData.refresh_token,
+          access_token: verifyData.access_token,
+          refresh_token: verifyData.refresh_token,
         })
       }
 
@@ -349,8 +332,8 @@ export default function LoginPage() {
         try {
           await fetch('/api/consent/sync', {
             method: 'POST',
-            headers: loginData.access_token
-              ? { Authorization: `Bearer ${loginData.access_token}` }
+            headers: verifyData.access_token
+              ? { Authorization: `Bearer ${verifyData.access_token}` }
               : undefined,
           })
         } catch {
@@ -371,7 +354,7 @@ export default function LoginPage() {
     setStep('credentials')
     setTwoFactorCode('')
     setError(null)
-    setPendingUserId(null)
+    setPendingChallengeId(null)
     setResendSuccess(false)
   }
 

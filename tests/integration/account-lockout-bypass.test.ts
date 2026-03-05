@@ -45,7 +45,12 @@ vi.mock('@/lib/email/security-notifications', () => ({
 }))
 
 // Mock Supabase server client with spy on signInWithPassword
-const { client: supabaseClient, signInWithPassword: mockSignInWithPassword } = createSupabaseMock()
+const {
+  client: supabaseClient,
+  signInWithPassword: mockSignInWithPassword,
+  maybeSingle: mockMaybeSingle,
+} = createSupabaseMock()
+;(supabaseClient.auth as any).signOut = vi.fn(async () => ({ error: null }))
 vi.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: vi.fn(async () => supabaseClient),
 }))
@@ -56,6 +61,13 @@ vi.mock('@supabase/ssr', () => ({
   createServerClient: vi.fn(() => supabaseClient),
 }))
 
+vi.mock('@/lib/security/pending-auth', () => ({
+  createPendingAuthChallenge: vi.fn(async () => ({
+    challengeId: 'challenge-123',
+    expiresInSeconds: 300,
+  })),
+}))
+
 // Import route handler and lockout functions AFTER mocks are registered
 import { POST } from '@/app/api/auth/login/route'
 import {
@@ -63,6 +75,7 @@ import {
   unlockAccount,
   resetFailureCount,
 } from '@/lib/security/auth-lockout'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 
 // --- Helpers ---
 
@@ -87,6 +100,7 @@ describe('Account Lockout Bypass Prevention - Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     lockedAccounts.clear()
+    mockMaybeSingle.mockResolvedValue({ data: { two_factor_enabled: false }, error: null })
   })
 
   describe('Locked account blocks authentication', () => {
@@ -258,6 +272,51 @@ describe('Account Lockout Bypass Prevention - Integration', () => {
       const otherResponse = await POST(createLoginRequest(OTHER_EMAIL, TEST_PASSWORD))
       expect(otherResponse.status).toBe(200)
       expect(mockSignInWithPassword).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('Rate limiter availability', () => {
+    it('should return 503 when rate limiter is unavailable', async () => {
+      vi.mocked(checkRateLimit).mockResolvedValueOnce({
+        allowed: false,
+        remaining: 0,
+        resetAt: new Date(Date.now() + 60_000),
+        available: false,
+      })
+
+      const response = await POST(createLoginRequest(TEST_EMAIL, TEST_PASSWORD))
+      const body = await response.json()
+
+      expect(response.status).toBe(503)
+      expect(body.error).toMatch(/temporarily unavailable/i)
+      expect(mockSignInWithPassword).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('2FA challenge flow', () => {
+    it('should return challenge metadata and no session tokens for 2FA-enabled account', async () => {
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { two_factor_enabled: true },
+        error: null,
+      })
+
+      mockSignInWithPassword.mockResolvedValueOnce({
+        data: {
+          user: { id: 'user-2fa', email: TEST_EMAIL },
+          session: { access_token: 'at-2fa', refresh_token: 'rt-2fa' },
+        },
+        error: null,
+      })
+
+      const response = await POST(createLoginRequest(TEST_EMAIL, TEST_PASSWORD))
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body.success).toBe(true)
+      expect(body.requiresTwoFactor).toBe(true)
+      expect(body.challengeId).toBe('challenge-123')
+      expect(body.access_token).toBeUndefined()
+      expect(body.refresh_token).toBeUndefined()
     })
   })
 })

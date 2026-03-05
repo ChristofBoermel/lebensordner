@@ -204,6 +204,33 @@ describe('Password reset request', () => {
     )
   })
 
+  it('returns 503 when rate limiter is unavailable', async () => {
+    const { checkRateLimit } = await import('@/lib/security/rate-limit')
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({
+      allowed: false,
+      remaining: 0,
+      resetAt: new Date(Date.now() + 60_000),
+      available: false,
+    } as any)
+
+    const { POST } = await import('@/app/api/auth/password-reset/request/route')
+
+    const request = new Request('http://localhost/api/auth/password-reset/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    })
+
+    const response = await POST(request as any)
+    const payload = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(payload.error).toMatch(/temporarily unavailable/i)
+  })
+
   it('preserves path segments in NEXT_PUBLIC_SUPABASE_URL when creating reset client', async () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://lebensordner.org/supabase/'
 
