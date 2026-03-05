@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -8,14 +8,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, CheckCircle2, Mail } from 'lucide-react'
+import { Loader2, CheckCircle2, Mail, Eye, EyeOff } from 'lucide-react'
 import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
+import { PasswordStrength } from '@/components/auth/password-strength'
 
 export default function RegisterPage() {
+  const searchParams = useSearchParams()
+  const invitedEmail = searchParams.get('email')
+  const isInvited = searchParams.get('invited') === 'true'
   const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(invitedEmail ?? '')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [tosAccepted, setTosAccepted] = useState(false)
@@ -23,42 +29,20 @@ export default function RegisterPage() {
   const [isSuccess, setIsSuccess] = useState(false)
   const [isCheckingSession, setIsCheckingSession] = useState(false)
   const router = useRouter()
-  const sessionCheckInterval = useRef<NodeJS.Timeout | null>(null)
-  const searchParams = useSearchParams()
-  const invitedEmail = searchParams.get('email')
-  const isInvited = searchParams.get('invited') === 'true'
   const supabase = createClient()
   const { capture } = usePostHog()
 
-  // Pre-fill email from invitation
+  // allowed: subscription lifecycle - poll auth session while waiting for email confirmation
   useEffect(() => {
-    if (invitedEmail && !email) {
-      setEmail(invitedEmail)
-    }
-  }, [invitedEmail, email])
-
-  // Cleanup session polling on unmount
-  useEffect(() => {
-    return () => {
-      if (sessionCheckInterval.current) {
-        clearInterval(sessionCheckInterval.current)
-      }
-    }
-  }, [])
-
-  // Poll for session changes (when user confirms email in another tab)
-  const startSessionPolling = () => {
-    sessionCheckInterval.current = setInterval(async () => {
+    if (!isSuccess || isCheckingSession) return
+    const intervalId = setInterval(async () => {
       const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        setIsCheckingSession(true)
-        if (sessionCheckInterval.current) {
-          clearInterval(sessionCheckInterval.current)
-        }
-        router.push('/onboarding')
-      }
-    }, 3000) // Check every 3 seconds
-  }
+      if (!session) return
+      setIsCheckingSession(true)
+      router.push('/onboarding')
+    }, 3000)
+    return () => clearInterval(intervalId)
+  }, [isSuccess, isCheckingSession, router, supabase])
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,14 +56,14 @@ export default function RegisterPage() {
     }
 
     // Validation
-    if (password !== confirmPassword) {
-      setError('Die Passwörter stimmen nicht überein.')
+    if (password.length < 8) {
+      setError('Das Passwort muss mindestens 8 Zeichen lang sein.')
       setIsLoading(false)
       return
     }
 
-    if (password.length < 8) {
-      setError('Das Passwort muss mindestens 8 Zeichen lang sein.')
+    if (password !== confirmPassword) {
+      setError('Die Passwörter stimmen nicht überein.')
       setIsLoading(false)
       return
     }
@@ -129,9 +113,6 @@ export default function RegisterPage() {
       }
 
       setIsSuccess(true)
-
-      // Start polling for session changes (in case user confirms in another tab)
-      startSessionPolling()
     } catch (err) {
       setError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.')
     } finally {
@@ -141,7 +122,7 @@ export default function RegisterPage() {
 
   if (isSuccess) {
     return (
-      <Card className="w-full max-w-md">
+      <Card key="success" className="w-full max-w-md animate-fade-in">
         <CardHeader className="text-center">
           <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-4">
             {isCheckingSession ? (
@@ -194,7 +175,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <Card className="w-full max-w-md">
+    <Card key="register" className="w-full max-w-md animate-fade-in">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Konto erstellen</CardTitle>
         <CardDescription>
@@ -243,29 +224,56 @@ export default function RegisterPage() {
           
           <div className="space-y-2">
             <Label htmlFor="password">Passwort</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Mindestens 8 Zeichen"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={isLoading}
-              minLength={8}
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Mindestens 8 Zeichen"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isLoading}
+                minLength={8}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-warmgray-400 hover:text-warmgray-600 focus:outline-none"
+                aria-label={showPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <PasswordStrength password={password} />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Passwort bestätigen</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              placeholder="Passwort wiederholen"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              disabled={isLoading}
-            />
+            <div className="relative">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Passwort wiederholen"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                disabled={isLoading}
+                minLength={8}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-warmgray-400 hover:text-warmgray-600 focus:outline-none"
+                aria-label={showConfirmPassword ? 'Bestätigung verbergen' : 'Bestätigung anzeigen'}
+              >
+                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {confirmPassword.length > 0 && password !== confirmPassword && (
+              <p className="text-xs text-red-600">Die Passwörter stimmen nicht überein.</p>
+            )}
           </div>
 
           <div className="flex items-start gap-3 mt-2">

@@ -3,29 +3,35 @@
 Rolling memory for major AI-driven changes. Newest entry first.
 
 ## 2026-03-04 UTC — Traycer.AI — uncommitted
+
 **T6: Full UI audit — onboarding dialogs, card hierarchy, tab scroll, hover states, dark mode & dialog consistency**
+
 - A: Skip/Exit dialogs: `max-w-md` → `sm:max-w-lg`; Resume dialog migrated from raw Card to Dialog primitive; manual focus-trap useEffect removed (Radix native)
 - B: Dashboard reminders empty state upgraded to icon+headline+CTA; Notfall welcome banner added (dismissible, session-only useState)
 - C: Dokumente TabsList: removed flex-wrap, added overflow-x-auto + WebkitOverflowScrolling
 - D: globals.css: document-item left-border accent on hover; card-interactive micro-interaction class added
 - E: globals.css: .dark overrides for onboarding-step-card (bg-white → bg-secondary); consent-toast-popup dark class
 - F: DialogHeader pr-10 maintained at all viewports (removed sm:pr-0 reset)
-**Risk:** Resume dialog migration removes manual keyboard trap — verify Radix trap works in onboarding context. bg-white dark override scoped to .onboarding-step-card to avoid dialog backdrop regression.
-**Verify:** Visual review at 375px in both light/dark. Smoke test onboarding resume flow.
-**Rollback:** Revert dialog.tsx DialogHeader change; revert onboarding page.tsx resume dialog block.
+  **Risk:** Resume dialog migration removes manual keyboard trap — verify Radix trap works in onboarding context. bg-white dark override scoped to .onboarding-step-card to avoid dialog backdrop regression.
+  **Verify:** Visual review at 375px in both light/dark. Smoke test onboarding resume flow.
+  **Rollback:** Revert dialog.tsx DialogHeader change; revert onboarding page.tsx resume dialog block.
 
 ## 2026-03-04 09:52 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - Removed `searchQuery` state and text-filter logic from `src/app/(dashboard)/dokumente/page.tsx` toolbar.
 - Replaced `<Input type="search">` with a styled `<button>` that dispatches `CustomEvent("search:open")`.
 - Added/kept dedicated `search:open` listener in `src/components/layout/dashboard-nav.tsx` that calls `openGlobalSearch()`.
 - Kept tag filter chips fully functional below the toolbar row.
 
 Risk / Regression Watch:
+
 - `renderDocumentItem` highlight path was removed; verify no unused `highlightText` import remains.
 - T4 runs in parallel touching notes/dialog sections of `dokumente/page.tsx`; this change only targets toolbar/search-filter/title hunks.
 
 Verification:
+
 - `pnpm build`
 - Click `Dokumente suchen…` button and verify global search dialog opens.
 - Press `⌘K` and verify global search dialog still opens.
@@ -33,20 +39,25 @@ Verification:
 - Confirm there is no `searchQuery` reference in console behavior.
 
 Rollback:
+
 - Revert the `dokumente/page.tsx` search/toolbar hunks and the `search:open` effect in `dashboard-nav.tsx`.
 
 ## 2026-03-04 09:50 UTC | Agent: Traycer.AI | Commit: uncommitted
+
 Change:
+
 - Removed `searchQuery` state and text-filter logic from `src/app/(dashboard)/dokumente/page.tsx` toolbar flow.
 - Replaced the Dokumente `<Input type="search">` toolbar control with a styled `<button>` that dispatches `window.dispatchEvent(new CustomEvent("search:open"))`.
 - Added a dedicated `search:open` window listener in `src/components/layout/dashboard-nav.tsx` that calls `openGlobalSearch()`.
 - Kept tag filter chips intact and moved them below the toolbar row outside the removed search input wrapper.
 
 Risk / Regression Watch:
+
 - `renderDocumentItem` no longer calls `highlightText`; confirm there is no unused-import TypeScript error for `highlightText`.
 - Parallel edits in notes/dialog regions of `dokumente/page.tsx` may conflict if they touch the same toolbar/filter hunks.
 
 Verification:
+
 - `pnpm build`
 - Click `Dokumente suchen...` and verify global search dialog opens.
 - Press `⌘K` and verify global search dialog still opens.
@@ -54,24 +65,32 @@ Verification:
 - Confirm there is no `searchQuery` reference in browser console behavior.
 
 Rollback:
+
 - Revert the toolbar/filter/title hunks in `src/app/(dashboard)/dokumente/page.tsx` and remove the `search:open` `useEffect` in `src/components/layout/dashboard-nav.tsx`.
 
 ## 2026-03-04 09:32 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - T5 — Created branded GoTrue email templates (`confirmation.html`, `recovery.html`) with fully inline CSS and Lebensordner sage-green branding; wired `GOTRUE_MAILER_TEMPLATES_CONFIRMATION`, `GOTRUE_MAILER_TEMPLATES_RECOVERY` env vars and `./supabase/email-templates:/templates` volume bind-mount to the `auth` service in `deploy/docker-compose.yml`.
 
 Risk / Regression Watch:
+
 - Deploy-only change; zero application code touched; `auth` container restart required; no schema or API change.
 
 Verification:
+
 - `docker compose -f deploy/docker-compose.yml up -d auth`
 - trigger a test signup to observe the branded email.
 
 Rollback:
+
 - remove the two env vars and `volumes:` entry from `docker-compose.yml` and restart `auth`.
 
 ## 2026-03-04 09:32 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - Created `src/lib/consent/consent-events.ts`: exports HEALTH_CONSENT_GRANTED_EVENT,
   HealthConsentGrantedDetail type, and emitHealthConsentGranted() — mirrors profile-events.ts.
 - Wired emitHealthConsentGranted() in `src/app/(dashboard)/notfall/page.tsx`
@@ -84,26 +103,32 @@ Change:
 - Submit button now disabled={isLoading || !tosAccepted}; handleRegister guards !tosAccepted early.
 
 Why:
+
 - Nav "Notfall & Vorsorge" lock persisted after consent without reload (T3a).
 - Registration had no legal gate for ToS/Datenschutz (T3b).
 
 Risk / Regression Watch:
+
 - healthConsentGranted state in nav is now dual-source (fetch-on-mount + event); verify the
   event fires before the fetch resolves in slow-network conditions (both paths set same state).
 - ToS gate only client-side — no server enforcement added (by design, per spec).
 
 Verification:
+
 - `npm run type-check`
 - `python scripts/ops/hook-discipline-audit.py`
 
 Rollback:
+
 - Delete src/lib/consent/consent-events.ts; revert notfall/page.tsx, dashboard-nav.tsx,
   registrieren/page.tsx to their prior state.
 
 Open Issues:
+
 - none
 
 ## Entry Template
+
 ```
 ## YYYY-MM-DD HH:MM UTC | Agent: Codex|Gemini|Claude | Commit: <hash|uncommitted>
 Change:
@@ -1038,52 +1063,67 @@ Open Issues:
 ---
 
 ## 2026-03-02 18:31 UTC | Agent: Traycer.AI | Commit: uncommitted
+
 Change:
+
 - Added `src/lib/dokumente/useCategoryLockState.ts` with exported `FIVE_MINUTES_MS` and 10-second interval recomputation for `{ isLocked, secondsRemaining }`.
 - Extracted a reusable `CategoryCard` sub-component in `src/app/(dashboard)/dokumente/page.tsx` for both default and custom categories, and wired tooltip-based locked guidance.
 - Applied secured-category amber styling updates, added shield-adjacent countdown badge, and removed legacy locked card overlay UI.
 - Updated category/document lock checks to use `vaultContext.lastUnlockTimestamp` + `FIVE_MINUTES_MS`, and removed dead code (`RECENT_UNLOCK_WINDOW_MS`, `lastVaultUnlockRef`, `isCategoryLocked`).
 
 Risk / Regression Watch:
+
 - Interval-driven state updates now run every 10 seconds per visible category card; verify no noticeable render/perf regressions with large category lists.
 
 Verification:
+
 - `npm run type-check`
 - `npm run lint`
 - `npm test -- --run tests/pages/dokumente.test.tsx`
 
 Rollback:
+
 - Revert `src/lib/dokumente/useCategoryLockState.ts` and revert the `CategoryCard`/lock-check/import cleanup changes in `src/app/(dashboard)/dokumente/page.tsx`.
 
 Open Issues:
+
 - none
 
 ## 2026-03-02 18:27 UTC | Agent: Traycer.AI | Commit: uncommitted
+
 Change:
+
 - Added `src/lib/dokumente/useCategoryLockState.ts` with `FIVE_MINUTES_MS` and a 10-second interval-based lock/timer recomputation hook.
 - Extracted a unified `CategoryCard` sub-component in `src/app/(dashboard)/dokumente/page.tsx` for both standard and custom categories, wired to `useCategoryLockState`.
 - Replaced locked hover overlay with tooltip-based locked guidance and added amber secured-card styling plus shield-adjacent countdown timer badge.
 - Replaced legacy category lock checks to use `vaultContext.lastUnlockTimestamp` + `FIVE_MINUTES_MS`, removed `RECENT_UNLOCK_WINDOW_MS`, removed `lastVaultUnlockRef`, and removed `isCategoryLocked`.
 
 Why:
+
 - Implement time-window-based secured category behavior directly from vault unlock timestamps and align category-card lock UX with tooltip and countdown requirements.
 
 Risk / Regression Watch:
+
 - Each visible secured category card now runs a 10-second interval recomputation; watch for performance impact with many categories rendered simultaneously.
 
 Verification:
+
 - `npm run type-check`
 - `npm run lint`
 - `npm test -- --run tests/pages/dokumente.test.tsx`
 
 Rollback:
+
 - Revert `src/lib/dokumente/useCategoryLockState.ts` and the related `CategoryCard`/import/lock-check cleanup changes in `src/app/(dashboard)/dokumente/page.tsx`.
 
 Open Issues:
+
 - none
 
 ## 2026-03-02 18:11 UTC | Agent: Traycer.AI | Commit: uncommitted
+
 Change:
+
 - Added biometric vault unlock audit event constant (`EVENT_VAULT_UNLOCKED_BIOMETRIC`).
 - Extended vault key-material GET response to include `webauthn_credential_id`.
 - Added new biometric vault API route with GET/POST/DELETE handlers at `src/app/api/vault/biometric-key/route.ts`.
@@ -1093,69 +1133,90 @@ Change:
 - Added biometric management UI blocks in settings page for both senior and standard layouts with explicit setup/locked/enabled variants.
 
 Why:
+
 - Implements T2 biometric unlock/management flow end-to-end while preserving existing passphrase/recovery unlock behavior.
 
 Risk / Regression Watch:
+
 - Biometric unlock introduces a new WebAuthn PRF-dependent unlock path; browser support or credential policy differences may affect availability.
 - Existing passphrase/recovery unlock flow remains unchanged, but shared unlock state now also tracks biometric status/timestamps.
 
 Verification:
+
 - `npm run type-check`
 - `npm run lint`
 - `python scripts/ops/logging-audit.py`
 
 Rollback:
+
 - Revert biometric route/context/modal/settings/audit-log/key-material changes and remove this changelog entry.
 
 Open Issues:
+
 - none
 
 ## 2026-03-02 17:58 UTC | Agent: Traycer.AI | Commit: uncommitted
+
 Change:
+
 - Created supabase/migrations/20260302000300_documents_tags.sql — adds `tags text[]` column + GIN index to documents.
 - Created supabase/migrations/20260302000400_vault_biometric_columns.sql — adds three nullable biometric/WebAuthn columns to user_vault_keys.
 - Created supabase/migrations/20260302000500_profiles_vault_idle_timeout.sql — adds `vault_idle_timeout_minutes integer` column to profiles.
 - Updated src/types/database.ts — extended documents, user_vault_keys, and profiles Row/Insert/Update types with new columns.
 
 Why:
+
 - T1 prerequisite migrations for the Document Vault UX Overhaul epic; all other tickets (T2–T9) depend on these schema changes.
 
 Risk / Regression Watch:
+
 - Additive schema changes only; no existing columns altered. TypeScript additions are all optional in Insert/Update.
 - Confirm no existing INSERT sites for documents/profiles/user_vault_keys omit `tags`/`vault_idle_timeout_minutes` in a way that would miss the DB default.
 
 Verification:
+
 - npm run type-check
 - npm run lint
 
 Rollback:
+
 - Delete the three migration files and revert the three table blocks in src/types/database.ts.
 
 Open Issues:
+
 - none
 
 ## 2026-03-02 05:48 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - Fixed `scripts/ops/verify-deploy.sh` syntax by restoring the full `check_internal_supabase_from_nextjs` heredoc/function block and removing stray Node.js lines that were outside any function.
 
 Why:
+
 - Deploy workflow `smoke-check` failed on server with `syntax error near unexpected token '('` at line 142.
 
 Risk / Regression Watch:
+
 - Internal nextjs->supabase probe logic is now scoped correctly; deployment verification should proceed to runtime checks instead of shell parse failure.
 
 Verification:
+
 - Reviewed fixed function boundaries and heredoc closure around lines 73-174.
 - `gh run view 22563086668 --job 65353776719 --log-failed` (confirmed prior failure signature).
 
 Rollback:
+
 - Revert `scripts/ops/verify-deploy.sh` and this changelog entry.
 
 Open Issues:
+
 - pending re-run of Deploy workflow to confirm smoke-check passes end-to-end.
 
 ## 2026-03-02 05:39 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - Stabilized `tests/pages/dokumente.test.tsx` against current UI behavior:
 - Updated mobile upload-dialog class expectation to `max-h-[95dvh]`.
 - Fixed free-tier manipulated watcher test to assert null watcher payload.
@@ -1163,110 +1224,145 @@ Change:
 - Confirmed `erinnerungen` and new `vault-context` tests pass in combination with the dokumente suite.
 
 Why:
+
 - User requested pre-commit readiness with tests; targeted suite still failed due stale test assumptions after UI refactors.
 
 Risk / Regression Watch:
+
 - Assertions now reflect current UI contracts, reducing false negatives from fragile DOM coupling.
 - Remaining stderr warnings in passing tests are accessibility warnings from mocked dialog usage, not test failures.
 
 Verification:
+
 - `npm test -- --run tests/pages/dokumente.test.tsx`
 - `npm test -- --run tests/pages/dokumente.test.tsx tests/pages/erinnerungen.test.tsx tests/pages/einstellungen-tier.test.tsx tests/pages/einstellungen-name-fields.test.tsx tests/pages/notfall-consent.test.tsx tests/pages/onboarding-category-cards.test.tsx tests/components/dialog.test.tsx tests/components/vault-unlock-modal.test.tsx tests/lib/vault-context.test.tsx`
 
 Rollback:
+
 - Revert `tests/pages/dokumente.test.tsx` and this changelog entry.
 
 Open Issues:
+
 - none
 
 ## 2026-03-02 05:33 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - Updated `tests/pages/erinnerungen.test.tsx` to match current watcher-gate UI semantics (watcher-specific option assertions, robust upgrade-hint assertions).
 - Added `tests/lib/vault-context.test.tsx` to cover session-cached vault passphrase behavior: auto-unlock success, auto-unlock failure cache cleanup, and lock-triggered cache removal.
 
 Why:
+
 - Align failing reminders tests with current UI copy/structure and add explicit regression coverage for newly introduced vault session-caching behavior.
 
 Risk / Regression Watch:
+
 - Focused suite is now green for reminders and vault context; `tests/pages/dokumente.test.tsx` still has pre-existing selector/expectation failures and keeps the full targeted pre-commit suite red.
 
 Verification:
+
 - `npm test -- --run tests/pages/erinnerungen.test.tsx tests/lib/vault-context.test.tsx`
 - `npm test -- --run tests/pages/dokumente.test.tsx tests/pages/erinnerungen.test.tsx tests/pages/einstellungen-tier.test.tsx tests/pages/einstellungen-name-fields.test.tsx tests/pages/notfall-consent.test.tsx tests/pages/onboarding-category-cards.test.tsx tests/components/dialog.test.tsx tests/components/vault-unlock-modal.test.tsx tests/lib/vault-context.test.tsx`
 
 Rollback:
+
 - Revert `tests/pages/erinnerungen.test.tsx`, remove `tests/lib/vault-context.test.tsx`, and remove this changelog entry.
 
 Open Issues:
+
 - `tests/pages/dokumente.test.tsx` (10 failing tests) requires follow-up to update selectors/expectations against current dokumente UI.
 
 ## 2026-03-02 05:14 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - Added standalone prototype SPA file `refactored-redesigned-spa.html` demonstrating responsive layout cleanup, category/document manual lock UX, session-cached vault unlock behavior, and search term highlighting over decrypted titles.
 
 Why:
+
 - User requested a redesigned `.html` SPA artifact to validate UX direction before or alongside framework integration.
 
 Risk / Regression Watch:
+
 - Standalone prototype file only; no runtime behavior changes in production Next.js routes.
 
 Verification:
+
 - Open `refactored-redesigned-spa.html` in browser and validate mobile/desktop behavior.
 
 Rollback:
+
 - Delete `refactored-redesigned-spa.html` and this changelog entry.
 
 Open Issues:
+
 - none
 
 ## 2026-03-02 05:05 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - Reviewed and repaired uncommitted UI changes across dashboard pages/components.
 - Fixed malformed JSX and duplicated/hallucinated blocks in onboarding and document upload flows.
 - Removed duplicate imports and missing symbol issues in documents/reminders pages.
 - Fixed mobile nav overlay accessibility warning (`div onClick` -> button) from `ui-audit`.
 
 Why:
+
 - Restore build stability, remove accidental duplicated fragments, and reduce merge risk before commit.
 
 Risk / Regression Watch:
+
 - Remaining `ui-audit` warnings are repository-wide baseline (React19 migration and route scaffolding), not introduced by this patch.
 - Documents overview introduced larger category cards; verify mobile behavior manually if this UI is high traffic.
 
 Verification:
+
 - `npm run type-check`
 - `npm run lint`
 - `npm run ui-audit`
 
 Rollback:
+
 - Revert touched files in this working tree and restore prior uncommitted state.
 
 Open Issues:
+
 - none
 
 ## 2026-03-02 02:20 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - Added multi-agent collaboration protocol in `docs/ai-collaboration.md`.
 - Introduced structured rolling memory file `docs/ai-changelog.md`.
 - Added mandatory AI memory/handoff rule reference in `AGENTS.md`.
 
 Why:
+
 - Multiple AI agents are used regularly; decisions and implementation context need stable, file-based handoff.
 
 Risk / Regression Watch:
+
 - Process-only documentation change. No runtime impact.
 
 Verification:
+
 - Reviewed repository docs structure and existing AI instruction files.
 
 Rollback:
+
 - Remove the two docs files and the AGENTS.md section.
 
 Open Issues:
+
 - none
 
 ## 2026-03-02 07:32 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - Completed documents/security flow hardening in `src/app/(dashboard)/dokumente/page.tsx`:
 - Removed duplicate legacy category overview sections and kept the new card system only.
 - Added category-level extra-security controls in standard/custom category detail headers with senior-mode text CTA and normal icon CTA.
@@ -1279,52 +1375,67 @@ Change:
 - Added safe optional theme hook for isolated renders/tests (`useThemeSafe`) and switched documents page to use it.
 
 Why:
+
 - User requested full implementation of the agreed documents/security plan, including senior/mobile-safe UI behavior and stronger unlock/security ergonomics.
 
 Risk / Regression Watch:
+
 - Documents page now contains additional security controls and icon-search UI; verify interaction density on very small mobile screens.
 - Idle warning banner introduces a fixed overlay; verify it does not conflict with other fixed dialogs on dashboard pages.
 
 Verification:
+
 - `npm run type-check`
 - `npm run lint`
 - `npm test -- --run tests/pages/dokumente.test.tsx tests/components/vault-unlock-modal.test.tsx tests/lib/vault-context.test.tsx`
 
 Rollback:
+
 - Revert `src/app/(dashboard)/dokumente/page.tsx`, `src/components/theme/theme-provider.tsx`, `src/components/auth/inactivity-logout.tsx`, `src/lib/vault/VaultContext.tsx`, `src/types/database.ts`, and `supabase/migrations/20260302000100_documents_extra_security.sql`.
 
 Open Issues:
+
 - none
 
 ## 2026-03-04 09:49 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - T4: Added `className="flex flex-col max-h-[80vh]"` on notes editor dialog content in `src/app/(dashboard)/dokumente/page.tsx`.
 - Updated `src/components/dokumente/EncryptedNotesEditor.tsx` unlocked layout: `h-full` root, textarea wrapper `flex-1 overflow-y-auto min-h-0`, textarea `h-full`, footer `flex-shrink-0`.
 - Refined locked state in `EncryptedNotesEditor`: `py-8`, amber icon badge (`bg-amber-50 border border-amber-200 rounded-full w-14 h-14`), heading weight/color update, added sub-text paragraph.
 - Updated notes rendering in `src/components/ui/document-preview.tsx` and `src/components/ui/document-viewer.tsx`: notes `<p>` now includes `max-h-32 overflow-y-auto`, dialog wrappers switched from `overflow-hidden` to `overflow-y-auto`.
 
 Risk / Regression Watch:
+
 - Layout-only CSS class changes; no logic, state, or data flow changes.
 
 Verification:
+
 - `npm run type-check`
 - `npm run lint`
 
 Rollback:
+
 - Revert `src/app/(dashboard)/dokumente/page.tsx`, `src/components/dokumente/EncryptedNotesEditor.tsx`, `src/components/ui/document-preview.tsx`, `src/components/ui/document-viewer.tsx`.
 
 ## 2026-03-04 09:52 UTC | Agent: Codex | Commit: uncommitted
+
 Change:
+
 - T4: Added `className="flex flex-col max-h-[80vh]"` to the notes editor `DialogContent` in `src/app/(dashboard)/dokumente/page.tsx`.
 - Ensured `src/components/dokumente/EncryptedNotesEditor.tsx` matches spec: unlocked layout uses `h-full`, textarea wrapper `flex-1 overflow-y-auto min-h-0`, textarea `h-full`, footer `flex-shrink-0`; locked layout uses `py-8`, amber badge `bg-amber-50 border border-amber-200 rounded-full w-14 h-14`, heading style update, and added protected-notes sub-text.
 - Ensured notes containers in `src/components/ui/document-preview.tsx` and `src/components/ui/document-viewer.tsx` include `max-h-32 overflow-y-auto`, and their dialog wrappers use `overflow-y-auto`.
 
 Risk / Regression Watch:
+
 - Layout-only class changes; no logic, state, API, or data flow impact.
 
 Verification:
+
 - `npm run type-check`
 - `npm run lint`
 
 Rollback:
+
 - Revert `src/app/(dashboard)/dokumente/page.tsx`, `src/components/dokumente/EncryptedNotesEditor.tsx`, `src/components/ui/document-preview.tsx`, `src/components/ui/document-viewer.tsx`.
