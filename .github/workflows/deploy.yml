@@ -105,7 +105,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: GITHUB_SHA
+          envs: DEPLOY_SHA
           command_timeout: 15m
           script: |
             set -euo pipefail
@@ -114,7 +114,7 @@ jobs:
             if ! git diff --quiet || ! git diff --cached --quiet; then
               echo "Server repo has tracked local changes; stashing before deploy."
               git status --short
-              git stash push -m "pre-deploy-${GITHUB_SHA:0:8}-$(date +%Y%m%d%H%M%S)"
+              git stash push -m "pre-deploy-${DEPLOY_SHA:0:8}-$(date +%Y%m%d%H%M%S)"
               echo "Created stash entry:"
               git stash list --max-count=1
             fi
@@ -124,16 +124,16 @@ jobs:
             git pull --ff-only origin main
 
             ACTUAL_SHA=$(git rev-parse HEAD)
-            if [ "$ACTUAL_SHA" != "$GITHUB_SHA" ]; then
-              echo "Server commit mismatch. expected=${GITHUB_SHA} actual=${ACTUAL_SHA}"
+            if [ "$ACTUAL_SHA" != "$DEPLOY_SHA" ]; then
+              echo "Server commit mismatch. expected=${DEPLOY_SHA} actual=${ACTUAL_SHA}"
               exit 1
             fi
 
             cd /opt/lebensordner/app/deploy
-            docker pull ghcr.io/christofboermel/lebensordner/nextjs:${GITHUB_SHA}
-            docker pull ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA}
-            docker tag ghcr.io/christofboermel/lebensordner/nextjs:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/nextjs:latest
-            docker tag ghcr.io/christofboermel/lebensordner/worker:${GITHUB_SHA} ghcr.io/christofboermel/lebensordner/worker:latest
+            docker pull ghcr.io/christofboermel/lebensordner/nextjs:${DEPLOY_SHA}
+            docker pull ghcr.io/christofboermel/lebensordner/worker:${DEPLOY_SHA}
+            docker tag ghcr.io/christofboermel/lebensordner/nextjs:${DEPLOY_SHA} ghcr.io/christofboermel/lebensordner/nextjs:latest
+            docker tag ghcr.io/christofboermel/lebensordner/worker:${DEPLOY_SHA} ghcr.io/christofboermel/lebensordner/worker:latest
 
             # Resolve Kong config from tracked template + deploy .env
             bash /opt/lebensordner/app/scripts/ops/render-kong-config.sh \
@@ -147,7 +147,7 @@ jobs:
             docker compose up -d --no-deps --force-recreate nextjs worker
             docker compose up -d --remove-orphans
         env:
-          GITHUB_SHA: ${{ env.TARGET_SHA }}
+          DEPLOY_SHA: ${{ env.TARGET_SHA }}
 
   smoke-check:
     needs: deploy
@@ -166,7 +166,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: GITHUB_SHA
+          envs: DEPLOY_SHA
           command_timeout: 5m
           script: |
             set -euo pipefail
@@ -179,7 +179,7 @@ jobs:
 
             mkdir -p /var/log/lebensordner
             TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            echo "$TS sha=${GITHUB_SHA:0:8} status=${VERIFY_STATUS}" >> /var/log/lebensordner/deploy.log
+            echo "$TS sha=${DEPLOY_SHA:0:8} status=${VERIFY_STATUS}" >> /var/log/lebensordner/deploy.log
             [ "$VERIFY_STATUS" = "failure" ] && exit 1 || exit 0
         env:
-          GITHUB_SHA: ${{ env.TARGET_SHA }}
+          DEPLOY_SHA: ${{ env.TARGET_SHA }}
