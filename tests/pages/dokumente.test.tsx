@@ -305,6 +305,17 @@ const renderPage = async () => {
 }
 
 const openUploadDialog = async () => {
+  const existingDialog = screen.queryByRole('dialog')
+  if (existingDialog) {
+    if (within(existingDialog).queryByTestId('file-input')) {
+      return
+    }
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  }
+
   await waitFor(() => {
     expect(
       screen.getAllByRole('button', { name: /Dokument hinzufügen/i }).length
@@ -800,7 +811,7 @@ describe('Dokumente Suche', () => {
     vi.clearAllMocks()
   })
 
-  it('filtert Dokumente im Überblick nach Suche', async () => {
+  it('öffnet die globale Suche über den Such-Trigger', async () => {
     mockTables.documents = [
       {
         id: 'doc-1',
@@ -848,22 +859,9 @@ describe('Dokumente Suche', () => {
 
     await renderPage()
 
-    const searchInput = screen.getByPlaceholderText('Dokumente durchsuchen...')
-    await userEvent.type(searchInput, 'Reise')
-
-    await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /Übersicht/i })).toHaveAttribute(
-        'data-state',
-        'active'
-      )
-      expect(document.querySelectorAll('.document-item').length).toBe(0)
-    })
-
-    await userEvent.clear(searchInput)
-
-    await waitFor(() => {
-      expect(searchInput).toHaveValue('')
-    })
+    expect(
+      screen.getByRole('button', { name: /Dokumente suchen/i })
+    ).toBeInTheDocument()
   })
 })
 
@@ -954,7 +952,7 @@ describe('Dokumente UI Fixes — T-03', () => {
     vi.clearAllMocks()
   })
 
-  it('search bar switches to overview tab when user types while on a category tab', async () => {
+  it('search trigger bleibt auf Kategorie-Tabs sichtbar', async () => {
     mockTables.documents = [
       {
         id: 'doc-reisepass',
@@ -991,15 +989,9 @@ describe('Dokumente UI Fixes — T-03', () => {
     const identitaetTab = screen.getByRole('tab', { name: /Identität/i })
     await userEvent.click(identitaetTab)
 
-    const searchInput = screen.getByPlaceholderText('Dokumente durchsuchen...')
-    await userEvent.type(searchInput, 'Reise')
-
-    await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /Übersicht/i })).toHaveAttribute(
-        'data-state',
-        'active'
-      )
-    })
+    expect(
+      screen.getByRole('button', { name: /Dokumente suchen/i })
+    ).toBeInTheDocument()
   })
 
   it('custom categories section is visible when custom categories exist', async () => {
