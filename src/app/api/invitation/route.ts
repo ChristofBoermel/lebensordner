@@ -80,6 +80,27 @@ export async function POST(request: Request) {
     }
 
     const supabase = getSupabaseAdmin()
+    const { data: invitation, error: fetchError } = await supabase
+      .from('trusted_persons')
+      .select('id, user_id, email, invitation_status')
+      .eq('invitation_token', token)
+      .single()
+
+    if (fetchError || !invitation) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `Invitation fetch error: ${fetchError?.message ?? 'not found'}`,
+        endpoint: '/api/invitation',
+      })
+      return NextResponse.json({ error: 'Einladung nicht gefunden' }, { status: 404 })
+    }
+
+    if (invitation.invitation_status !== 'pending') {
+      return NextResponse.json(
+        { error: 'Diese Einladung wurde bereits bearbeitet' },
+        { status: 409 }
+      )
+    }
 
     const updateData: Record<string, any> = {
       invitation_status: action === 'accept' ? 'accepted' : 'declined',
@@ -98,20 +119,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Ungültige E-Mail-Adresse' }, { status: 400 })
       }
 
-      // First, get the invitation to find the user_id for duplicate checking
-      const { data: invitation, error: fetchError } = await supabase
-        .from('trusted_persons')
-        .select('id, user_id')
-        .eq('invitation_token', token)
-        .single()
-
-      if (fetchError || !invitation) {
-        emitStructuredError({
-          error_type: 'api',
-          error_message: `Invitation fetch error: ${fetchError?.message ?? 'not found'}`,
-          endpoint: '/api/invitation',
-        })
-        return NextResponse.json({ error: 'Einladung nicht gefunden' }, { status: 404 })
+      // Token-only model remains, but acceptance email must match the invited email exactly.
+      if (normalizedEmail !== invitation.email.toLowerCase().trim()) {
+        return NextResponse.json(
+          { error: 'Diese Einladung ist nur für die ursprünglich eingeladene E-Mail gültig' },
+          { status: 403 }
+        )
       }
 
       // Check for duplicate email (case-insensitive)
@@ -131,13 +144,15 @@ export async function POST(request: Request) {
       }
 
       updateData.invitation_accepted_at = new Date().toISOString()
-      updateData.email = normalizedEmail
     }
 
-    const { error } = await supabase
+    const { data: updatedRow, error } = await supabase
       .from('trusted_persons')
       .update(updateData)
-      .eq('invitation_token', token)
+      .eq('id', invitation.id)
+      .eq('invitation_status', 'pending')
+      .select('id')
+      .maybeSingle()
 
     if (error) {
       emitStructuredError({
@@ -146,6 +161,13 @@ export async function POST(request: Request) {
         endpoint: '/api/invitation',
       })
       return NextResponse.json({ error: 'Fehler beim Aktualisieren' }, { status: 500 })
+    }
+
+    if (!updatedRow) {
+      return NextResponse.json(
+        { error: 'Diese Einladung wurde bereits bearbeitet' },
+        { status: 409 }
+      )
     }
 
     return NextResponse.json({ success: true })

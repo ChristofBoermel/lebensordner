@@ -43,7 +43,7 @@ const faqItems: FAQItem[] = [
   {
     category: 'Sicherheit',
     question: 'Was ist Zwei-Faktor-Authentifizierung?',
-    answer: 'Die Zwei-Faktor-Authentifizierung (2FA) bietet zusätzliche Sicherheit. Neben Ihrem Passwort benötigen Sie einen Code aus einer Authenticator-App, um sich anzumelden. Diese Funktion ist für Premium-Nutzer verfügbar.'
+    answer: 'Die Zwei-Faktor-Authentifizierung (2FA) bietet zusätzliche Sicherheit. Neben Ihrem Passwort benötigen Sie einen Code aus einer Authenticator-App, um sich anzumelden. Diese Funktion ist ab dem Basis-Tarif verfügbar.'
   },
   // Vertrauenspersonen
   {
@@ -65,7 +65,7 @@ const faqItems: FAQItem[] = [
   {
     category: 'Abonnement',
     question: 'Welche Abonnements gibt es?',
-    answer: 'Wir bieten drei Stufen: Kostenlos (10 Dokumente, 100 MB), Basis (50 Dokumente, 500 MB, 4,90€/Monat) und Premium (unbegrenzt, 10 GB, 11,90€/Monat). Premium enthält zusätzlich 2FA und Prioritäts-Support.'
+    answer: 'Wir bieten drei Stufen: Kostenlos (20 Dokumente, 100 MB), Basis (50 Dokumente, 500 MB, 5,90 €/Monat, inkl. 2FA) und Vorsorge (unbegrenzt, 4 GB, 13,90 €/Monat, inkl. Notfallzugang und SMS-Benachrichtigungen).'
   },
   {
     category: 'Abonnement',

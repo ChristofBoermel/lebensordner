@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
-import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
 // This endpoint should be called by a cron job daily
 // Sends upgrade emails to FREE users who:
@@ -87,7 +87,7 @@ function generateUpgradeEmailHtml(name: string, documentCount: number): string {
               </p>
 
               <p style="margin: 0 0 24px 0; color: #374151; font-size: 18px; line-height: 1.7;">
-                Viele unserer Nutzer schalten nach kurzer Zeit Premium frei, um:
+                Viele unserer Nutzer schalten nach kurzer Zeit Vorsorge frei, um:
               </p>
 
               <!-- Benefits List -->
@@ -209,15 +209,17 @@ export async function GET(request: Request) {
     )
   }
 
-  // Check authorization: either Bearer token or Vercel cron header
+  // Check authorization: Bearer token only
   const authHeader = request.headers.get('authorization')
-  const vercelCronHeader = request.headers.get('x-vercel-cron')
 
   const isAuthorizedByBearer = authHeader === `Bearer ${CRON_SECRET}`
-  const isAuthorizedByVercel = vercelCronHeader === '1'
 
-  if (!isAuthorizedByBearer && !isAuthorizedByVercel) {
-    console.warn('[CRON] Unauthorized request attempt')
+  if (!isAuthorizedByBearer) {
+    emitStructuredWarn({
+      event_type: 'auth',
+      event_message: 'Unauthorized cron request rejected',
+      endpoint: '/api/cron/send-upgrade-emails',
+    })
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

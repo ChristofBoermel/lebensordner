@@ -67,10 +67,17 @@ export async function POST(request: Request) {
     const ipRateLimitConfig = {
       identifier: `invite_ip:${clientIp}`,
       endpoint: '/api/trusted-person/invite',
+      failMode: 'closed' as const,
       ...RATE_LIMIT_INVITE,
     }
 
     const ipRateLimit = await checkRateLimit(ipRateLimitConfig)
+    if (ipRateLimit.available === false) {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
     if (!ipRateLimit.allowed) {
       const retryAfterSeconds = Math.ceil(
         (ipRateLimit.resetAt.getTime() - Date.now()) / 1000
@@ -85,10 +92,17 @@ export async function POST(request: Request) {
     const rateLimitConfig = {
       identifier: `invite:${user.id}`,
       endpoint: '/api/trusted-person/invite',
+      failMode: 'closed' as const,
       ...RATE_LIMIT_INVITE,
     }
 
     const rateLimit = await checkRateLimit(rateLimitConfig)
+    if (rateLimit.available === false) {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
     if (!rateLimit.allowed) {
       const retryAfterSeconds = Math.ceil(
         (rateLimit.resetAt.getTime() - Date.now()) / 1000

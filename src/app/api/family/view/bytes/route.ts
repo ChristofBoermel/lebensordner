@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { getTierFromSubscription } from '@/lib/subscription-tiers'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { guardTrustedPersonAccess } from '@/lib/security/trusted-person-guard'
 
 export async function GET(request: Request) {
   try {
@@ -26,18 +27,10 @@ export async function GET(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    const { data: trustedPerson, error: tpError } = await adminClient
-      .from('trusted_persons')
-      .select('id')
-      .eq('user_id', ownerId)
-      .eq('linked_user_id', user.id)
-      .eq('invitation_status', 'accepted')
-      .eq('is_active', true)
-      .single()
-
-    if (tpError || !trustedPerson) {
+    const guard = await guardTrustedPersonAccess(adminClient, ownerId, user.id, 'view')
+    if (!guard.allowed) {
       return NextResponse.json(
-        { error: 'Keine Berechtigung für diese Ansicht' },
+        { error: guard.details || 'Keine Berechtigung für diese Ansicht' },
         { status: 403 }
       )
     }

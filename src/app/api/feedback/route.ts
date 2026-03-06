@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -15,12 +18,21 @@ interface FeedbackRequest {
   name?: string
   subject: string
   message: string
-  userId?: string
 }
 
 export async function POST(request: Request) {
   try {
-    const { email, name, subject, message, userId } = await request.json() as FeedbackRequest
+    const supabase = await createServerSupabaseClient()
+    const user = await resolveAuthenticatedUser(supabase, request, '/api/feedback')
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Nicht angemeldet' },
+        { status: 401 }
+      )
+    }
+
+    const { email, name, subject, message } = await request.json() as FeedbackRequest
 
     if (!email || !subject || !message) {
       return NextResponse.json(
@@ -29,11 +41,54 @@ export async function POST(request: Request) {
       )
     }
 
+    const forwarded = request.headers.get('x-forwarded-for') || ''
+    const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
+
+    const ipLimit = await checkRateLimit({
+      identifier: `feedback_ip:${clientIp}`,
+      endpoint: '/api/feedback',
+      maxRequests: 20,
+      windowMs: 60 * 60 * 1000,
+      failMode: 'closed',
+    })
+    if (ipLimit.available === false) {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests' },
+        { status: 429 }
+      )
+    }
+
+    const userLimit = await checkRateLimit({
+      identifier: `feedback_user:${user.id}`,
+      endpoint: '/api/feedback',
+      maxRequests: 10,
+      windowMs: 60 * 60 * 1000,
+      failMode: 'closed',
+    })
+    if (userLimit.available === false) {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
+    if (!userLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests' },
+        { status: 429 }
+      )
+    }
+
     // Save feedback to database
     const { data: feedback, error: dbError } = await getSupabaseAdmin()
       .from('feedback')
       .insert({
-        user_id: userId || null,
+        user_id: user.id,
         email,
         name: name || null,
         subject,
@@ -77,7 +132,7 @@ export async function POST(request: Request) {
               <p><strong>Von:</strong> ${name || 'Nicht angegeben'}</p>
               <p><strong>E-Mail:</strong> ${email}</p>
               <p><strong>Betreff:</strong> ${subject}</p>
-              ${userId ? `<p><strong>User ID:</strong> ${userId}</p>` : ''}
+              <p><strong>User ID:</strong> ${user.id}</p>
             </div>
 
             <h3 style="color: #374151;">Nachricht:</h3>

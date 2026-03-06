@@ -1,17 +1,20 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createHash, createHmac, timingSafeEqual } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { logSecurityEvent, EVENT_DOWNLOAD_LINK_VIEWED } from '@/lib/security/audit-log'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { buildDownloadTokenHashPrefix, hashDownloadToken } from '@/lib/security/download-token'
+import {
+  getRecipientChallengeCookieName,
+  readCookieValueFromHeader,
+  verifyRecipientChallengeCookieValue,
+} from '@/lib/security/download-link-recipient-challenge'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-function buildTokenHashPrefix(token: string): string {
-  return createHash('sha256').update(token).digest('hex').slice(0, 12)
-}
+const MAX_VIEW_LINK_ACCESSES = 100
 
 // Secret for signing stream tokens (uses service role key as base)
 const getTokenSecret = () => {
@@ -59,6 +62,9 @@ export async function GET(
   try {
     const params = await context.params
     const downloadLinkToken = params.token
+    const tokenHash = hashDownloadToken(downloadLinkToken)
+    const forwarded = request.headers.get('x-forwarded-for') || ''
+    const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
 
     const { searchParams } = new URL(request.url)
     const docId = searchParams.get('docId')
@@ -85,11 +91,26 @@ export async function GET(
     const { data: downloadToken, error: tokenError } = await adminClient
       .from('download_tokens')
       .select('*')
-      .eq('token', downloadLinkToken)
+      .eq('token_hash', tokenHash)
       .single()
 
     if (tokenError || !downloadToken) {
       return NextResponse.json({ error: 'Ungültiger Link' }, { status: 404 })
+    }
+
+    const tokenHashPrefix = tokenHash.slice(0, 12)
+    const cookieName = getRecipientChallengeCookieName(tokenHashPrefix)
+    const cookieValue = readCookieValueFromHeader(request.headers.get('cookie'), cookieName)
+    const recipientVerified = verifyRecipientChallengeCookieValue(
+      cookieValue,
+      tokenHashPrefix,
+      downloadToken.recipient_email
+    )
+    if (!recipientVerified) {
+      return NextResponse.json(
+        { error: 'Empfänger-Verifizierung erforderlich', requiresRecipientVerification: true },
+        { status: 403 }
+      )
     }
 
     // Check if token has expired
@@ -100,6 +121,16 @@ export async function GET(
     // Check if this is a view link
     if (downloadToken.link_type !== 'view') {
       return NextResponse.json({ error: 'Dieser Link ist für Download, nicht für Ansicht' }, { status: 400 })
+    }
+
+    if (
+      typeof downloadToken.access_count === 'number'
+      && downloadToken.access_count >= MAX_VIEW_LINK_ACCESSES
+    ) {
+      return NextResponse.json(
+        { error: 'Dieser Link hat sein Zugriffslimit erreicht' },
+        { status: 410 }
+      )
     }
 
     // Verify owner matches
@@ -144,10 +175,19 @@ export async function GET(
         file_type: document.file_type,
         action: 'stream',
         download_token_id: downloadToken.id,
-        download_token_hash_prefix: buildTokenHashPrefix(downloadLinkToken),
+        download_token_hash_prefix: buildDownloadTokenHashPrefix(downloadLinkToken),
       },
       request,
     })
+
+    await adminClient
+      .from('download_tokens')
+      .update({
+        access_count: (downloadToken.access_count ?? 0) + 1,
+        last_accessed_at: new Date().toISOString(),
+        last_accessed_ip: clientIp,
+      })
+      .eq('id', downloadToken.id)
 
     // Get file as array buffer for streaming
     const arrayBuffer = await fileData.arrayBuffer()

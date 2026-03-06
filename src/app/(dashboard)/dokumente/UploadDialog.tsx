@@ -616,7 +616,7 @@ function UploadDialogRoot({
               className="text-sm text-amber-800"
               data-testid="reminder-watcher-upgrade-hint"
             >
-              Upgraden Sie auf Basic oder Premium, um Vertrauenspersonen zu
+              Upgraden Sie auf Basis oder Vorsorge, um Vertrauenspersonen zu
               Erinnerungen hinzuzufügen
             </p>
           </div>

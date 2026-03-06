@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { hashDownloadToken } from '@/lib/security/download-token'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -14,6 +15,7 @@ export async function GET(
   try {
     const params = await context.params
     const token = params.token
+    const tokenHash = hashDownloadToken(token)
 
     if (!token) {
       return NextResponse.json({ error: 'Token fehlt' }, { status: 400 })
@@ -25,7 +27,7 @@ export async function GET(
     const { data: downloadToken, error: tokenError } = await adminClient
       .from('download_tokens')
       .select('*, user:user_id(full_name, email)')
-      .eq('token', token)
+      .eq('token_hash', tokenHash)
       .single()
 
     if (tokenError || !downloadToken) {

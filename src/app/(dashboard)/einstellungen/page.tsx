@@ -60,6 +60,7 @@ import { CONSENT_VERSION, CONSENT_COOKIE_NAME } from '@/lib/consent/constants'
 import Link from 'next/link'
 import { SecurityActivityLog } from '@/components/settings/security-activity-log'
 import { DocumentAuditLog } from '@/components/settings/document-audit-log'
+import { EmergencyAccessSettings } from '@/components/settings/EmergencyAccessSettings'
 import { useVault } from '@/lib/vault/VaultContext'
 import { resolveAvatarUrl } from '@/lib/avatar'
 import { emitProfileAvatarUpdated } from '@/lib/profile-events'
@@ -1955,6 +1956,9 @@ export default function EinstellungenPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Emergency Access */}
+      <EmergencyAccessSettings isVorsorgeTier={userTier.limits.emergencyAccess} />
 
       {/* Security & Activity */}
       <SecurityActivityLog />

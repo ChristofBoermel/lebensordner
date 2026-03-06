@@ -76,8 +76,8 @@ export function TierStatusCard({ tier, className }: TierStatusCardProps) {
   const config = {
     premium: {
       icon: Crown,
-      title: 'Premium',
-      description: 'Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen',
+      title: 'Vorsorge',
+      description: 'Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen — und werden im Notfall automatisch benachrichtigt.',
       bgColor: 'bg-green-50',
       iconBgColor: 'bg-green-100',
       iconColor: 'text-green-600',

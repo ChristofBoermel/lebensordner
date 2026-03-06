@@ -6,6 +6,7 @@ import { generateStreamToken } from './stream/route'
 import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
+import { guardTrustedPersonAccess } from '@/lib/security/trusted-person-guard'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -59,85 +60,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Benutzer-ID fehlt' }, { status: 400 })
     }
 
-    console.log('[Family View API] Request from user:', user.id, 'for owner:', ownerId)
-
     const adminClient = getSupabaseAdmin()
 
-    // Check if current user is linked as a trusted person for the owner
-    // First, check if any relationship exists at all
-    const { data: anyRelationship, error: anyRelError } = await adminClient
-      .from('trusted_persons')
-      .select('id, invitation_status, is_active')
-      .eq('user_id', ownerId)
-      .eq('linked_user_id', user.id)
-      .single()
-
-    console.log('[Family View API] Relationship check:', {
-      ownerId,
-      userId: user.id,
-      relationship: anyRelationship,
-      error: anyRelError?.message
-    })
-
-    // Provide specific error messages based on relationship status
-    if (anyRelError || !anyRelationship) {
+    const guard = await guardTrustedPersonAccess(adminClient, ownerId, user.id, 'view')
+    if (!guard.allowed || !guard.trustedPerson) {
       return NextResponse.json(
         {
           error: 'Keine Berechtigung für diese Ansicht',
-          errorCode: 'NO_RELATIONSHIP',
-          details: 'Sie wurden nicht als Vertrauensperson für diesen Benutzer hinzugefügt.'
+          errorCode: guard.errorCode ?? 'PERMISSION_DENIED',
+          details: guard.details ?? 'Es konnte keine gültige Vertrauensperson-Beziehung gefunden werden.',
         },
         { status: 403 }
       )
     }
-
-    if (anyRelationship.invitation_status !== 'accepted') {
-      return NextResponse.json(
-        {
-          error: 'Einladung noch nicht angenommen',
-          errorCode: 'INVITATION_PENDING',
-          details: `Die Einladung hat den Status: ${anyRelationship.invitation_status}. Bitte nehmen Sie die Einladung zuerst an.`
-        },
-        { status: 403 }
-      )
-    }
-
-    if (!anyRelationship.is_active) {
-      return NextResponse.json(
-        {
-          error: 'Zugriff deaktiviert',
-          errorCode: 'RELATIONSHIP_INACTIVE',
-          details: 'Der Zugriff wurde vom Besitzer deaktiviert.'
-        },
-        { status: 403 }
-      )
-    }
-
-    // Get full trusted person data for active, accepted relationship
-    const { data: trustedPerson, error: tpError } = await adminClient
-      .from('trusted_persons')
-      .select('id, name, access_level')
-      .eq('user_id', ownerId)
-      .eq('linked_user_id', user.id)
-      .eq('invitation_status', 'accepted')
-      .eq('is_active', true)
-      .single()
-
-    if (tpError || !trustedPerson) {
-      emitStructuredError({
-        error_type: 'api',
-        error_message: `[Family View API] Unexpected error fetching trusted person: ${tpError?.message ?? 'unknown error'}`,
-        endpoint: '/api/family/view',
-      })
-      return NextResponse.json(
-        {
-          error: 'Keine Berechtigung für diese Ansicht',
-          errorCode: 'PERMISSION_DENIED',
-          details: 'Es konnte keine gültige Vertrauensperson-Beziehung gefunden werden.'
-        },
-        { status: 403 }
-      )
-    }
+    const trustedPerson = guard.trustedPerson
 
     // Get owner profile with subscription info
     const { data: ownerProfile, error: ownerError } = await adminClient
@@ -168,8 +104,6 @@ export async function GET(request: Request) {
       ownerProfile.stripe_price_id || null
     )
 
-    console.log('[Family View API] Owner tier:', ownerTier.id, 'for owner:', ownerId)
-
     // Only allow view for basic or premium tiers (not free)
     if (ownerTier.id === 'free') {
       return NextResponse.json(
@@ -186,7 +120,6 @@ export async function GET(request: Request) {
     const ownerName = ownerProfile.full_name || ownerProfile.email || 'Unbekannt'
 
     // Get all documents for the owner
-    console.log('[Family View API] Fetching documents for owner:', ownerId)
     const { data: documents, error: docsError } = await adminClient
       .from('documents')
       .select('*')
@@ -209,8 +142,6 @@ export async function GET(request: Request) {
         { status: 500 }
       )
     }
-
-    console.log('[Family View API] Documents fetched:', documents?.length || 0)
 
     if (!documents || documents.length === 0) {
       logSecurityEvent({

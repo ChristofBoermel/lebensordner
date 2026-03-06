@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { sendSecurityNotification } from '@/lib/email/security-notifications'
+import { emitStructuredError, emitStructuredInfo } from '@/lib/errors/structured-logger'
 
 // --- Helper ---
 
@@ -45,9 +46,21 @@ export async function lockAccount(email: string, reason?: string): Promise<void>
     sendSecurityNotification('account_locked', email, {
       userName: email,
       timestamp: new Date().toISOString(),
-    }).catch((err) => console.error('Lockout notification failed:', err))
+    }).catch((err) =>
+      emitStructuredError({
+        error_type: 'notification',
+        error_message: `Lockout notification failed: ${err instanceof Error ? err.message : String(err)}`,
+        endpoint: 'lib/security/auth-lockout',
+        stack: err instanceof Error ? err.stack : undefined,
+      })
+    )
   } catch (error) {
-    console.error('Failed to lock account:', error)
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: `Failed to lock account: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: 'lib/security/auth-lockout',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
   }
 }
 
@@ -60,7 +73,12 @@ export async function unlockAccount(email: string): Promise<void> {
       .eq('email', email)
       .is('unlocked_at', null)
   } catch (error) {
-    console.error('Failed to unlock account:', error)
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: `Failed to unlock account: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: 'lib/security/auth-lockout',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
   }
 }
 
@@ -90,7 +108,11 @@ export async function resetFailureCount(email: string): Promise<void> {
   try {
     const locked = await isAccountLocked(email)
     if (locked) {
-      console.log(`Skipping failure count reset for locked account: ${email}`)
+      emitStructuredInfo({
+        event_type: 'auth',
+        event_message: 'Skipping failure count reset for locked account',
+        endpoint: 'lib/security/auth-lockout',
+      })
       return
     }
 
@@ -101,6 +123,11 @@ export async function resetFailureCount(email: string): Promise<void> {
       .eq('identifier', `login_email:${email}`)
       .eq('endpoint', '/api/auth/login')
   } catch (error) {
-    console.error('Failed to reset failure count:', error)
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: `Failed to reset failure count: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: 'lib/security/auth-lockout',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
   }
 }

@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, use, useRef } from 'react'
+import { useState, useEffect, use, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Download, Loader2, AlertTriangle, CheckCircle2, Leaf, XCircle, Clock, Eye, Lock, FileText } from 'lucide-react'
 import Link from 'next/link'
+import { RecipientVerificationForm } from '@/components/download/RecipientVerificationForm'
 
 interface TokenInfo {
   valid: boolean
@@ -35,10 +36,70 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadComplete, setDownloadComplete] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [requiresRecipientVerification, setRequiresRecipientVerification] = useState(false)
+  const [recipientVerified, setRecipientVerified] = useState(false)
   const [shareKey, setShareKey] = useState<string>('')
   const [manualKeyInput, setManualKeyInput] = useState('')
   const [decryptProgress, setDecryptProgress] = useState<{ current: number; total: number; currentName: string } | null>(null)
   const manualKeyInputRef = useRef<HTMLInputElement | null>(null)
+
+  const checkToken = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/download-link/${resolvedParams.token}/metadata`)
+      const data = await response.json()
+
+      if (response.status === 403 && data?.requiresRecipientVerification) {
+        setRequiresRecipientVerification(true)
+        setTokenInfo(null)
+        return
+      }
+
+      if (response.status === 429) {
+        setTokenInfo({
+          valid: false,
+          expired: false,
+          used: false,
+          error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.',
+        })
+        return
+      }
+
+      if (response.ok) {
+        setRequiresRecipientVerification(false)
+        setTokenInfo({
+          valid: true,
+          expired: false,
+          used: false,
+          senderName: data.senderName,
+          expiresAt: data.expiresAt,
+          linkType: data.linkType || 'download',
+          requiresClientDecryption: data.requiresClientDecryption,
+          documents: data.documents || [],
+        })
+      } else {
+        const isExpired = response.status === 410 && data.error?.includes('abgelaufen')
+        const isUsed = response.status === 410 && data.error?.includes('verwendet')
+        setTokenInfo({
+          valid: false,
+          expired: isExpired,
+          used: isUsed,
+          error: data.error,
+        })
+        if (response.status === 409) {
+          setError(data.error || 'Fehler beim Laden')
+        }
+      }
+    } catch {
+      setTokenInfo({
+        valid: false,
+        expired: false,
+        used: false,
+        error: 'Verbindungsfehler',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [resolvedParams.token])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -48,49 +109,8 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
       }
       window.history.replaceState(null, '', window.location.pathname)
     }
-
-    async function checkToken() {
-      try {
-        const response = await fetch(`/api/download-link/${resolvedParams.token}/metadata`)
-        const data = await response.json()
-
-        if (response.ok) {
-          setTokenInfo({
-            valid: true,
-            expired: false,
-            used: false,
-            senderName: data.senderName,
-            expiresAt: data.expiresAt,
-            linkType: data.linkType || 'download',
-            requiresClientDecryption: data.requiresClientDecryption,
-            documents: data.documents || [],
-          })
-        } else {
-          const isExpired = response.status === 410 && data.error?.includes('abgelaufen')
-          const isUsed = response.status === 410 && data.error?.includes('verwendet')
-          setTokenInfo({
-            valid: false,
-            expired: isExpired,
-            used: isUsed,
-            error: data.error,
-          })
-          if (response.status === 409) {
-            setError(data.error || 'Fehler beim Laden')
-          }
-        }
-      } catch (err) {
-        setTokenInfo({
-          valid: false,
-          expired: false,
-          used: false,
-          error: 'Verbindungsfehler',
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
     checkToken()
-  }, [resolvedParams.token])
+  }, [checkToken, recipientVerified])
 
   const categoryNames: Record<string, string> = {
     identitaet: 'Identität',
@@ -244,6 +264,11 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
               <Loader2 className="w-10 h-10 animate-spin text-sage-600 mb-4" />
               <p className="text-warmgray-600">Link wird überprüft...</p>
             </div>
+          ) : requiresRecipientVerification ? (
+            <RecipientVerificationForm
+              token={resolvedParams.token}
+              onVerified={() => setRecipientVerified(true)}
+            />
           ) : tokenInfo?.valid ? (
             downloadComplete ? (
               <div className="text-center py-6">

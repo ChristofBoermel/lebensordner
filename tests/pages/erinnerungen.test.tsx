@@ -102,7 +102,7 @@ const openDialog = async () => {
 
 const watcherOptionMatcher = /Nur ich persönlich/i
 const upgradeHintMatcher =
-  /Upgraden Sie auf den Basis\+ oder Premium Tarif, um Vertrauenspersonen automatisch zu benachrichtigen/i
+  /Upgraden Sie auf den Basis\+ oder Vorsorge Tarif, um Vertrauenspersonen automatisch zu benachrichtigen/i
 
 describe('Erinnerungen Reminder Watcher Tier Gate', () => {
   beforeEach(() => {

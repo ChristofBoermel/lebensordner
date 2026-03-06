@@ -1,4 +1,5 @@
 import Redis from 'ioredis'
+import { emitStructuredError, emitStructuredInfo } from '@/lib/errors/structured-logger'
 
 let redis: Redis | null = null
 
@@ -13,11 +14,19 @@ export function getRedis(): Redis {
     })
 
     redis.on('error', (err) => {
-      console.error('[Redis] Connection error:', err.message)
+      emitStructuredError({
+        error_type: 'cache',
+        error_message: `Redis connection error: ${err.message}`,
+        endpoint: 'lib/redis/client',
+      })
     })
 
     redis.on('connect', () => {
-      console.log('[Redis] Connected')
+      emitStructuredInfo({
+        event_type: 'cache',
+        event_message: 'Redis connected',
+        endpoint: 'lib/redis/client',
+      })
     })
   }
   return redis

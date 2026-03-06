@@ -794,7 +794,7 @@ export default function ErinnerungenPage() {
                 </Label>
                 <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
                   <p className="text-sm text-amber-800 senior-mode:text-lg leading-relaxed">
-                    <strong>Hinweis:</strong> Upgraden Sie auf den <strong>Basis+</strong> oder <strong>Premium</strong> Tarif, um Vertrauenspersonen automatisch zu benachrichtigen.
+                    <strong>Hinweis:</strong> Upgraden Sie auf den <strong>Basis+</strong> oder <strong>Vorsorge</strong> Tarif, um Vertrauenspersonen automatisch zu benachrichtigen.
                   </p>
                   <Link href="/abo" className="text-xs text-amber-700 underline font-bold mt-2 inline-block senior-mode:text-base">
                     Tarife ansehen

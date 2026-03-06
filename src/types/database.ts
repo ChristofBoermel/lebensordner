@@ -187,6 +187,12 @@ export interface Database {
           two_factor_secret_encrypted: boolean
           health_data_consent_granted: boolean
           health_data_consent_timestamp: string | null
+          last_active_at: string | null
+          emergency_access_enabled: boolean
+          emergency_access_days: number
+          emergency_access_trusted_person_id: string | null
+          emergency_access_notified_at: string | null
+          emergency_access_test_sent_at: string | null
           first_name: string | null
           middle_name: string | null
           last_name: string | null
@@ -228,6 +234,12 @@ export interface Database {
           two_factor_secret_encrypted?: boolean
           health_data_consent_granted?: boolean
           health_data_consent_timestamp?: string | null
+          last_active_at?: string | null
+          emergency_access_enabled?: boolean
+          emergency_access_days?: number
+          emergency_access_trusted_person_id?: string | null
+          emergency_access_notified_at?: string | null
+          emergency_access_test_sent_at?: string | null
           first_name?: string | null
           middle_name?: string | null
           last_name?: string | null
@@ -269,6 +281,12 @@ export interface Database {
           two_factor_secret_encrypted?: boolean
           health_data_consent_granted?: boolean
           health_data_consent_timestamp?: string | null
+          last_active_at?: string | null
+          emergency_access_enabled?: boolean
+          emergency_access_days?: number
+          emergency_access_trusted_person_id?: string | null
+          emergency_access_notified_at?: string | null
+          emergency_access_test_sent_at?: string | null
           first_name?: string | null
           middle_name?: string | null
           last_name?: string | null

@@ -336,10 +336,10 @@ export default function HomePage() {
         <div className="section-container">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-serif font-semibold text-warmgray-900 mb-4">
-              Transparent und fair
+              Schützen Sie, was Ihrer Familie wichtig ist
             </h2>
             <p className="text-xl text-warmgray-600">
-              Starten Sie kostenlos. Erweitern Sie, wenn Sie mehr brauchen.
+              Transparent und fair. Starten Sie kostenlos.
             </p>
           </div>
 
@@ -349,8 +349,11 @@ export default function HomePage() {
               <h3 className="text-2xl font-semibold text-warmgray-900 mb-2">
                 Kostenlos
               </h3>
-              <p className="text-warmgray-600 mb-6">
-                Zum Kennenlernen
+              <p className="text-warmgray-600 mb-1">
+                Einfach starten
+              </p>
+              <p className="text-sm text-warmgray-400 mb-6">
+                Keine Kreditkarte erforderlich
               </p>
 
               <div className="mb-6">
@@ -361,19 +364,19 @@ export default function HomePage() {
               <ul className="text-left space-y-3 mb-8 flex-1">
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">10 Dokumente</span>
+                  <span className="text-warmgray-700">20 Dokumente</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">1 Vertrauensperson</span>
+                  <span className="text-warmgray-700">100 MB Speicher</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Alle Basis-Funktionen</span>
+                  <span className="text-warmgray-700">Alle Basiskategorien</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Unbegrenzt lange nutzbar</span>
+                  <span className="text-warmgray-700">Sicherer Zugriff</span>
                 </li>
               </ul>
 
@@ -393,15 +396,15 @@ export default function HomePage() {
                 Basis
               </h3>
               <p className="text-warmgray-600 mb-6">
-                Für den Alltag
+                Für Ihren Alltag
               </p>
 
               <div className="mb-2">
-                <span className="text-4xl font-bold text-warmgray-900">4,90 €</span>
+                <span className="text-4xl font-bold text-warmgray-900">5,90 €</span>
                 <span className="text-warmgray-600 text-lg"> / Monat</span>
               </div>
               <p className="text-sage-600 font-medium mb-6">
-                oder 49 € / Jahr (spare 2 Monate!)
+                oder 59 € / Jahr (spare 2 Monate!)
               </p>
 
               <ul className="text-left space-y-3 mb-8 flex-1">
@@ -411,15 +414,23 @@ export default function HomePage() {
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">500 MB Speicher</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
                   <span className="text-warmgray-700">3 Vertrauenspersonen</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Ordnerstruktur</span>
+                  <span className="text-warmgray-700">E-Mail-Erinnerungen bei Ablaufdaten</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">E-Mail-Erinnerungen</span>
+                  <span className="text-warmgray-700">Zwei-Faktor-Authentifizierung</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">Individuelle Kategorien</span>
                 </li>
               </ul>
 
@@ -430,39 +441,55 @@ export default function HomePage() {
               </Link>
             </div>
 
-            {/* Premium Tier */}
+            {/* Vorsorge Tier */}
             <div className="card-elevated p-8 text-center flex flex-col">
               <h3 className="text-2xl font-semibold text-warmgray-900 mb-2">
-                Premium
+                Vorsorge
               </h3>
-              <p className="text-warmgray-600 mb-6">
-                Rundum sorglos
+              <p className="text-warmgray-600 mb-1">
+                Für Ihre Familie
+              </p>
+              <p className="text-sm text-warmgray-400 italic mb-6">
+                Rundum abgesichert — auch wenn Sie nicht da sind.
               </p>
 
               <div className="mb-2">
-                <span className="text-4xl font-bold text-warmgray-900">11,90 €</span>
+                <span className="text-4xl font-bold text-warmgray-900">13,90 €</span>
                 <span className="text-warmgray-600 text-lg"> / Monat</span>
               </div>
               <p className="text-sage-600 font-medium mb-6">
-                oder 119 € / Jahr
+                oder 139 € / Jahr (spare 2 Monate!)
               </p>
 
               <ul className="text-left space-y-3 mb-8 flex-1">
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Unbegrenzt Dokumente</span>
+                  <span className="text-warmgray-700">Unbegrenzte Dokumente</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Unbegrenzt Vertrauenspersonen</span>
+                  <span className="text-warmgray-700">4 GB Speicher</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Prioritäts-Support</span>
+                  <span className="text-warmgray-700">5 Vertrauenspersonen</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-warmgray-700">
+                    <span className="font-medium">Notfallzugang</span>
+                    <span className="block text-xs text-warmgray-500 mt-0.5">
+                      Ihre Familie wird automatisch benachrichtigt, wenn Sie sich länger nicht einloggen
+                    </span>
+                  </span>
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Frühzugang zu neuen Features</span>
+                  <span className="text-warmgray-700">SMS-Benachrichtigungen</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">Persönlicher Support</span>
                 </li>
               </ul>
 

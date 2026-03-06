@@ -94,7 +94,7 @@ describe('Tier Detection Integration Flow', () => {
 
       expect(result.extractedPriceId).toBe(STRIPE_PRICE_PREMIUM_MONTHLY)
       expect(result.tierId).toBe('premium')
-      expect(result.tierName).toBe('Premium')
+      expect(result.tierName).toBe('Vorsorge')
     })
 
     it('should correctly identify Premium yearly user through entire flow', () => {
@@ -102,27 +102,23 @@ describe('Tier Detection Integration Flow', () => {
 
       expect(result.extractedPriceId).toBe(STRIPE_PRICE_PREMIUM_YEARLY)
       expect(result.tierId).toBe('premium')
-      expect(result.tierName).toBe('Premium')
+      expect(result.tierName).toBe('Vorsorge')
     })
 
-    it('should correctly identify Family monthly user as Premium through entire flow', () => {
+    it('should fall back to Basic for Family monthly (family tier removed)', () => {
       const result = simulateTierDetectionFlow(STRIPE_PRICE_FAMILY_MONTHLY)
 
       expect(result.extractedPriceId).toBe(STRIPE_PRICE_FAMILY_MONTHLY)
-      expect(result.tierId).toBe('premium')
-      expect(result.tierName).toBe('Premium')
-      // Verify full premium features are available
-      expect(result.tier.limits.maxDocuments).toBe(-1) // unlimited
-      expect(result.tier.limits.smsNotifications).toBe(true)
-      expect(result.tier.limits.familyDashboard).toBe(true)
+      expect(result.tierId).toBe('basic')
+      expect(result.tierName).toBe('Basis')
     })
 
-    it('should correctly identify Family yearly user as Premium through entire flow', () => {
+    it('should fall back to Basic for Family yearly (family tier removed)', () => {
       const result = simulateTierDetectionFlow(STRIPE_PRICE_FAMILY_YEARLY)
 
       expect(result.extractedPriceId).toBe(STRIPE_PRICE_FAMILY_YEARLY)
-      expect(result.tierId).toBe('premium')
-      expect(result.tierName).toBe('Premium')
+      expect(result.tierId).toBe('basic')
+      expect(result.tierName).toBe('Basis')
     })
 
     it('should handle unknown price ID with safe fallback to Basic', () => {
@@ -161,14 +157,14 @@ describe('Tier Detection Integration Flow', () => {
       const result = simulateTierDetectionFlow(STRIPE_PRICE_PREMIUM_MONTHLY, 'trialing')
 
       expect(result.tierId).toBe('premium')
-      expect(result.tierName).toBe('Premium')
+      expect(result.tierName).toBe('Vorsorge')
     })
 
-    it('should handle trialing status with Family price', () => {
+    it('should handle trialing status with Family price (falls back to Basic)', () => {
       const result = simulateTierDetectionFlow(STRIPE_PRICE_FAMILY_MONTHLY, 'trialing')
 
-      expect(result.tierId).toBe('premium')
-      expect(result.tierName).toBe('Premium')
+      expect(result.tierId).toBe('basic')
+      expect(result.tierName).toBe('Basis')
     })
   })
 
@@ -180,8 +176,6 @@ describe('Tier Detection Integration Flow', () => {
       expect(priceIds.basic.yearly).toBe(STRIPE_PRICE_BASIC_YEARLY)
       expect(priceIds.premium.monthly).toBe(STRIPE_PRICE_PREMIUM_MONTHLY)
       expect(priceIds.premium.yearly).toBe(STRIPE_PRICE_PREMIUM_YEARLY)
-      expect(priceIds.family.monthly).toBe(STRIPE_PRICE_FAMILY_MONTHLY)
-      expect(priceIds.family.yearly).toBe(STRIPE_PRICE_FAMILY_YEARLY)
     })
 
     it('should match test fixtures with environment variables', () => {
@@ -189,8 +183,6 @@ describe('Tier Detection Integration Flow', () => {
       expect(process.env.STRIPE_PRICE_BASIC_YEARLY).toBe(STRIPE_PRICE_BASIC_YEARLY)
       expect(process.env.STRIPE_PRICE_PREMIUM_MONTHLY).toBe(STRIPE_PRICE_PREMIUM_MONTHLY)
       expect(process.env.STRIPE_PRICE_PREMIUM_YEARLY).toBe(STRIPE_PRICE_PREMIUM_YEARLY)
-      expect(process.env.STRIPE_PRICE_FAMILY_MONTHLY).toBe(STRIPE_PRICE_FAMILY_MONTHLY)
-      expect(process.env.STRIPE_PRICE_FAMILY_YEARLY).toBe(STRIPE_PRICE_FAMILY_YEARLY)
     })
   })
 
@@ -218,7 +210,7 @@ describe('Tier Detection Integration Flow', () => {
       expect(tier.limits.maxTrustedPersons).toBe(3)
       expect(tier.limits.emailReminders).toBe(true)
       expect(tier.limits.documentExpiry).toBe(true)
-      expect(tier.limits.twoFactorAuth).toBe(false) // Not in basic
+      expect(tier.limits.twoFactorAuth).toBe(true) // Now included in basic
       expect(tier.limits.prioritySupport).toBe(false) // Not in basic
       expect(tier.limits.smsNotifications).toBe(false) // Not in basic
       expect(tier.limits.familyDashboard).toBe(true)
@@ -228,7 +220,7 @@ describe('Tier Detection Integration Flow', () => {
     it('Free tier should have minimal features', () => {
       const tier = SUBSCRIPTION_TIERS.free
 
-      expect(tier.limits.maxDocuments).toBe(10)
+      expect(tier.limits.maxDocuments).toBe(20)
       expect(tier.limits.maxStorageMB).toBe(100)
       expect(tier.limits.maxTrustedPersons).toBe(0)
       expect(tier.limits.emailReminders).toBe(false)
@@ -240,12 +232,12 @@ describe('Tier Detection Integration Flow', () => {
       expect(tier.limits.customCategories).toBe(false)
     })
 
-    it('Family tier users should get all Premium features', () => {
+    it('Family tier users fall back to Basic (family tier removed)', () => {
       const familyTier = getTierFromSubscription('active', STRIPE_PRICE_FAMILY_MONTHLY)
-      const premiumTier = SUBSCRIPTION_TIERS.premium
+      const basicTier = SUBSCRIPTION_TIERS.basic
 
-      // Family users get the exact same tier config as Premium users
-      expect(familyTier).toEqual(premiumTier)
+      // Family price IDs are no longer recognized, fall back to basic
+      expect(familyTier).toEqual(basicTier)
     })
   })
 
@@ -319,8 +311,8 @@ describe('Webhook to UI Data Flow Verification', () => {
       clientData.stripe_price_id
     )
 
-    expect(tier.id).toBe('premium')
-    expect(tier.name).toBe('Premium')
+    expect(tier.id).toBe('basic')
+    expect(tier.name).toBe('Basis')
   })
 
   it('should handle subscription upgrade flow', () => {
@@ -332,9 +324,9 @@ describe('Webhook to UI Data Flow Verification', () => {
     const premiumTier = getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY)
     expect(premiumTier.id).toBe('premium')
 
-    // User switches to Family plan
+    // User switches to Family plan (family tier removed, falls back to basic)
     const familyTier = getTierFromSubscription('active', STRIPE_PRICE_FAMILY_MONTHLY)
-    expect(familyTier.id).toBe('premium') // Family is treated as Premium
+    expect(familyTier.id).toBe('basic') // Family price IDs fall back to basic
   })
 
   it('should handle subscription downgrade flow', () => {

@@ -8,7 +8,7 @@ import {
   DEFAULT_EMAIL_TIMEOUT_MS,
 } from '@/lib/email/resend-service'
 import { getTierFromSubscription, allowsFamilyDownloads } from '@/lib/subscription-tiers'
-import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
 // This endpoint should be called by a cron job
 // Recommended: Call every 5 minutes
@@ -62,9 +62,8 @@ interface Profile {
 }
 
 export async function GET(request: Request) {
-  // Verify authorization - require valid CRON_SECRET or Vercel cron header
+  // Verify authorization - require valid CRON_SECRET bearer token
   const authHeader = request.headers.get('authorization')
-  const vercelCronHeader = request.headers.get('x-vercel-cron')
 
   // CRON_SECRET must be set - reject all requests if not configured
   if (!CRON_SECRET) {
@@ -79,12 +78,14 @@ export async function GET(request: Request) {
     )
   }
 
-  // Check authorization: either Bearer token or Vercel cron header
   const isAuthorizedByBearer = authHeader === `Bearer ${CRON_SECRET}`
-  const isAuthorizedByVercel = vercelCronHeader === '1'
 
-  if (!isAuthorizedByBearer && !isAuthorizedByVercel) {
-    console.warn('[CRON] Unauthorized request attempt')
+  if (!isAuthorizedByBearer) {
+    emitStructuredWarn({
+      event_type: 'auth',
+      event_message: 'Unauthorized cron request rejected',
+      endpoint: '/api/cron/process-email-queue',
+    })
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

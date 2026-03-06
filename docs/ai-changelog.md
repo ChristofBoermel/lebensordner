@@ -2,6 +2,55 @@
 
 Rolling memory for major AI-driven changes. Newest entry first.
 
+## 2026-03-06 16:12 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+
+- Implemented monetization + emergency-access backend plan:
+- Updated `src/lib/subscription-tiers.ts` for new tier values (Free docs 20, Basic 2FA enabled, Premium display renamed to Vorsorge, emergencyAccess limit flag), added `canPerformAction(..., 'useEmergencyAccess')`, removed Family price map, and added legacy premium-price grandfather handling.
+- Added migration `supabase/migrations/20260307000001_emergency_access.sql` with inactivity + emergency-access columns and indexes.
+- Added debounced activity tracking in `src/lib/supabase/middleware.ts` to update `last_active_at` and reset `emergency_access_notified_at`.
+- Added emergency-access endpoints:
+  - `GET/POST /api/emergency-access/settings`
+  - `POST /api/emergency-access/test`
+  - shared template helper `src/lib/email/emergency-access.ts`
+- Added cron endpoint `GET /api/cron/check-emergency-access` with bearer auth, inactivity threshold checks, accepted trusted-person enforcement, notification send, and notification timestamp updates.
+- Added `vercel.json` cron schedule for `/api/cron/check-emergency-access` at `0 9 * * *`.
+- Removed Family Stripe env usage from `.env.example` and `/api/stripe/prices`, updated upgrade email copy from “Premium” to “Vorsorge”.
+- Updated `tests/subscription-tier.test.ts` to the new tier model and legacy-price behavior.
+
+Risk / Regression Watch:
+
+- `src/lib/supabase/middleware.ts` now performs a best-effort profile update for authenticated traffic; if RLS/policies differ by environment, activity timestamps may silently not update.
+- Emergency-access cron currently depends on `RESEND_API_KEY`, `CRON_SECRET`, and trusted-person accepted state; missing config or stale invitation linkage will skip sends.
+- This change removes Family-tier Stripe mapping globally; any remaining external dashboards/scripts referencing Family price env vars must be updated.
+
+Verification:
+
+- `npm run type-check`
+- `npm test -- --run tests/subscription-tier.test.ts tests/utils/tier-detection-logging.test.ts`
+- `python scripts/ops/logging-audit.py`
+- `rg -n "FAMILY|family.*tier|tier.*family|STRIPE_PRICE_FAMILY" src`
+
+Rollback:
+
+- Revert:
+  - `src/lib/subscription-tiers.ts`
+  - `src/lib/supabase/middleware.ts`
+  - `src/app/api/stripe/prices/route.ts`
+  - `src/app/api/cron/send-upgrade-emails/route.ts`
+  - `src/app/api/emergency-access/settings/route.ts`
+  - `src/app/api/emergency-access/test/route.ts`
+  - `src/app/api/cron/check-emergency-access/route.ts`
+  - `src/lib/email/emergency-access.ts`
+  - `supabase/migrations/20260307000001_emergency_access.sql`
+  - `src/types/database.ts`
+  - `src/app/(dashboard)/abo/page.tsx`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `.env.example`
+  - `vercel.json`
+  - `tests/subscription-tier.test.ts`
+
 ## 2026-03-06 12:35 UTC | Agent: Codex | Commit: uncommitted
 
 Change:
@@ -1562,3 +1611,231 @@ Verification:
 Rollback:
 
 - Revert `src/app/(dashboard)/dokumente/page.tsx`, `src/components/dokumente/EncryptedNotesEditor.tsx`, `src/components/ui/document-preview.tsx`, `src/components/ui/document-viewer.tsx`.
+
+## 2026-03-06 12:57 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Added repository-grounded security threat model report at Lebensordner-threat-model.md covering trust boundaries, abuse paths, prioritized threats (TM-001..TM-007), and focused review paths.
+
+Risk / Regression Watch:
+- Documentation-only change; no runtime behavior changed.
+
+Verification:
+- python scripts/ops/logging-audit.py
+- npm test -- --run tests/lib/security tests/api
+Rollback:
+- Remove Lebensordner-threat-model.md and this changelog entry.
+
+
+## 2026-03-06 13:09 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Ran security-ownership-map analysis (ownership-map-out/) and appended net-new findings to Lebensordner-threat-model.md (TM-008..TM-011), including cron header spoofing risk, feedback userId spoofing, plaintext token-at-rest risk, and auth ownership concentration risk.
+
+Risk / Regression Watch:
+- Documentation-only updates; no runtime code changed.
+
+Verification:
+- python C:\Users\chris\.codex\skills\security-ownership-map\scripts\run_ownership_map.py --repo D:\Projects\Lebensordner --out D:\Projects\Lebensordner\ownership-map-out --since "12 months ago" --emit-commits
+- python C:\Users\chris\.codex\skills\security-ownership-map\scripts\query_ownership.py --data-dir ownership-map-out summary --section bus_factor_hotspots
+- python C:\Users\chris\.codex\skills\security-ownership-map\scripts\query_ownership.py --data-dir ownership-map-out summary --section hidden_owners
+
+Rollback:
+- Revert Lebensordner-threat-model.md and remove this changelog entry.
+
+## 2026-03-06 13:28 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Implemented security plan items TM-008/TM-009/TM-010 and updated threat model status:
+  - Cron hardening: removed `x-vercel-cron` fallback and enforced bearer-only `CRON_SECRET` auth in:
+    - `src/app/api/cron/send-reminders/route.ts`
+    - `src/app/api/cron/process-email-queue/route.ts`
+    - `src/app/api/cron/send-upgrade-emails/route.ts`
+  - Replaced unauthorized cron `console.warn` usage with structured warn events.
+  - Feedback hardening in `src/app/api/feedback/route.ts`:
+    - requires authenticated session
+    - derives/stores `user_id` from session only
+    - adds fail-closed IP/user rate limits
+  - Download-link token-at-rest hardening:
+    - added `src/lib/security/download-token.ts` for SHA-256 hashing
+    - switched download-link token lookup routes to `token_hash` comparisons
+    - create route now stores `token_hash` and no plaintext token
+    - added migration `supabase/migrations/20260306000000_download_tokens_hash_at_rest.sql` to backfill hash, index it, and null plaintext tokens
+  - Updated `Lebensordner-threat-model.md` implementation status section (TM-008..TM-011).
+  - Added tests:
+    - `tests/api/feedback.test.ts`
+    - `tests/api/download-link-token-hash.test.ts`
+    - updated `tests/api/email-invitation.test.ts` with bearer-only cron auth coverage
+
+Risk / Regression Watch:
+- Download-link verification now depends on `token_hash`; deploy migration before or with app rollout to avoid lookup failures.
+- Feedback endpoint is now authenticated-only; unauthenticated feedback submissions will return `401`.
+- Cron jobs must include bearer auth consistently in every scheduler invocation.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/feedback.test.ts tests/api/download-link-token-hash.test.ts tests/api/email-invitation.test.ts`
+
+Rollback:
+- Revert modified API routes/tests/helper and migration:
+  - `src/app/api/cron/send-reminders/route.ts`
+  - `src/app/api/cron/process-email-queue/route.ts`
+  - `src/app/api/cron/send-upgrade-emails/route.ts`
+  - `src/app/api/feedback/route.ts`
+  - `src/lib/security/download-token.ts`
+  - `src/app/api/download-link/create/route.ts`
+  - `src/app/api/download-link/verify/[token]/route.ts`
+  - `src/app/api/download-link/[token]/route.ts`
+  - `src/app/api/download-link/[token]/metadata/route.ts`
+  - `src/app/api/download-link/[token]/view/route.ts`
+  - `src/app/api/download-link/[token]/view/stream/route.ts`
+  - `src/app/api/download-link/[token]/mark-used/route.ts`
+  - `supabase/migrations/20260306000000_download_tokens_hash_at_rest.sql`
+  - `tests/api/feedback.test.ts`
+  - `tests/api/download-link-token-hash.test.ts`
+  - `tests/api/email-invitation.test.ts`
+  - `Lebensordner-threat-model.md`
+
+## 2026-03-06 13:41 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Implemented threat-model queue phase for critical + high/medium follow-up hardening.
+- TM-001 (critical) implemented:
+  - Invitation accept no longer mutates invited email.
+  - Accept now requires submitted email to match invited email.
+  - Invitation token flow is now single-use by status (`pending` only).
+  - Removed service-role fallback in trusted-person linking (user-scoped linking only).
+  - Files:
+    - `src/app/api/invitation/route.ts`
+    - `src/app/api/trusted-person/link/route.ts`
+- TM-002 (high) implemented:
+  - Added explicit trusted-person access policy helper and enforced `access_level` checks in family endpoints:
+    - view routes require `immediate` or `emergency`
+    - download route requires `immediate`
+  - Files:
+    - `src/lib/security/trusted-person-access.ts`
+    - `src/app/api/family/view/route.ts`
+    - `src/app/api/family/view/stream/route.ts`
+    - `src/app/api/family/view/bytes/route.ts`
+    - `src/app/api/family/download/route.ts`
+- TM-004 (high, partial) implemented:
+  - Added bounded view-link reuse check and access telemetry updates (`access_count`, `last_accessed_at`, `last_accessed_ip`) across download-link access routes.
+  - Files:
+    - `src/app/api/download-link/[token]/route.ts`
+    - `src/app/api/download-link/[token]/metadata/route.ts`
+    - `src/app/api/download-link/[token]/view/route.ts`
+    - `src/app/api/download-link/[token]/view/stream/route.ts`
+- TM-006 (medium, partial) implemented:
+  - Removed `unsafe-eval` from CSP in `next.config.js`.
+- TM-007 (medium) implemented:
+  - Replaced remaining security-library raw console logs with structured logs.
+  - Enforced fail-closed rate-limit behavior for trusted-person invite and download-link creation.
+  - Files:
+    - `src/lib/redis/client.ts`
+    - `src/lib/security/auth-lockout.ts`
+    - `src/lib/security/device-detection.ts`
+    - `src/app/api/trusted-person/invite/route.ts`
+    - `src/app/api/download-link/create/route.ts`
+- Added/updated tests:
+  - `tests/api/invitation-security.test.ts`
+  - `tests/api/trusted-person-link-security.test.ts`
+  - `tests/lib/security/trusted-person-access.test.ts`
+
+Risk / Regression Watch:
+- Removing service-role fallback from trusted-person linking can expose existing RLS policy gaps (linking may fail with 500 until policy allows secure user-scoped link updates).
+- `access_level` enforcement may change behavior for existing trusted-person relationships using `after_confirmation`/`emergency`.
+- View-link access limits may block very high-frequency view sessions; monitor support/telemetry for false positives.
+- CSP still contains `unsafe-inline`; further hardening requires nonce/hash migration.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/invitation-security.test.ts tests/api/trusted-person-link-security.test.ts tests/api/email-invitation.test.ts`
+- `npm test -- --run tests/api/invitation-security.test.ts tests/api/trusted-person-link-security.test.ts tests/api/email-invitation.test.ts tests/lib/security/trusted-person-access.test.ts tests/api/feedback.test.ts tests/api/download-link-token-hash.test.ts`
+
+Rollback:
+- Revert:
+  - `src/app/api/invitation/route.ts`
+  - `src/app/api/trusted-person/link/route.ts`
+  - `src/lib/security/trusted-person-access.ts`
+  - `src/app/api/family/view/route.ts`
+  - `src/app/api/family/view/stream/route.ts`
+  - `src/app/api/family/view/bytes/route.ts`
+  - `src/app/api/family/download/route.ts`
+  - `src/app/api/download-link/[token]/route.ts`
+  - `src/app/api/download-link/[token]/metadata/route.ts`
+  - `src/app/api/download-link/[token]/view/route.ts`
+  - `src/app/api/download-link/[token]/view/stream/route.ts`
+  - `src/app/api/download-link/create/route.ts`
+  - `src/app/api/trusted-person/invite/route.ts`
+  - `src/lib/redis/client.ts`
+  - `src/lib/security/auth-lockout.ts`
+  - `src/lib/security/device-detection.ts`
+  - `next.config.js`
+  - `tests/api/invitation-security.test.ts`
+  - `tests/api/trusted-person-link-security.test.ts`
+  - `tests/lib/security/trusted-person-access.test.ts`
+  - `Lebensordner-threat-model.md`
+
+## 2026-03-06 13:50 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Completed remaining high-priority queue implementation (TM-004, TM-005) and finalized end-to-end flow.
+- TM-004 (replay/recipient-binding) implementation:
+  - Added recipient verification challenge endpoint:
+    - `src/app/api/download-link/[token]/challenge/route.ts`
+  - Added signed HttpOnly cookie challenge utility:
+    - `src/lib/security/download-link-recipient-challenge.ts`
+  - Enforced recipient-verification gate on token data/file access routes:
+    - `src/app/api/download-link/[token]/metadata/route.ts`
+    - `src/app/api/download-link/[token]/view/route.ts`
+    - `src/app/api/download-link/[token]/view/stream/route.ts`
+    - `src/app/api/download-link/[token]/route.ts`
+    - `src/app/api/download-link/[token]/mark-used/route.ts`
+  - Added bounded view-link reuse telemetry (`access_count`, `last_accessed_at`, `last_accessed_ip`) to token access paths.
+  - Updated public token pages to handle recipient verification UX:
+    - `src/app/herunterladen/[token]/page.tsx`
+    - `src/app/herunterladen/[token]/view/page.tsx`
+- TM-005 (service-role guardrail) implementation:
+  - Added centralized trusted-person guard:
+    - `src/lib/security/trusted-person-guard.ts`
+  - Applied guard in family access endpoints:
+    - `src/app/api/family/view/route.ts`
+    - `src/app/api/family/download/route.ts`
+    - `src/app/api/family/view/stream/route.ts`
+    - `src/app/api/family/view/bytes/route.ts`
+- Added test coverage:
+  - `tests/api/download-link-recipient-challenge.test.ts`
+  - `tests/lib/security/trusted-person-guard.test.ts`
+  - Updated `tests/api/download-link-token-hash.test.ts` for challenge-gated behavior.
+- Updated threat model implementation status to reflect completed high-priority items.
+
+Risk / Regression Watch:
+- Recipient verification is now required before sensitive download-link endpoints; users must complete the new email verification step in shared-link flows.
+- Trusted-person link no longer falls back to service-role update; if RLS policy is too strict, linking returns 500 until policy alignment.
+- Access-level enforcement may deny previously allowed flows for `after_confirmation` / `emergency` combinations.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm test -- --run tests/api/invitation-security.test.ts tests/api/trusted-person-link-security.test.ts tests/api/download-link-recipient-challenge.test.ts tests/api/download-link-token-hash.test.ts tests/lib/security/trusted-person-access.test.ts tests/lib/security/trusted-person-guard.test.ts tests/api/feedback.test.ts`
+
+Rollback:
+- Revert:
+  - `src/lib/security/download-link-recipient-challenge.ts`
+  - `src/app/api/download-link/[token]/challenge/route.ts`
+  - `src/app/api/download-link/[token]/metadata/route.ts`
+  - `src/app/api/download-link/[token]/view/route.ts`
+  - `src/app/api/download-link/[token]/view/stream/route.ts`
+  - `src/app/api/download-link/[token]/route.ts`
+  - `src/app/api/download-link/[token]/mark-used/route.ts`
+  - `src/app/herunterladen/[token]/page.tsx`
+  - `src/app/herunterladen/[token]/view/page.tsx`
+  - `src/lib/security/trusted-person-guard.ts`
+  - `src/app/api/family/view/route.ts`
+  - `src/app/api/family/download/route.ts`
+  - `src/app/api/family/view/stream/route.ts`
+  - `src/app/api/family/view/bytes/route.ts`
+  - `tests/api/download-link-recipient-challenge.test.ts`
+  - `tests/lib/security/trusted-person-guard.test.ts`
+  - `tests/api/download-link-token-hash.test.ts`
+  - `Lebensordner-threat-model.md`

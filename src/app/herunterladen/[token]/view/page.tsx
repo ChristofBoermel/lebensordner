@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Loader2, AlertTriangle, Leaf, XCircle, Eye, ArrowLeft, Lock } from 'lucide-react'
 import Link from 'next/link'
+import { RecipientVerificationForm } from '@/components/download/RecipientVerificationForm'
 import { DocumentViewer } from '@/components/ui/document-viewer'
 import type { DocumentMetadata } from '@/types/database'
 
@@ -36,6 +37,8 @@ export default function ViewPage({ params }: { params: Promise<{ token: string }
   const [expiresAt, setExpiresAt] = useState<string | null>(null)
   const [metadataLoading, setMetadataLoading] = useState(true)
   const [metadataError, setMetadataError] = useState<string | null>(null)
+  const [requiresRecipientVerification, setRequiresRecipientVerification] = useState(false)
+  const [recipientVerified, setRecipientVerified] = useState(false)
   const [viewLoading, setViewLoading] = useState(false)
   const [shareKey, setShareKey] = useState('')
   const [manualKeyInput, setManualKeyInput] = useState('')
@@ -58,11 +61,22 @@ export default function ViewPage({ params }: { params: Promise<{ token: string }
         const response = await fetch(`/api/download-link/${resolvedParams.token}/metadata`)
         const data = await response.json()
 
+        if (response.status === 403 && data?.requiresRecipientVerification) {
+          setRequiresRecipientVerification(true)
+          return
+        }
+
+        if (response.status === 429) {
+          setMetadataError('Zu viele Anfragen. Bitte versuchen Sie es später erneut.')
+          return
+        }
+
         if (!response.ok) {
           setMetadataError(data.error || 'Fehler beim Laden der Dokumente')
           return
         }
 
+        setRequiresRecipientVerification(false)
         setRequiresClientDecryption(!!data.requiresClientDecryption)
         setMetadataDocuments(data.documents || [])
         setExpiresAt(data.expiresAt || null)
@@ -74,7 +88,7 @@ export default function ViewPage({ params }: { params: Promise<{ token: string }
     }
 
     fetchMetadata()
-  }, [resolvedParams.token])
+  }, [resolvedParams.token, recipientVerified])
 
   useEffect(() => {
     if (metadataLoading || metadataError) return
@@ -147,6 +161,28 @@ export default function ViewPage({ params }: { params: Promise<{ token: string }
               <Loader2 className="w-10 h-10 animate-spin text-sage-600 mb-4" />
               <p className="text-warmgray-600">Dokumente werden geladen...</p>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (requiresRecipientVerification) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-cream-50 to-cream-100 flex items-center justify-center p-4">
+        <Card className="max-w-lg w-full">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-sage-600 flex items-center justify-center">
+              <Leaf className="w-10 h-10 text-white" />
+            </div>
+            <CardTitle className="text-2xl font-serif">Lebensordner</CardTitle>
+            <CardDescription>Empfänger-Verifizierung</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RecipientVerificationForm
+              token={resolvedParams.token}
+              onVerified={() => setRecipientVerified(true)}
+            />
           </CardContent>
         </Card>
       </div>

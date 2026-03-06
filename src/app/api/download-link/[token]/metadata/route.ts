@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { hashDownloadToken } from '@/lib/security/download-token'
+import {
+  getRecipientChallengeCookieName,
+  readCookieValueFromHeader,
+  verifyRecipientChallengeCookieValue,
+} from '@/lib/security/download-link-recipient-challenge'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -8,6 +14,7 @@ const getSupabaseAdmin = () => createClient(
 )
 
 const ENCRYPTED_LINK_ERROR = 'Dieser Link unterstützt keine verschlüsselten Dokumente. Bitte bitten Sie den Absender, einen neuen Link zu erstellen.'
+const MAX_VIEW_LINK_ACCESSES = 100
 
 export async function GET(
   _request: Request,
@@ -16,6 +23,9 @@ export async function GET(
   try {
     const params = await context.params
     const token = params.token
+    const tokenHash = hashDownloadToken(token)
+    const forwarded = _request.headers.get('x-forwarded-for') || ''
+    const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
 
     if (!token) {
       return NextResponse.json({ error: 'Token fehlt' }, { status: 400 })
@@ -26,13 +36,28 @@ export async function GET(
     const { data: downloadToken, error: tokenError } = await adminClient
       .from('download_tokens')
       .select('*')
-      .eq('token', token)
+      .eq('token_hash', tokenHash)
       .single()
 
     if (tokenError || !downloadToken) {
       return NextResponse.json(
         { error: 'Ungültiger oder abgelaufener Link' },
         { status: 404 }
+      )
+    }
+
+    const tokenHashPrefix = tokenHash.slice(0, 12)
+    const cookieName = getRecipientChallengeCookieName(tokenHashPrefix)
+    const cookieValue = readCookieValueFromHeader(_request.headers.get('cookie'), cookieName)
+    const recipientVerified = verifyRecipientChallengeCookieValue(
+      cookieValue,
+      tokenHashPrefix,
+      downloadToken.recipient_email
+    )
+    if (!recipientVerified) {
+      return NextResponse.json(
+        { error: 'Empfänger-Verifizierung erforderlich', requiresRecipientVerification: true },
+        { status: 403 }
       )
     }
 
@@ -46,6 +71,17 @@ export async function GET(
     if (downloadToken.link_type !== 'view' && downloadToken.used_at) {
       return NextResponse.json(
         { error: 'Dieser Link wurde bereits verwendet' },
+        { status: 410 }
+      )
+    }
+
+    if (
+      downloadToken.link_type === 'view'
+      && typeof downloadToken.access_count === 'number'
+      && downloadToken.access_count >= MAX_VIEW_LINK_ACCESSES
+    ) {
+      return NextResponse.json(
+        { error: 'Dieser Link hat sein Zugriffslimit erreicht' },
         { status: 410 }
       )
     }
@@ -208,6 +244,18 @@ export async function GET(
       .single()
 
     const senderName = profile?.full_name || profile?.email || 'Unbekannt'
+
+    // Track view-link accesses for replay resistance telemetry and bounded re-use.
+    if (downloadToken.link_type === 'view') {
+      await adminClient
+        .from('download_tokens')
+        .update({
+          access_count: (downloadToken.access_count ?? 0) + 1,
+          last_accessed_at: new Date().toISOString(),
+          last_accessed_ip: clientIp,
+        })
+        .eq('id', downloadToken.id)
+    }
 
     return NextResponse.json({
       requiresClientDecryption,

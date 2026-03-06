@@ -75,7 +75,7 @@ describe('Admin User Management', () => {
   it('shows subscription and onboarding badges', () => {
     render(<AdminDashboard initialStats={mockStats} initialUsers={mockUsers} />)
 
-    expect(screen.getByText('Premium')).toBeInTheDocument()
+    expect(screen.getByText('Vorsorge')).toBeInTheDocument()
     expect(screen.getByText('Trial')).toBeInTheDocument()
     expect(screen.getAllByText('Aktiv').length).toBeGreaterThan(0)
     expect(screen.getByText('Onboarding')).toBeInTheDocument()

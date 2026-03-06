@@ -305,7 +305,7 @@ export function DocumentViewer({
       return (
         <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-600 flex items-center gap-1">
           <Crown className="w-3 h-3" aria-hidden="true" />
-          Premium
+          Vorsorge
         </span>
       )
     }
@@ -364,7 +364,7 @@ export function DocumentViewer({
                 </p>
               ) : ownerTier === 'basic' ? (
                 <p className="text-sm text-blue-800">
-                  Sie haben Nur-Ansicht-Zugriff auf diese Dokumente. Downloads sind nur verfügbar, wenn der Besitzer ein Premium-Abo hat.
+                  Sie haben Nur-Ansicht-Zugriff auf diese Dokumente. Downloads sind nur verfügbar, wenn der Besitzer ein Vorsorge-Abo hat.
                 </p>
               ) : (
                 <p className="text-sm text-warmgray-600">

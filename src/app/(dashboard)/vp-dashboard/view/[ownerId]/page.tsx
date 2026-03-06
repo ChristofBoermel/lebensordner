@@ -1,19 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function VpDashboardViewPage() {
   const params = useParams();
   const ownerId = params.ownerId as string;
-  const supabase = createClient();
+  // allowed: imperative-sync - stable client identity prevents effect re-fetch loops
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
 
   const [documents, setDocuments] = useState<any[]>([]);
   const [shareTokens, setShareTokens] = useState<Record<string, string>>({});
   const [rk, setRk] = useState<string | null>(null);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [accessLevel, setAccessLevel] = useState<string | null>(null);
+  const [viewError, setViewError] = useState<string | null>(null);
+
+  const canDownloadAll = accessLevel === 'immediate';
+  const canOpenDocuments = accessLevel === 'immediate' || accessLevel === 'emergency';
 
   useEffect(() => {
     const stored = localStorage.getItem(`rk_${ownerId}`);
@@ -38,21 +45,37 @@ export default function VpDashboardViewPage() {
         }
         setShareTokens(map);
       });
+
+    // allowed: I/O - fetch trusted person access level from DB
+    async function fetchAccessLevel() {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      if (!userId) return;
+      const { data } = await supabase
+        .from("trusted_persons")
+        .select("access_level")
+        .eq("user_id", ownerId)
+        .eq("linked_user_id", userId)
+        .single();
+      setAccessLevel(data?.access_level ?? null);
+    }
+    fetchAccessLevel();
   }, [ownerId, supabase]);
 
   const handleViewDoc = async (doc: any) => {
+    setViewError(null);
     if (!doc.is_encrypted) {
       const bytesRes = await fetch(
         `/api/family/view/bytes?docId=${doc.id}&ownerId=${ownerId}`,
       );
       if (!bytesRes.ok) {
         if (bytesRes.status === 403) {
-          alert(
+          setViewError(
             "Der Besitzer hat ein kostenloses Abo. Ansicht ist nur mit einem kostenpflichtigen Abo verfügbar.",
           );
           return;
         }
-        alert("Fehler beim Laden der Datei.");
+        setViewError("Fehler beim Laden der Datei.");
         return;
       }
       const buffer = await bytesRes.arrayBuffer();
@@ -63,7 +86,7 @@ export default function VpDashboardViewPage() {
       return;
     }
     if (!rk) {
-      alert(
+      setViewError(
         "Kein Zugriffsschlüssel. Bitten Sie den Besitzer, Ihnen den Link erneut zu senden.",
       );
       return;
@@ -73,13 +96,13 @@ export default function VpDashboardViewPage() {
     const rkKey = await importRawHexKey(rk, ["wrapKey", "unwrapKey"]);
     const wrappedDek = shareTokens[doc.id];
     if (!wrappedDek) {
-      alert("Kein Zugriffstoken für dieses Dokument.");
+      setViewError("Kein Zugriffstoken für dieses Dokument.");
       return;
     }
     const dek = await unwrapKey(wrappedDek, rkKey, "AES-GCM");
     const bytesRes = await fetch(`/api/family/view/bytes?docId=${doc.id}&ownerId=${ownerId}`);
     if (!bytesRes.ok) {
-      alert("Fehler beim Laden der Datei.");
+      setViewError("Fehler beim Laden der Datei.");
       return;
     }
     const buffer = await bytesRes.arrayBuffer();
@@ -91,11 +114,12 @@ export default function VpDashboardViewPage() {
   };
 
   const handleDownloadAll = async () => {
+    setViewError(null);
     setIsDownloading(true);
     try {
       const res = await fetch(`/api/family/download?ownerId=${ownerId}`);
       if (!res.ok) {
-        alert("Fehler beim Erstellen des Downloads.");
+        setViewError("Fehler beim Erstellen des Downloads.");
         return;
       }
 
@@ -116,7 +140,7 @@ export default function VpDashboardViewPage() {
 
       const data = await res.json();
       if (!data?.requiresClientDecryption) {
-        alert("Fehler beim Erstellen des Downloads.");
+        setViewError("Fehler beim Erstellen des Downloads.");
         return;
       }
 
@@ -128,7 +152,7 @@ export default function VpDashboardViewPage() {
       for (const doc of data.documents || []) {
         const bytesRes = await fetch(`/api/family/view/bytes?docId=${doc.id}&ownerId=${ownerId}`);
         if (!bytesRes.ok) {
-          alert("Fehler beim Laden der Datei.");
+          setViewError("Fehler beim Laden der Datei.");
           return;
         }
 
@@ -155,9 +179,8 @@ export default function VpDashboardViewPage() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Download all error:", error);
-      alert("Fehler beim Erstellen des Downloads.");
+    } catch {
+      setViewError("Fehler beim Erstellen des Downloads.");
     } finally {
       setIsDownloading(false);
     }
@@ -174,14 +197,29 @@ export default function VpDashboardViewPage() {
         </div>
       )}
       <h1 className="text-2xl font-bold mb-6">Dokumente</h1>
+      {viewError && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {viewError}
+        </div>
+      )}
       <div className="mb-4">
-        <button
-          onClick={handleDownloadAll}
-          disabled={isDownloading}
-          className="px-4 py-2 bg-sage-600 text-white rounded-lg hover:bg-sage-700 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {isDownloading ? "Wird erstellt..." : "Alle herunterladen"}
-        </button>
+        {canDownloadAll ? (
+          <button
+            onClick={handleDownloadAll}
+            disabled={isDownloading}
+            className="px-4 py-2 bg-sage-600 text-white rounded-lg hover:bg-sage-700 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isDownloading ? "Wird erstellt..." : "Alle herunterladen"}
+          </button>
+        ) : accessLevel === 'emergency' ? (
+          <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm">
+            Ihr Zugriff ist auf Notfall-Ansicht beschränkt. Downloads sind nicht erlaubt.
+          </div>
+        ) : accessLevel === 'after_confirmation' ? (
+          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+            Downloads erfordern eine Bestätigung durch den Besitzer.
+          </div>
+        ) : null}
       </div>
       <div className="space-y-3">
         {documents.map((doc) => (
@@ -195,12 +233,18 @@ export default function VpDashboardViewPage() {
               </p>
               <p className="text-sm text-gray-500">{doc.category}</p>
             </div>
-            <button
-              onClick={() => handleViewDoc(doc)}
-              className="px-4 py-2 bg-sage-600 text-white rounded-lg hover:bg-sage-700"
-            >
-              Öffnen
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button
+                onClick={() => handleViewDoc(doc)}
+                disabled={!canOpenDocuments}
+                className="px-4 py-2 bg-sage-600 text-white rounded-lg hover:bg-sage-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Öffnen
+              </button>
+              {!canOpenDocuments && accessLevel === 'after_confirmation' && (
+                <span className="text-xs text-amber-700">Bestätigung erforderlich</span>
+              )}
+            </div>
           </div>
         ))}
       </div>

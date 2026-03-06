@@ -1,23 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { createClient } from '@supabase/supabase-js'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
-
-// Service role client to update trusted_persons when RLS blocks user-scoped writes.
-const getSupabaseAdmin = () => {
-  const supabaseUrl = process.env['SUPABASE_URL'] || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
-
-  if (!supabaseUrl || !serviceKey) {
-    return null
-  }
-
-  return createClient(
-    supabaseUrl,
-    serviceKey
-  )
-}
 
 export async function POST(request: Request) {
   try {
@@ -36,65 +20,31 @@ export async function POST(request: Request) {
       })
     }
 
-    // 1) Try user-scoped linking first (works when DB policies allow invitee self-linking).
+    const normalizedEmail = user.email.toLowerCase().trim()
+
+    // Link accepted invitations by immutable invited email with user-scoped auth only.
     const { data: userUpdateRows, error: userUpdateError } = await supabase
       .from('trusted_persons')
       .update({ linked_user_id: user.id })
-      .ilike('email', user.email)
+      .ilike('email', normalizedEmail)
       .eq('invitation_status', 'accepted')
+      .eq('is_active', true)
       .is('linked_user_id', null)
       .select('id')
 
-    if (!userUpdateError) {
-      const linkedCount = userUpdateRows?.length ?? 0
-      return NextResponse.json({
-        success: true,
-        linked: linkedCount,
-        message: linkedCount > 0
-          ? `${linkedCount} Verknüpfung(en) erstellt`
-          : 'Keine ausstehenden Verknüpfungen gefunden',
-      })
-    }
-
-    console.warn('User-scoped trusted-person linking failed, trying admin fallback:', userUpdateError)
-
-    // 2) Fallback: service-role update for environments where invitee self-linking is blocked by RLS.
-    const adminClient = getSupabaseAdmin()
-    if (!adminClient) {
-      emitStructuredError({
-        error_type: 'config',
-        error_message: 'Missing service-role client config for trusted-person link fallback',
-        endpoint: '/api/trusted-person/link',
-      })
-      return NextResponse.json({
-        success: true,
-        linked: 0,
-        message: 'Verknüpfung derzeit nicht möglich (Konfiguration)',
-      })
-    }
-
-    const { data: adminUpdateRows, error: adminUpdateError } = await adminClient
-      .from('trusted_persons')
-      .update({ linked_user_id: user.id })
-      .ilike('email', user.email)
-      .eq('invitation_status', 'accepted')
-      .is('linked_user_id', null)
-      .select('id')
-
-    if (adminUpdateError) {
+    if (userUpdateError) {
       emitStructuredError({
         error_type: 'api',
-        error_message: `Admin fallback trusted-person linking failed: ${adminUpdateError.message}`,
+        error_message: `User-scoped trusted-person linking failed: ${userUpdateError.message}`,
         endpoint: '/api/trusted-person/link',
       })
-      return NextResponse.json({
-        success: true,
-        linked: 0,
-        message: 'Verknüpfung derzeit nicht möglich',
-      })
+      return NextResponse.json(
+        { error: 'Verknüpfung derzeit nicht möglich' },
+        { status: 500 }
+      )
     }
 
-    const linkedCount = adminUpdateRows?.length ?? 0
+    const linkedCount = userUpdateRows?.length ?? 0
 
     return NextResponse.json({
       success: true,

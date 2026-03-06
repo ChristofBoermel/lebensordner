@@ -8,6 +8,7 @@ import { logSecurityEvent, EVENT_DOWNLOAD_LINK_CREATED } from '@/lib/security/au
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_DOWNLOAD_LINK } from '@/lib/security/rate-limit'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
+import { hashDownloadToken } from '@/lib/security/download-token'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -77,10 +78,17 @@ export async function POST(request: Request) {
     const ipRateLimitConfig = {
       identifier: `download_link_ip:${clientIp}`,
       endpoint: '/api/download-link/create',
+      failMode: 'closed' as const,
       ...RATE_LIMIT_DOWNLOAD_LINK,
     }
 
     const ipRateLimit = await checkRateLimit(ipRateLimitConfig)
+    if (ipRateLimit.available === false) {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
     if (!ipRateLimit.allowed) {
       const retryAfterSeconds = Math.ceil(
         (ipRateLimit.resetAt.getTime() - Date.now()) / 1000
@@ -95,10 +103,17 @@ export async function POST(request: Request) {
     const rateLimitConfig = {
       identifier: `download_link:${user.id}`,
       endpoint: '/api/download-link/create',
+      failMode: 'closed' as const,
       ...RATE_LIMIT_DOWNLOAD_LINK,
     }
 
     const rateLimit = await checkRateLimit(rateLimitConfig)
+    if (rateLimit.available === false) {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      )
+    }
     if (!rateLimit.allowed) {
       const retryAfterSeconds = Math.ceil(
         (rateLimit.resetAt.getTime() - Date.now()) / 1000
@@ -114,6 +129,7 @@ export async function POST(request: Request) {
 
     // Generate a secure random token
     const token = randomBytes(32).toString('hex')
+    const tokenHash = hashDownloadToken(token)
     const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000) // 12 hours
 
     const adminClient = getSupabaseAdmin()
@@ -123,7 +139,8 @@ export async function POST(request: Request) {
       .from('download_tokens')
       .insert({
         user_id: user.id,
-        token,
+        token: null,
+        token_hash: tokenHash,
         expires_at: expiresAt.toISOString(),
         recipient_name: recipientName,
         recipient_email: recipientEmail,

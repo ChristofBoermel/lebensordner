@@ -138,8 +138,6 @@ describe('Abo Debug Panel', () => {
     expect(screen.getByText(`Basic Yearly: ${STRIPE_PRICE_BASIC_YEARLY}`)).toBeInTheDocument()
     expect(screen.getByText(`Premium Monthly: ${STRIPE_PRICE_PREMIUM_MONTHLY}`)).toBeInTheDocument()
     expect(screen.getByText(`Premium Yearly: ${STRIPE_PRICE_PREMIUM_YEARLY}`)).toBeInTheDocument()
-    expect(screen.getByText(`Family Monthly: ${STRIPE_PRICE_FAMILY_MONTHLY}`)).toBeInTheDocument()
-    expect(screen.getByText(`Family Yearly: ${STRIPE_PRICE_FAMILY_YEARLY}`)).toBeInTheDocument()
     restore()
   })
 

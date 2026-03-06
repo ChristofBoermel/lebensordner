@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { emitStructuredError } from '@/lib/errors/structured-logger'
 
 // --- Helper ---
 
@@ -35,13 +36,22 @@ export async function isNewDevice(
       .limit(1)
 
     if (error) {
-      console.error('Device detection query error:', error)
+      emitStructuredError({
+        error_type: 'auth',
+        error_message: `Device detection query error: ${error.message}`,
+        endpoint: 'lib/security/device-detection',
+      })
       return false
     }
 
     return !data || data.length === 0
   } catch (error) {
-    console.error('Device detection error:', error)
+    emitStructuredError({
+      error_type: 'auth',
+      error_message: `Device detection error: ${error instanceof Error ? error.message : String(error)}`,
+      endpoint: 'lib/security/device-detection',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     // Default to not new device to avoid spamming notifications
     return false
   }

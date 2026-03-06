@@ -5,6 +5,7 @@ import { getTierFromSubscription } from '@/lib/subscription-tiers'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { guardTrustedPersonAccess } from '@/lib/security/trusted-person-guard'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -97,21 +98,14 @@ export async function GET(request: Request) {
     const adminClient = getSupabaseAdmin()
 
     // Verify trusted person access (re-check at stream time for security)
-    const { data: trustedPerson, error: tpError } = await adminClient
-      .from('trusted_persons')
-      .select('id, name, access_level')
-      .eq('user_id', ownerId)
-      .eq('linked_user_id', user.id)
-      .eq('invitation_status', 'accepted')
-      .eq('is_active', true)
-      .single()
-
-    if (tpError || !trustedPerson) {
+    const guard = await guardTrustedPersonAccess(adminClient, ownerId, user.id, 'view')
+    if (!guard.allowed || !guard.trustedPerson) {
       return NextResponse.json(
-        { error: 'Keine Berechtigung für diese Ansicht' },
+        { error: guard.details || 'Keine Berechtigung für diese Ansicht' },
         { status: 403 }
       )
     }
+    const trustedPerson = guard.trustedPerson
 
     // Get owner profile to verify tier
     const { data: ownerProfile } = await adminClient

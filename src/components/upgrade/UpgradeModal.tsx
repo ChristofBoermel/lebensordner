@@ -9,11 +9,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { FileText, Folder, Users, HardDrive } from 'lucide-react'
+import { FileText, Folder, Users, HardDrive, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { usePostHog, ANALYTICS_EVENTS } from '@/lib/posthog'
 
-type FeatureType = 'document' | 'folder' | 'trusted_person' | 'storage' | 'custom_category'
+type FeatureType = 'document' | 'folder' | 'trusted_person' | 'storage' | 'custom_category' | 'emergency_access'
 
 interface UpgradeModalProps {
   isOpen: boolean
@@ -59,6 +59,12 @@ const featureConfig: Record<FeatureType, {
     title: 'Mehr eigene Kategorien erstellen?',
     description: 'Organisieren Sie Ihre Dokumente nach Ihren eigenen Wünschen.',
     emoji: '🏷️',
+  },
+  emergency_access: {
+    icon: Shield,
+    title: 'Notfallzugang einrichten?',
+    description: 'Der Notfallzugang gibt Ihrer Familie Sicherheit — auch wenn Sie nicht erreichbar sind.',
+    emoji: '🛡️',
   },
 }
 
@@ -130,7 +136,7 @@ export function UpgradeModal({
             )}
             {premiumLimit && (
               <div className="flex items-center justify-between text-base">
-                <span className="text-warmgray-700">Mit Premium:</span>
+                <span className="text-warmgray-700">Mit Vorsorge:</span>
                 <span className="font-semibold text-sage-700">
                   {typeof premiumLimit === 'number' ? premiumLimit : premiumLimit}
                 </span>

@@ -8,7 +8,21 @@ const config = [
     },
   },
   {
-    ignores: ["dist/**"],
+    ignores: [
+      ".next/**",
+      "node_modules/**",
+      "dist/**",
+      "build/**",
+      "coverage/**",
+      "test-results/**",
+      "playwright-report/**",
+      "ownership-map-out/**",
+      "qa_screenshots/**",
+      "migration-data/**",
+      "public/**",
+      "supabase/**",
+      ".cache/**",
+    ],
   },
 ];
 

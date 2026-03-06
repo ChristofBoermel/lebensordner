@@ -159,7 +159,7 @@ describe('Debug Tools Integration Flow', () => {
       await user.type(searchInput, 'search@example.com')
 
       expect(screen.getByText('Search User')).toBeInTheDocument()
-      expect(screen.getByText('Premium')).toBeInTheDocument()
+      expect(screen.getByText('Vorsorge')).toBeInTheDocument()
     } finally {
       warnSpy.mockRestore()
       restore()

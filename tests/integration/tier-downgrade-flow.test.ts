@@ -118,12 +118,12 @@ describe('Tier Downgrade Flow Integration', () => {
   })
 
   describe('Feature Restrictions After Downgrade', () => {
-    it('document upload limits enforced after downgrade (premium -> free: unlimited -> 10)', () => {
+    it('document upload limits enforced after downgrade (premium -> free: unlimited -> 20)', () => {
       const premiumTier = getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_MONTHLY)
       const freeTier = getTierFromSubscription('canceled', STRIPE_PRICE_PREMIUM_MONTHLY)
 
       expect(canPerformAction(premiumTier, 'uploadDocument', 999)).toBe(true)
-      expect(canPerformAction(freeTier, 'uploadDocument', 10)).toBe(false)
+      expect(canPerformAction(freeTier, 'uploadDocument', 20)).toBe(false)
     })
 
     it('storage limits enforced after downgrade (4GB -> 100MB)', () => {
@@ -164,7 +164,7 @@ describe('Tier Downgrade Flow Integration', () => {
       const freeTier = getTierFromSubscription(null, null)
       const basicTier = getTierFromSubscription('active', STRIPE_PRICE_BASIC_MONTHLY)
 
-      expect(canPerformAction(freeTier, 'uploadDocument', 10)).toBe(false)
+      expect(canPerformAction(freeTier, 'uploadDocument', 20)).toBe(false)
       expect(canPerformAction(basicTier, 'uploadDocument', 10)).toBe(true)
       expect(hasFeatureAccess(basicTier, 'emailReminders')).toBe(true)
     })
@@ -173,7 +173,7 @@ describe('Tier Downgrade Flow Integration', () => {
       const basicTier = getTierFromSubscription('active', STRIPE_PRICE_BASIC_MONTHLY)
       const premiumTier = getTierFromSubscription('active', STRIPE_PRICE_PREMIUM_YEARLY)
 
-      expect(hasFeatureAccess(basicTier, 'twoFactorAuth')).toBe(false)
+      expect(hasFeatureAccess(basicTier, 'twoFactorAuth')).toBe(true) // 2FA now in basic
       expect(hasFeatureAccess(premiumTier, 'twoFactorAuth')).toBe(true)
       expect(canUploadFile(basicTier, 500, 1).allowed).toBe(false)
       expect(canUploadFile(premiumTier, 500, 1).allowed).toBe(true)

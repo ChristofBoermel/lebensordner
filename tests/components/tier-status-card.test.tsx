@@ -4,17 +4,17 @@ import { TierStatusCard, InfoBadge } from '@/components/ui/info-badge'
 
 describe('TierStatusCard', () => {
   describe('Premium Tier Display', () => {
-    it('should display "Premium" title', () => {
+    it('should display "Vorsorge" title', () => {
       render(<TierStatusCard tier="premium" />)
 
-      expect(screen.getByText('Premium')).toBeInTheDocument()
+      expect(screen.getByText('Vorsorge')).toBeInTheDocument()
     })
 
     it('should display correct description for premium tier', () => {
       render(<TierStatusCard tier="premium" />)
 
       expect(
-        screen.getByText('Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen')
+        screen.getByText('Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen — und werden im Notfall automatisch benachrichtigt.')
       ).toBeInTheDocument()
     })
 

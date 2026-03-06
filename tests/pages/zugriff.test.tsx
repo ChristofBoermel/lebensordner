@@ -145,7 +145,7 @@ describe('Zugriff Page Tier Display Integration', () => {
   })
 
   describe('Premium User Display', () => {
-    it('should display "Premium" when user has active premium subscription', async () => {
+    it('should display "Vorsorge" when user has active premium subscription', async () => {
       // Set up mock to return premium profile - this is the shared state used by the Supabase mock
       setMockProfile({
         subscription_status: 'active',
@@ -157,16 +157,16 @@ describe('Zugriff Page Tier Display Integration', () => {
 
       // Wait for the data to load and display tier (async useEffect fetches profile)
       await waitFor(() => {
-        expect(screen.getByText('Premium')).toBeInTheDocument()
+        expect(screen.getByText('Vorsorge')).toBeInTheDocument()
       })
 
       // Verify the full tier description is shown (this comes from TierStatusCard)
       expect(
-        screen.getByText('Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen')
+        screen.getByText('Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen — und werden im Notfall automatisch benachrichtigt.')
       ).toBeInTheDocument()
     })
 
-    it('should display "Premium" for yearly premium subscription', async () => {
+    it('should display "Vorsorge" for yearly premium subscription', async () => {
       setMockProfile({
         subscription_status: 'active',
         stripe_price_id: STRIPE_PRICE_PREMIUM_YEARLY,
@@ -175,11 +175,11 @@ describe('Zugriff Page Tier Display Integration', () => {
       render(<TierDisplayTestWrapper />)
 
       await waitFor(() => {
-        expect(screen.getByText('Premium')).toBeInTheDocument()
+        expect(screen.getByText('Vorsorge')).toBeInTheDocument()
       })
     })
 
-    it('should display "Premium" for trialing premium subscription', async () => {
+    it('should display "Vorsorge" for trialing premium subscription', async () => {
       setMockProfile({
         subscription_status: 'trialing',
         stripe_price_id: STRIPE_PRICE_PREMIUM_MONTHLY,
@@ -188,7 +188,7 @@ describe('Zugriff Page Tier Display Integration', () => {
       render(<TierDisplayTestWrapper />)
 
       await waitFor(() => {
-        expect(screen.getByText('Premium')).toBeInTheDocument()
+        expect(screen.getByText('Vorsorge')).toBeInTheDocument()
       })
     })
   })
@@ -293,11 +293,11 @@ describe('Premium Subscription Bug Reproduction', () => {
     // Wait for the async data fetching to complete and verify the UI
     // If there's a bug where Premium shows as Basis, this test will fail
     await waitFor(() => {
-      const premiumText = screen.queryByText('Premium')
+      const vorsorgeText = screen.queryByText('Vorsorge')
       const basisText = screen.queryByText('Basis')
 
-      // The page should show "Premium", NOT "Basis"
-      expect(premiumText).toBeInTheDocument()
+      // The page should show "Vorsorge", NOT "Basis"
+      expect(vorsorgeText).toBeInTheDocument()
       expect(basisText).not.toBeInTheDocument()
     })
   })
@@ -311,7 +311,7 @@ describe('Premium Subscription Bug Reproduction', () => {
     render(<TierDisplayTestWrapper />)
 
     await waitFor(() => {
-      expect(screen.getByText('Premium')).toBeInTheDocument()
+      expect(screen.getByText('Vorsorge')).toBeInTheDocument()
       expect(screen.queryByText('Basis')).not.toBeInTheDocument()
     })
   })
@@ -337,7 +337,7 @@ describe('Tier Feature Verification', () => {
     const tier = SUBSCRIPTION_TIERS.free
 
     expect(tier.limits.familyDashboard).toBe(false)
-    expect(tier.limits.maxDocuments).toBe(10)
+    expect(tier.limits.maxDocuments).toBe(20)
     expect(tier.limits.maxTrustedPersons).toBe(0)
   })
 })

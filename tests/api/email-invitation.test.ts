@@ -460,6 +460,23 @@ describe('Email Retry Queue Processing', () => {
     expect(data.error).toBe('Unauthorized')
   })
 
+  it('should return 401 when only x-vercel-cron header is provided', async () => {
+    const { GET } = await import('@/app/api/cron/process-email-queue/route')
+
+    const request = new Request('http://localhost/api/cron/process-email-queue', {
+      method: 'GET',
+      headers: {
+        'x-vercel-cron': '1',
+      },
+    })
+
+    const response = await GET(request)
+    const data = await response.json()
+
+    expect(response.status).toBe(401)
+    expect(data.error).toBe('Unauthorized')
+  })
+
   it('should return success with no pending items message when queue is empty', async () => {
     const { GET } = await import('@/app/api/cron/process-email-queue/route')
 

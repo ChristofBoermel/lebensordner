@@ -11,25 +11,27 @@ export interface TierConfig {
   priceMonthly: number
   priceYearly: number
   features: string[]
-  limits: {
-    maxDocuments: number
-    maxStorageMB: number
-    maxTrustedPersons: number
-    maxSubcategories: number // -1 = unlimited
-    maxCustomCategories: number // -1 = unlimited
-    emailReminders: boolean
-    documentExpiry: boolean
-    twoFactorAuth: boolean
-    prioritySupport: boolean
-    familyMembers: number
-    // New feature flags
-    smsNotifications: boolean
-    familyDashboard: boolean
-    customCategories: boolean
-  }
+  limits: TierLimits
   highlighted?: boolean
   badge?: string
   deprecated?: boolean
+}
+
+export interface TierLimits {
+  maxDocuments: number
+  maxStorageMB: number
+  maxTrustedPersons: number
+  maxSubcategories: number // -1 = unlimited
+  maxCustomCategories: number // -1 = unlimited
+  emailReminders: boolean
+  documentExpiry: boolean
+  twoFactorAuth: boolean
+  prioritySupport: boolean
+  familyMembers: number
+  smsNotifications: boolean
+  familyDashboard: boolean
+  customCategories: boolean
+  emergencyAccess: boolean
 }
 
 // Helper to get price IDs at runtime (for server-side use)
@@ -43,11 +45,6 @@ export function getStripePriceIds() {
       monthly: process.env.STRIPE_PRICE_PREMIUM_MONTHLY || process.env.STRIPE_PRICE_ID || '',
       yearly: process.env.STRIPE_PRICE_PREMIUM_YEARLY || '',
     },
-    // Family tier uses premium features - these price IDs should map to premium tier
-    family: {
-      monthly: process.env.STRIPE_PRICE_FAMILY_MONTHLY || '',
-      yearly: process.env.STRIPE_PRICE_FAMILY_YEARLY || '',
-    },
   }
 }
 
@@ -59,13 +56,13 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     priceMonthly: 0,
     priceYearly: 0,
     features: [
-      'Bis zu 10 Dokumente',
+      'Bis zu 20 Dokumente',
       '100 MB Speicherplatz',
       '3 Ordner',
       'Basis-Dashboard',
     ],
     limits: {
-      maxDocuments: 10,
+      maxDocuments: 20,
       maxStorageMB: 100,
       maxTrustedPersons: 0,
       maxSubcategories: 3,
@@ -78,14 +75,15 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       smsNotifications: false,
       familyDashboard: false,
       customCategories: false,
+      emergencyAccess: false,
     },
   },
   basic: {
     id: 'basic',
     name: 'Basis',
     description: 'Für Einzelpersonen',
-    priceMonthly: 4.90,
-    priceYearly: 49,
+    priceMonthly: 5.90,
+    priceYearly: 59,
     features: [
       'Bis zu 50 Dokumente',
       '500 MB Speicherplatz',
@@ -94,6 +92,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       '5 Eigene Kategorien',
       'E-Mail-Erinnerungen',
       'Dokument-Ablaufdatum',
+      'Zwei-Faktor-Auth',
       'Familien-Dashboard', // Added
     ],
     limits: {
@@ -104,20 +103,21 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       maxCustomCategories: 5,
       emailReminders: true,
       documentExpiry: true,
-      twoFactorAuth: false,
+      twoFactorAuth: true,
       prioritySupport: false,
       familyMembers: 0,
       smsNotifications: false,
       familyDashboard: true, // Changed to true
       customCategories: true,
+      emergencyAccess: false,
     },
   },
   premium: {
     id: 'premium',
-    name: 'Premium',
-    description: 'Voller Schutz',
-    priceMonthly: 11.90,
-    priceYearly: 119,
+    name: 'Vorsorge',
+    description: 'Für Ihre Familie',
+    priceMonthly: 13.90,
+    priceYearly: 139,
     features: [
       'Unbegrenzte Dokumente',
       '4 GB Speicherplatz', // Changed from 10 GB to 4 GB
@@ -130,6 +130,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       'Prioritäts-Support',
       'Familien-Dashboard',
       'SMS-Benachrichtigungen',
+      'Notfallzugang',
     ],
     limits: {
       maxDocuments: -1, // unlimited
@@ -145,9 +146,10 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       smsNotifications: true,
       familyDashboard: true,
       customCategories: true,
+      emergencyAccess: true,
     },
     highlighted: true,
-    badge: 'Beliebt',
+    badge: 'Meistgewählt',
   },
 }
 
@@ -163,6 +165,16 @@ export function getTierFromSubscription(
   // Check price ID against known price IDs
   const priceIds = getStripePriceIds()
   const normalizedPriceId = priceId?.toLowerCase()
+  const legacyPremiumPriceIds = [
+    process.env.STRIPE_PRICE_PREMIUM_MONTHLY_OLD,
+    process.env.STRIPE_PRICE_PREMIUM_YEARLY_OLD,
+    process.env.STRIPE_PRICE_PREMIUM_LEGACY_MONTHLY,
+    process.env.STRIPE_PRICE_PREMIUM_LEGACY_YEARLY,
+    // Grandfather known previously used production monthly price.
+    'price_1sr6skcaexnimhccdbmdf7e6',
+  ]
+    .filter((id): id is string => Boolean(id))
+    .map((id) => id.toLowerCase())
   const normalizedPriceIds = {
     basic: {
       monthly: priceIds.basic.monthly?.toLowerCase(),
@@ -171,10 +183,6 @@ export function getTierFromSubscription(
     premium: {
       monthly: priceIds.premium.monthly?.toLowerCase(),
       yearly: priceIds.premium.yearly?.toLowerCase(),
-    },
-    family: {
-      monthly: priceIds.family.monthly?.toLowerCase(),
-      yearly: priceIds.family.yearly?.toLowerCase(),
     },
   }
 
@@ -194,12 +202,8 @@ export function getTierFromSubscription(
     return SUBSCRIPTION_TIERS.premium
   }
 
-  // Family tier price IDs are treated as premium tier for feature access
-  // This allows family plan subscribers to have full premium features
-  if (
-    normalizedPriceId === normalizedPriceIds.family.monthly ||
-    normalizedPriceId === normalizedPriceIds.family.yearly
-  ) {
+  // Grandfather legacy premium/vorsorge price IDs so existing subscribers keep access.
+  if (normalizedPriceId && legacyPremiumPriceIds.includes(normalizedPriceId)) {
     return SUBSCRIPTION_TIERS.premium
   }
 
@@ -229,7 +233,7 @@ export function hasFeatureAccess(
 // Check if user can perform action based on tier limits
 export function canPerformAction(
   tier: TierConfig,
-  action: 'uploadDocument' | 'addTrustedPerson' | 'use2FA' | 'useEmailReminders' | 'addSubcategory' | 'addCustomCategory',
+  action: 'uploadDocument' | 'addTrustedPerson' | 'use2FA' | 'useEmailReminders' | 'addSubcategory' | 'addCustomCategory' | 'useEmergencyAccess',
   currentCount?: number
 ): boolean {
   switch (action) {
@@ -248,6 +252,8 @@ export function canPerformAction(
       return tier.limits.twoFactorAuth
     case 'useEmailReminders':
       return tier.limits.emailReminders
+    case 'useEmergencyAccess':
+      return tier.limits.emergencyAccess
     default:
       return false
   }
@@ -291,7 +297,7 @@ export function getTierDisplayInfo(tier: TierConfig): {
 } {
   switch (tier.id) {
     case 'premium':
-      return { name: 'Premium', color: 'text-purple-600', badge: 'bg-purple-100', viewOnly: false }
+      return { name: 'Vorsorge', color: 'text-purple-600', badge: 'bg-purple-100', viewOnly: false }
     case 'basic':
       return { name: 'Basis', color: 'text-blue-600', badge: 'bg-blue-100', viewOnly: true }
     default:

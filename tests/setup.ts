@@ -52,6 +52,25 @@ beforeAll(() => {
     configurable: true,
     value: vi.fn(),
   })
+  if (typeof URL.createObjectURL !== 'function') {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => 'blob:mock-url'),
+    })
+  }
+  if (typeof URL.revokeObjectURL !== 'function') {
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      writable: true,
+      value: vi.fn(),
+    })
+  }
+  Object.defineProperty(window, 'open', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(),
+  })
   server.listen({ onUnhandledRequest: 'bypass' })
 })
 

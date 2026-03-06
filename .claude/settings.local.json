@@ -64,7 +64,13 @@
       "WebFetch(domain:tamagui.dev)",
       "Bash(pnpm install:*)",
       "Bash(/c/Users/chris/AppData/Roaming/npm/pnpm install:*)",
-      "WebFetch(domain:www.authgear.com)"
+      "WebFetch(domain:www.authgear.com)",
+      "Bash(WT=\"D:/Projects/Lebensordner/.worktrees/monetization-frontend-update\")",
+      "Read(//d/Projects/Lebensordner/.worktrees/monetization-frontend-update/$WT/src/app/\\(dashboard\\)/abo/**)",
+      "Bash(WT=\"D:/Projects/Lebensordner/.worktrees/monetization-frontend-update\" grep -n \"einstellungen\\\\|EmergencyAccess\\\\|NotfallZugang\\\\|Notfallzugang\" \"$WT/src/app/\\(dashboard\\)/einstellungen/page.tsx\")",
+      "Bash(python3:*)",
+      "Bash(grep -v \"tier.id === ''premium''\")",
+      "Bash(grep -v \"case ''premium''\")"
     ]
   }
 }

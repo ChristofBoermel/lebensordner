@@ -24,7 +24,6 @@ interface SubscriptionInfo {
 interface StripePriceIds {
   basic: { monthly: string; yearly: string }
   premium: { monthly: string; yearly: string }
-  family: { monthly: string; yearly: string }
 }
 
 // Map feature keys to human-readable German descriptions
@@ -36,6 +35,7 @@ const FEATURE_LABELS: Record<string, string> = {
   smsNotifications: 'SMS-Benachrichtigungen',
   familyDashboard: 'Familien-Dashboard',
   customCategories: 'Eigene Kategorien',
+  useEmergencyAccess: 'Notfallzugang',
 }
 
 export default function AboPage() {
@@ -204,9 +204,6 @@ export default function AboPage() {
     // Check premium tier price IDs
     if (priceId === priceIds.premium.monthly || priceId === priceIds.premium.yearly) return 'premium'
 
-    // Family tier price IDs are treated as premium tier for feature access
-    if (priceId === priceIds.family.monthly || priceId === priceIds.family.yearly) return 'premium'
-
     // Null or unknown price_id with active subscription → basic (matches server logic)
     if (!priceId) {
 
@@ -246,14 +243,15 @@ export default function AboPage() {
 
   // Feature comparison data - synced with SUBSCRIPTION_TIERS constants
   const featureComparison = [
-    { name: 'Dokumente', free: '10', basic: '50', premium: 'Unbegrenzt' },
+    { name: 'Dokumente', free: '20', basic: '50', premium: 'Unbegrenzt' },
     { name: 'Speicherplatz', free: '100 MB', basic: '500 MB', premium: '4 GB' },
     { name: 'Vertrauenspersonen', free: '1', basic: '3', premium: '5' },
     { name: 'Ordner', free: '3', basic: '10', premium: 'Unbegrenzt' },
     { name: 'E-Mail-Erinnerungen', free: false, basic: true, premium: true },
     { name: 'Dokument-Ablaufdatum', free: false, basic: true, premium: true },
     { name: 'Eigene Kategorien', free: false, basic: '5', premium: 'Unbegrenzt' },
-    { name: 'Zwei-Faktor-Auth', free: false, basic: false, premium: true },
+    { name: 'Zwei-Faktor-Auth', free: false, basic: true, premium: true },
+    { name: 'Notfallzugang', free: false, basic: false, premium: true },
     { name: 'Prioritäts-Support', free: false, basic: false, premium: true },
   ]
 
@@ -370,7 +368,7 @@ export default function AboPage() {
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                   <span className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full bg-sage-600 text-white shadow-lg">
                     <Star className="w-4 h-4 fill-current" />
-                    Empfohlen
+                    Meistgewählt
                   </span>
                 </div>
               )}
@@ -386,9 +384,9 @@ export default function AboPage() {
               <CardHeader className="pb-4 pt-8">
                 <CardTitle className="text-2xl">{tier.name}</CardTitle>
                 <CardDescription className="text-base">
-                  {tier.id === 'free' && 'Für den Start'}
-                  {tier.id === 'basic' && 'Für Einzelpersonen'}
-                  {tier.id === 'premium' && 'Für umfassenden Schutz'}
+                  {tier.id === 'free' && 'Einfach starten'}
+                  {tier.id === 'basic' && 'Für Ihren Alltag'}
+                  {tier.id === 'premium' && 'Für Ihre Familie'}
                 </CardDescription>
               </CardHeader>
 
@@ -540,8 +538,6 @@ export default function AboPage() {
                 <p>Basic Yearly: {priceIds.basic.yearly || 'not set'}</p>
                 <p>Premium Monthly: {priceIds.premium.monthly || 'not set'}</p>
                 <p>Premium Yearly: {priceIds.premium.yearly || 'not set'}</p>
-                <p>Family Monthly: {priceIds.family.monthly || 'not set'}</p>
-                <p>Family Yearly: {priceIds.family.yearly || 'not set'}</p>
               </div>
             )}
             <div className="mt-2 pt-2 border-t border-warmgray-300">

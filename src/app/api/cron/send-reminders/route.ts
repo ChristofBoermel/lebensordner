@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import { emitStructuredError } from "@/lib/errors/structured-logger";
+import { emitStructuredError, emitStructuredWarn } from "@/lib/errors/structured-logger";
 
 // This endpoint should be called by a cron job (e.g., Vercel Cron, GitHub Actions, or external service)
 // Recommended: Call daily at 8:00 AM
@@ -95,15 +95,17 @@ export async function GET(request: Request) {
     );
   }
 
-  // Check authorization: either Bearer token or Vercel cron header
+  // Check authorization: Bearer token only
   const authHeader = request.headers.get("authorization");
-  const vercelCronHeader = request.headers.get("x-vercel-cron");
 
   const isAuthorizedByBearer = authHeader === `Bearer ${CRON_SECRET}`;
-  const isAuthorizedByVercel = vercelCronHeader === "1";
 
-  if (!isAuthorizedByBearer && !isAuthorizedByVercel) {
-    console.warn("[CRON] Unauthorized request attempt");
+  if (!isAuthorizedByBearer) {
+    emitStructuredWarn({
+      event_type: "auth",
+      event_message: "Unauthorized cron request rejected",
+      endpoint: "/api/cron/send-reminders",
+    });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

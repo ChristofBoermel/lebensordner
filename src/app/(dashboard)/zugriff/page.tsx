@@ -82,7 +82,6 @@ interface FamilyMember {
 interface StripePriceIds {
   basic: { monthly: string; yearly: string }
   premium: { monthly: string; yearly: string }
-  family: { monthly: string; yearly: string }
 }
 
 export default function ZugriffPage() {
@@ -184,10 +183,6 @@ export default function ZugriffPage() {
         monthly: priceIds?.premium?.monthly?.toLowerCase() ?? '',
         yearly: priceIds?.premium?.yearly?.toLowerCase() ?? '',
       },
-      family: {
-        monthly: priceIds?.family?.monthly?.toLowerCase() ?? '',
-        yearly: priceIds?.family?.yearly?.toLowerCase() ?? '',
-      },
     }
 
     // No status or canceled → free (matches server logic)
@@ -212,14 +207,6 @@ export default function ZugriffPage() {
     if (
       normalizedPriceId === normalizedPriceIds.premium.monthly
       || normalizedPriceId === normalizedPriceIds.premium.yearly
-    ) {
-      return SUBSCRIPTION_TIERS.premium
-    }
-
-    // Family tier price IDs are treated as premium tier for feature access
-    if (
-      normalizedPriceId === normalizedPriceIds.family.monthly
-      || normalizedPriceId === normalizedPriceIds.family.yearly
     ) {
       return SUBSCRIPTION_TIERS.premium
     }
@@ -853,11 +840,11 @@ export default function ZugriffPage() {
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs">
                       {userTier.id === 'premium' ? (
-                        <p>Mit Ihrem Premium-Abo können Empfänger alle Dokumente herunterladen</p>
+                        <p>Mit Ihrem Vorsorge-Abo können Empfänger alle Dokumente herunterladen</p>
                       ) : userTier.id === 'basic' ? (
                         <p>Mit Ihrem Basis-Abo können Empfänger Dokumente nur ansehen, nicht herunterladen</p>
                       ) : (
-                        <p>Upgraden Sie auf Basis oder Premium, um diese Funktion zu nutzen</p>
+                        <p>Upgraden Sie auf Basis oder Vorsorge, um diese Funktion zu nutzen</p>
                       )}
                     </TooltipContent>
                   </Tooltip>
@@ -909,7 +896,7 @@ export default function ZugriffPage() {
                   Ansichts-Link erstellen
                 </Button>
                 <p className="text-xs text-center text-warmgray-500">
-                  <Link href="/abo" className="text-sage-600 hover:underline">Upgrade auf Premium</Link> für Download-Links
+                  <Link href="/abo" className="text-sage-600 hover:underline">Upgrade auf Vorsorge</Link> für Download-Links
                 </p>
               </div>
             ) : (
@@ -948,7 +935,7 @@ export default function ZugriffPage() {
                       {userTier.id === 'premium' ? (
                         <p>Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen</p>
                       ) : userTier.id === 'basic' ? (
-                        <p>Ihre Vertrauenspersonen können Dokumente nur ansehen (Upgrade auf Premium für Downloads)</p>
+                        <p>Ihre Vertrauenspersonen können Dokumente nur ansehen (Upgrade auf Vorsorge für Downloads)</p>
                       ) : (
                         <p>Upgraden Sie auf ein kostenpflichtiges Abo, um diese Funktion zu nutzen</p>
                       )}
@@ -994,7 +981,7 @@ export default function ZugriffPage() {
             <div className="flex items-start gap-4">
               <Crown className="w-6 h-6 text-amber-600 flex-shrink-0" />
               <div className="flex-1">
-                <p className="font-medium text-amber-900 mb-1">Premium-Funktion</p>
+                <p className="font-medium text-amber-900 mb-1">Vorsorge-Funktion</p>
                 <p className="text-sm text-amber-800 mb-3">
                   Mit einem kostenpflichtigen Abo können Sie Dokumente mit Vertrauenspersonen teilen.
                 </p>
@@ -1016,9 +1003,9 @@ export default function ZugriffPage() {
             <div className="flex items-start gap-4">
               <Download className="w-6 h-6 text-orange-600 flex-shrink-0" />
               <div className="flex-1">
-                <p className="font-medium text-orange-900 mb-1">Upgrade auf Premium für Download-Zugriff</p>
+                <p className="font-medium text-orange-900 mb-1">Upgrade auf Vorsorge für Download-Zugriff</p>
                 <p className="text-sm text-orange-800 mb-3">
-                  Mit Ihrem Basis-Abo können Ihre Vertrauenspersonen Dokumente nur ansehen. Upgraden Sie auf Premium, damit sie Dokumente auch herunterladen können.
+                  Mit Ihrem Basis-Abo können Ihre Vertrauenspersonen Dokumente nur ansehen. Upgraden Sie auf Vorsorge, damit sie Dokumente auch herunterladen können.
                 </p>
                 <div className="flex items-center gap-4 mb-3">
                   <div className="flex items-center gap-2 text-sm">
@@ -1028,12 +1015,12 @@ export default function ZugriffPage() {
                   <span className="text-orange-400">→</span>
                   <div className="flex items-center gap-2 text-sm">
                     <Download className="w-4 h-4 text-green-600" />
-                    <span className="text-orange-800">Mit Premium: <strong>Ansicht + Download</strong></span>
+                    <span className="text-orange-800">Mit Vorsorge: <strong>Ansicht + Download</strong></span>
                   </div>
                 </div>
                 <Link href="/abo">
                   <Button size="sm" variant="outline" className="border-orange-300 hover:bg-orange-100">
-                    Auf Premium upgraden
+                    Auf Vorsorge upgraden
                   </Button>
                 </Link>
               </div>
@@ -1297,7 +1284,7 @@ export default function ZugriffPage() {
                       <div>
                         <p className="font-medium text-green-800">Vollständiger Download-Zugriff verfügbar</p>
                         <p className="text-sm text-green-700">
-                          Sie können Dokumente von Familienmitgliedern mit Premium-Abo herunterladen.
+                          Sie können Dokumente von Familienmitgliedern mit Vorsorge-Abo herunterladen.
                         </p>
                       </div>
                     </div>
@@ -1309,7 +1296,7 @@ export default function ZugriffPage() {
                       <div>
                         <p className="font-medium text-blue-800">Nur-Ansicht-Zugriff verfügbar</p>
                         <p className="text-sm text-blue-700">
-                          Sie können Dokumente ansehen, aber nicht herunterladen. Downloads erfordern ein Premium-Abo des Dokumenteninhabers.
+                          Sie können Dokumente ansehen, aber nicht herunterladen. Downloads erfordern ein Vorsorge-Abo des Dokumenteninhabers.
                         </p>
                       </div>
                     </div>
@@ -1388,7 +1375,7 @@ export default function ZugriffPage() {
                                           </TooltipTrigger>
                                           <TooltipContent side="top" className="max-w-xs" id={`tier-desc-${member.id}`}>
                                             {member.tier.canDownload ? (
-                                              <p>Premium-Mitglied - Sie können alle Dokumente herunterladen</p>
+                                              <p>Vorsorge-Mitglied - Sie können alle Dokumente herunterladen</p>
                                             ) : member.tier.viewOnly ? (
                                               <p>Basis-Mitglied - Sie können Dokumente nur ansehen</p>
                                             ) : (
@@ -1452,7 +1439,7 @@ export default function ZugriffPage() {
                                         Nur Ansicht
                                       </Button>
                                       <span className="text-xs text-center sm:text-left text-warmgray-500">
-                                        Downloads mit Premium verfügbar
+                                        Downloads mit Vorsorge verfügbar
                                       </span>
                                     </div>
                                   ) : (
@@ -1467,7 +1454,7 @@ export default function ZugriffPage() {
                                         Abo erforderlich
                                       </Button>
                                       <span className="text-xs text-center sm:text-left text-warmgray-500">
-                                        Diese Person benötigt ein Basis- oder Premium-Abo
+                                        Diese Person benötigt ein Basis- oder Vorsorge-Abo
                                       </span>
                                     </div>
                                   )}
@@ -1617,7 +1604,7 @@ export default function ZugriffPage() {
                 Der Link ist 12 Stunden gültig und kann nur einmal verwendet werden.</>
               ) : (
                 <>Erstellen Sie einen Link, mit dem die Person alle Ihre Dokumente im Browser ansehen kann.
-                Der Link ist 12 Stunden gültig. Upgrade auf Premium für Download-Links.</>
+                Der Link ist 12 Stunden gültig. Upgrade auf Vorsorge für Download-Links.</>
               )}
             </DialogDescription>
           </DialogHeader>
@@ -1641,7 +1628,7 @@ export default function ZugriffPage() {
                   <Eye className="w-4 h-4 inline mr-1" />
                   Mit diesem Link kann die Person Ihre Dokumente nur ansehen, nicht herunterladen.
                   <Link href="/abo" className="block mt-1 text-sage-600 hover:underline">
-                    Upgrade auf Premium für Download-Links
+                    Upgrade auf Vorsorge für Download-Links
                   </Link>
                 </div>
               )}

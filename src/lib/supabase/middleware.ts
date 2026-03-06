@@ -56,6 +56,25 @@ export async function updateSession(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
+  if (user) {
+    const nowIso = new Date().toISOString()
+    const oneHourAgoIso = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+
+    // Debounce activity writes: update only when stale/missing and clear prior emergency notification marker.
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          last_active_at: nowIso,
+          emergency_access_notified_at: null,
+        })
+        .eq('id', user.id)
+        .or(`last_active_at.is.null,last_active_at.lt.${oneHourAgoIso}`)
+    } catch {
+      // Best-effort write: activity tracking must not break request/session middleware.
+    }
+  }
+
   const protectedRoutes = ['/dashboard', '/dokumente', '/notfall', '/zugriff']
   const authRoutes = ['/anmelden', '/registrieren']
   const pathname = request.nextUrl.pathname

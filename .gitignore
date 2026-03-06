@@ -107,3 +107,8 @@ deploy/.env.production
 # Migration data (database dumps, storage exports)
 migration-data/
 qa_screenshots/
+.cache/
+ownership-map-out/
+claude-plan.md
+codex-plan.md
+claude-frontend-security-plan.md

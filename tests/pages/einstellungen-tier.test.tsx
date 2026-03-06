@@ -117,7 +117,7 @@ describe("Einstellungen Tier Display", () => {
     await screen.findByText("Einstellungen");
     await waitFor(() => {
       expect(
-        screen.getAllByText(/Basis|Premium|Kostenlos/).length,
+        screen.getAllByText(/Basis|Vorsorge|Kostenlos/).length,
       ).toBeGreaterThan(0);
     });
   });
@@ -145,8 +145,8 @@ describe("Einstellungen Tier Display", () => {
     render(<EinstellungenPage />);
 
     await screen.findByText("Speicherplatz");
-    expect(screen.getByText(/verfügbar/i)).toBeInTheDocument();
-    expect(screen.getByText(/Upgrade/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/verfügbar/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Upgrade/i).length).toBeGreaterThan(0);
   });
 
   it("shows premium badge for premium users", async () => {
@@ -159,7 +159,7 @@ describe("Einstellungen Tier Display", () => {
     render(<EinstellungenPage />);
 
     await screen.findByText("Einstellungen");
-    expect(screen.getByText("Premium")).toBeInTheDocument();
+    expect(screen.getByText("Vorsorge")).toBeInTheDocument();
   });
 
   it("renders tier badge and upgrade prompt in the senior payment card", async () => {
@@ -216,7 +216,7 @@ describe("Einstellungen Tier Display", () => {
     rerender(<EinstellungenPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Premium")).toBeInTheDocument();
+      expect(screen.getByText("Vorsorge")).toBeInTheDocument();
     });
   });
 

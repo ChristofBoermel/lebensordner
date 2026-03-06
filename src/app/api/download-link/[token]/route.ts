@@ -1,18 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createHash } from 'crypto'
 import JSZip from 'jszip'
 import { logSecurityEvent, EVENT_DOWNLOAD_LINK_VIEWED } from '@/lib/security/audit-log'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { buildDownloadTokenHashPrefix, hashDownloadToken } from '@/lib/security/download-token'
+import {
+  getRecipientChallengeCookieName,
+  readCookieValueFromHeader,
+  verifyRecipientChallengeCookieValue,
+} from '@/lib/security/download-link-recipient-challenge'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-function buildTokenHashPrefix(token: string): string {
-  return createHash('sha256').update(token).digest('hex').slice(0, 12)
-}
 
 export async function GET(
   request: Request,
@@ -21,6 +22,9 @@ export async function GET(
   try {
     const params = await context.params
     const token = params.token
+    const tokenHash = hashDownloadToken(token)
+    const forwarded = request.headers.get('x-forwarded-for') || ''
+    const clientIp = forwarded.split(',')[0]?.trim() || '127.0.0.1'
 
     if (!token) {
       return NextResponse.json({ error: 'Token fehlt' }, { status: 400 })
@@ -32,13 +36,28 @@ export async function GET(
     const { data: downloadToken, error: tokenError } = await adminClient
       .from('download_tokens')
       .select('*')
-      .eq('token', token)
+      .eq('token_hash', tokenHash)
       .single()
 
     if (tokenError || !downloadToken) {
       return NextResponse.json(
         { error: 'Ungültiger oder abgelaufener Link' },
         { status: 404 }
+      )
+    }
+
+    const tokenHashPrefix = tokenHash.slice(0, 12)
+    const cookieName = getRecipientChallengeCookieName(tokenHashPrefix)
+    const cookieValue = readCookieValueFromHeader(request.headers.get('cookie'), cookieName)
+    const recipientVerified = verifyRecipientChallengeCookieValue(
+      cookieValue,
+      tokenHashPrefix,
+      downloadToken.recipient_email
+    )
+    if (!recipientVerified) {
+      return NextResponse.json(
+        { error: 'Empfänger-Verifizierung erforderlich', requiresRecipientVerification: true },
+        { status: 403 }
       )
     }
 
@@ -253,7 +272,7 @@ export async function GET(
         recipient_email: downloadToken.recipient_email,
         document_count: orderedDocuments?.length || 0,
         download_token_id: downloadToken.id,
-        download_token_hash_prefix: buildTokenHashPrefix(token),
+        download_token_hash_prefix: buildDownloadTokenHashPrefix(token),
         link_type: 'download',
       },
       request: request as NextRequest,
@@ -262,7 +281,12 @@ export async function GET(
     // Mark token as used
     await adminClient
       .from('download_tokens')
-      .update({ used_at: new Date().toISOString() })
+      .update({
+        used_at: new Date().toISOString(),
+        last_accessed_at: new Date().toISOString(),
+        last_accessed_ip: clientIp,
+        access_count: (downloadToken.access_count ?? 0) + 1,
+      })
       .eq('id', downloadToken.id)
 
     // Create safe filename

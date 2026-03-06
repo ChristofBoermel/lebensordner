@@ -379,7 +379,7 @@ export function AdminDashboard({ initialStats, initialUsers }: AdminDashboardPro
                     <td className="py-3 px-4">
                       {user.subscription_status === 'active' && (
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-sage-100 text-sage-700">
-                          <Crown className="w-3 h-3" /> Premium
+                          <Crown className="w-3 h-3" /> Vorsorge
                         </span>
                       )}
                       {user.subscription_status === 'trialing' && (
