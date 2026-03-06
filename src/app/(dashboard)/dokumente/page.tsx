@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
@@ -574,8 +574,6 @@ export default function DocumentsPage() {
       ? "locked"
       : "unlocked";
   const isUnlockRequested = vaultContext.isUnlockRequested;
-  // allowed: imperative-sync - detect unlock modal close transitions.
-  const previousUnlockRequestedRef = useRef(isUnlockRequested);
   const { seniorMode } = useThemeSafe();
   const { capture } = usePostHog();
 
@@ -643,19 +641,6 @@ export default function DocumentsPage() {
   const hasRecentUnlock =
     vaultContext.isUnlocked &&
     Date.now() - vaultContext.lastUnlockTimestamp <= FIVE_MINUTES_MS;
-
-  useEffect(() => {
-    const wasUnlockRequested = previousUnlockRequestedRef.current;
-    previousUnlockRequestedRef.current = isUnlockRequested;
-
-    // User dismissed unlock dialog without unlocking:
-    // clear pending targets so the prompt does not immediately re-open.
-    if (wasUnlockRequested && !isUnlockRequested && !hasRecentUnlock) {
-      setPendingUnlockCategory(null);
-      setPendingUnlockDocumentId(null);
-      setHighlightedDoc(null);
-    }
-  }, [hasRecentUnlock, isUnlockRequested]);
 
   useEffect(() => {
     if (!hasRecentUnlock) {

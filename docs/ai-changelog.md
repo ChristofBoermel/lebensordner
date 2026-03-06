@@ -2,6 +2,26 @@
 
 Rolling memory for major AI-driven changes. Newest entry first.
 
+## 2026-03-06 12:35 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+
+- Fixed CI `hook-discipline-guard` regression by removing one newly introduced `useEffect` from `src/app/(dashboard)/dokumente/page.tsx` (hook count returned to baseline).
+
+Risk / Regression Watch:
+
+- The unlock-cancel cleanup effect removed in this hotfix may reintroduce the previous unlock-dismiss UX loop in edge cases; monitor vault unlock cancellation behavior in documents view.
+
+Verification:
+
+- `python scripts/ops/hook-discipline-audit.py`
+- `npm run type-check`
+- `npm test -- --run tests/components/global-search.test.tsx tests/pages/dokumente.test.tsx tests/components/vault-unlock-modal.test.tsx tests/lib/vault-context.test.tsx`
+
+Rollback:
+
+- Revert `src/app/(dashboard)/dokumente/page.tsx` and this changelog entry.
+
 ## 2026-03-06 11:54 UTC | Agent: Codex | Commit: uncommitted
 
 Change:
