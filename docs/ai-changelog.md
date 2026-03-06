@@ -2,6 +2,30 @@
 
 Rolling memory for major AI-driven changes. Newest entry first.
 
+## 2026-03-06 11:54 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+
+- Fixed global document-search navigation to preserve folder context: search result URLs now include `unterordner` when a document belongs to a subcategory.
+- Updated `src/components/search/global-search.tsx` document queries (both title/notes and metadata branches) to include `subcategory_id` and `custom_category_id`, and centralized URL creation for consistent routing behavior.
+- Updated `src/app/(dashboard)/dokumente/page.tsx` URL highlight handling so deep links resolve the target document context, switch to the correct category/custom category tab, and open the matching subfolder before highlight scroll (without forcing preview open).
+- Added regression coverage in `tests/pages/dokumente.test.tsx` for deep-link highlight into a subfolder document.
+- Updated `tests/components/global-search.test.tsx` expected navigation URL to include folder context and hardened `tests/setup.ts` with a stable `scrollIntoView` mock plus configurable mocked `useSearchParams`.
+
+Risk / Regression Watch:
+
+- Deep links now prefer highlight document context over plain category param; verify existing category-only links still open the expected tab/folder state.
+- Test setup now mocks `scrollIntoView` globally and supports configurable query strings; monitor for unintended coupling in future navigation tests.
+
+Verification:
+
+- `npm run type-check`
+- `npm test -- --run tests/components/global-search.test.tsx tests/pages/dokumente.test.tsx`
+
+Rollback:
+
+- Revert `src/components/search/global-search.tsx`, `src/app/(dashboard)/dokumente/page.tsx`, `tests/components/global-search.test.tsx`, `tests/pages/dokumente.test.tsx`, `tests/setup.ts`, and this changelog entry.
+
 ## 2026-03-04 UTC — Traycer.AI — uncommitted
 
 **T6: Full UI audit — onboarding dialogs, card hierarchy, tab scroll, hover states, dark mode & dialog consistency**
@@ -1445,6 +1469,58 @@ Verification:
 Rollback:
 
 - Revert `src/app/(dashboard)/dokumente/page.tsx`, `src/components/dokumente/EncryptedNotesEditor.tsx`, `src/components/ui/document-preview.tsx`, `src/components/ui/document-viewer.tsx`.
+
+## 2026-03-06 11:46 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+
+- Fixed vault unlock form behavior in `src/components/vault/VaultUnlockModal.tsx` by making mode-switch link buttons explicit `type="button"` so they no longer trigger unintended form submits/unmount warnings.
+- Added recovery-key-gated vault passphrase reset flow:
+  - New `resetPassphraseWithRecovery(recoveryKeyHex, newPassphrase)` action in `src/lib/vault/VaultContext.tsx`.
+  - Unlock modal recovery mode now supports entering a recovery key plus new passphrase/confirmation to rewrite only the passphrase wrapper while preserving recovery wrapping material.
+- Added regression coverage:
+  - `tests/components/vault-unlock-modal.test.tsx` for Enter-key submit behavior, non-submitting mode switches, and recovery reset invocation.
+  - `tests/lib/vault-context.test.tsx` for successful and failed recovery-based passphrase reset behavior.
+
+Risk / Regression Watch:
+
+- Reset flow depends on existing `/api/vault/key-material` payload shape (`kdf_params`, `wrapped_mk_with_recovery`, `recovery_key_salt`); malformed historical rows will now surface clearer user-facing errors.
+- Recovery reset intentionally reuses existing `kdf_params`; if parameters are migrated in future, reset behavior should be reviewed to keep wrappers consistent.
+
+Verification:
+
+- `npm test -- --run tests/components/vault-unlock-modal.test.tsx tests/lib/vault-context.test.tsx`
+- `npm run type-check`
+- `npx eslint src/lib/vault/VaultContext.tsx src/components/vault/VaultUnlockModal.tsx tests/components/vault-unlock-modal.test.tsx tests/lib/vault-context.test.tsx --max-warnings=0`
+- `npm run lint` (timed out in this workspace due lint traversing large `.worktrees/.next` artifacts)
+
+Rollback:
+
+- Revert `src/lib/vault/VaultContext.tsx`, `src/components/vault/VaultUnlockModal.tsx`, `tests/components/vault-unlock-modal.test.tsx`, and `tests/lib/vault-context.test.tsx`.
+
+## 2026-03-06 11:23 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+
+- Fixed document-open interaction flow in `src/app/(dashboard)/dokumente/page.tsx`: left-clicking a document row now opens the same preview flow as `Ansehen` after category/folder targeting.
+- Added unlock-cancel guard in documents page: when unlock modal is closed without successful unlock, pending unlock targets/highlight are cleared to prevent immediate re-open loops.
+- Updated `src/components/search/global-search.tsx` dialog close handling to trigger `onClose` only on actual close transitions.
+- Added regression coverage:
+  - `tests/pages/dokumente.test.tsx`: row click opens preview.
+  - `tests/components/global-search.test.tsx`: Enter and mouse click navigation, plus close handling.
+
+Risk / Regression Watch:
+
+- Document row clicks now open preview immediately; monitor for users who expected only in-list focusing/highlighting.
+- Unlock-cancel cleanup clears pending highlight intent; verify this does not conflict with any future deep-link replay expectations.
+
+Verification:
+
+- `npm test -- --run tests/components/global-search.test.tsx tests/pages/dokumente.test.tsx`
+
+Rollback:
+
+- Revert `src/app/(dashboard)/dokumente/page.tsx`, `src/components/search/global-search.tsx`, `tests/pages/dokumente.test.tsx`, and `tests/components/global-search.test.tsx`.
 
 ## 2026-03-04 09:52 UTC | Agent: Codex | Commit: uncommitted
 

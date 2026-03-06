@@ -17,7 +17,6 @@ import {
   Clock,
   AlertCircle,
   Loader2,
-  Command,
   ArrowRight
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -31,6 +30,30 @@ interface SearchResult {
   subtitle?: string
   category?: DocumentCategory
   url: string
+}
+
+interface DocumentSearchRow {
+  id: string
+  title: string
+  category: DocumentCategory
+  metadata: Record<string, string> | null
+  subcategory_id: string | null
+  custom_category_id: string | null
+}
+
+function buildDocumentResultUrl(doc: DocumentSearchRow) {
+  const params = new URLSearchParams()
+  const categoryKey = doc.custom_category_id
+    ? `custom:${doc.custom_category_id}`
+    : doc.category
+
+  params.set('kategorie', categoryKey)
+  params.set('highlight', doc.id)
+  if (doc.subcategory_id) {
+    params.set('unterordner', doc.subcategory_id)
+  }
+
+  return `/dokumente?${params.toString()}`
 }
 
 interface GlobalSearchProps {
@@ -63,20 +86,28 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       // Search documents (title, notes, and metadata)
       const { data: documents } = await supabase
         .from('documents')
-        .select('id, title, category, notes, metadata')
+        .select('id, title, category, notes, metadata, subcategory_id, custom_category_id')
         .eq('user_id', user.id)
         .or(`title.ilike.%${searchQuery}%,notes.ilike.%${searchQuery}%`)
         .limit(5)
 
       if (documents) {
         documents.forEach((doc: Record<string, unknown>) => {
-          searchResults.push({
+          const typedDoc: DocumentSearchRow = {
             id: doc.id as string,
-            type: 'document',
             title: doc.title as string,
-            subtitle: DOCUMENT_CATEGORIES[(doc.category as DocumentCategory)]?.name,
             category: doc.category as DocumentCategory,
-            url: `/dokumente?kategorie=${doc.category}&highlight=${doc.id}`,
+            metadata: (doc.metadata as Record<string, string> | null) ?? null,
+            subcategory_id: (doc.subcategory_id as string | null) ?? null,
+            custom_category_id: (doc.custom_category_id as string | null) ?? null,
+          }
+          searchResults.push({
+            id: typedDoc.id,
+            type: 'document',
+            title: typedDoc.title,
+            subtitle: DOCUMENT_CATEGORIES[typedDoc.category]?.name,
+            category: typedDoc.category,
+            url: buildDocumentResultUrl(typedDoc),
           })
         })
       }
@@ -85,28 +116,36 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       // This catches documents where the search term matches metadata but not title/notes
       const { data: allUserDocs } = await supabase
         .from('documents')
-        .select('id, title, category, metadata')
+        .select('id, title, category, metadata, subcategory_id, custom_category_id')
         .eq('user_id', user.id)
         .not('metadata', 'is', null)
         .limit(50)
 
       if (allUserDocs) {
         allUserDocs.forEach((doc: Record<string, unknown>) => {
+          const typedDoc: DocumentSearchRow = {
+            id: doc.id as string,
+            title: doc.title as string,
+            category: doc.category as DocumentCategory,
+            metadata: (doc.metadata as Record<string, string> | null) ?? null,
+            subcategory_id: (doc.subcategory_id as string | null) ?? null,
+            custom_category_id: (doc.custom_category_id as string | null) ?? null,
+          }
           // Skip if already in results
-          if (searchResults.find(r => r.id === doc.id)) return
-          const metadata = doc.metadata as Record<string, string> | null
+          if (searchResults.find(r => r.id === typedDoc.id)) return
+          const metadata = typedDoc.metadata
           if (metadata) {
             const matchesMetadata = Object.values(metadata).some(
               (val) => typeof val === 'string' && val.toLowerCase().includes(searchQuery.toLowerCase())
             )
             if (matchesMetadata) {
               searchResults.push({
-                id: doc.id as string,
+                id: typedDoc.id,
                 type: 'document',
-                title: doc.title as string,
-                subtitle: DOCUMENT_CATEGORIES[(doc.category as DocumentCategory)]?.name,
-                category: doc.category as DocumentCategory,
-                url: `/dokumente?kategorie=${doc.category}&highlight=${doc.id}`,
+                title: typedDoc.title,
+                subtitle: DOCUMENT_CATEGORIES[typedDoc.category]?.name,
+                category: typedDoc.category,
+                url: buildDocumentResultUrl(typedDoc),
               })
             }
           }
@@ -204,7 +243,14 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose()
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-xl p-0 gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Suche</DialogTitle>
         <DialogDescription className="sr-only">

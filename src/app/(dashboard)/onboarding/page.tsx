@@ -1864,11 +1864,11 @@ export default function OnboardingPage() {
                 : 'Ein Notfallkontakt ist wichtig für Ihre Sicherheit. Ohne Kontakt können Vertrauenspersonen im Notfall nicht benachrichtigt werden.'}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex flex-col sm:flex-row gap-3 pt-4">
+          <DialogFooter className="flex flex-row gap-3 pt-4">
             <Button
               onClick={() => setShowSkipDialog(false)}
               size="onboarding"
-              className="min-h-[44px] flex-1"
+              className="flex-1"
             >
               Zurück zum Formular
             </Button>
@@ -1876,7 +1876,7 @@ export default function OnboardingPage() {
               variant="destructive"
               onClick={confirmSkip}
               size="onboarding"
-              className="min-h-[44px] flex-1"
+              className="flex-1"
             >
               Trotzdem überspringen
             </Button>
@@ -2001,11 +2001,11 @@ export default function OnboardingPage() {
             />
           </div>
 
-          <DialogFooter className="flex flex-col sm:flex-row gap-3 pt-4">
+          <DialogFooter className="flex flex-row gap-3 pt-4">
             <Button
               onClick={handleExitSurveySubmit}
               size="onboarding"
-              className="min-h-[44px] flex-1"
+              className="flex-1"
             >
               Absenden und sp&auml;ter weitermachen
             </Button>
@@ -2013,7 +2013,7 @@ export default function OnboardingPage() {
               variant="outline"
               onClick={handleExitSurveyCancel}
               size="onboarding"
-              className="min-h-[44px] flex-1"
+              className="flex-1"
             >
               Abbrechen
             </Button>

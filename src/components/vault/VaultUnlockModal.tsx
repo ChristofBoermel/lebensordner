@@ -18,10 +18,16 @@ import { useVault } from '@/lib/vault/VaultContext'
 type VaultUnlockContextValue = {
   mode: 'passphrase' | 'recovery'
   setMode: (mode: 'passphrase' | 'recovery') => void
+  recoveryIntent: 'unlock' | 'reset'
+  setRecoveryIntent: (intent: 'unlock' | 'reset') => void
   passphrase: string
   setPassphrase: (value: string) => void
   recoveryKey: string
   setRecoveryKey: (value: string) => void
+  newPassphrase: string
+  setNewPassphrase: (value: string) => void
+  confirmNewPassphrase: string
+  setConfirmNewPassphrase: (value: string) => void
   isLoading: boolean
   error: string | null
   handleUnlock: () => Promise<void>
@@ -74,7 +80,7 @@ function VaultUnlockPassphrase() {
             onChange={e => setPassphrase(e.target.value)}
           />
         </div>
-        <Button variant="link" className="px-0" onClick={() => setMode('recovery')}>
+        <Button type="button" variant="link" className="px-0" onClick={() => setMode('recovery')}>
           Wiederherstellungsschlussel verwenden
         </Button>
         {hasBiometricSetup && isBiometricSupported ? (
@@ -120,7 +126,23 @@ function VaultUnlockPassphrase() {
 }
 
 function VaultUnlockRecovery() {
-  const { recoveryKey, setRecoveryKey, setMode, isLoading, error, handleUnlock } = useVaultUnlockContext()
+  const {
+    recoveryIntent,
+    setRecoveryIntent,
+    recoveryKey,
+    setRecoveryKey,
+    newPassphrase,
+    setNewPassphrase,
+    confirmNewPassphrase,
+    setConfirmNewPassphrase,
+    setMode,
+    isLoading,
+    error,
+    handleUnlock
+  } = useVaultUnlockContext()
+
+  const isResetValid =
+    newPassphrase.length >= 12 && confirmNewPassphrase.length > 0 && newPassphrase === confirmNewPassphrase
 
   return (
     <form
@@ -140,7 +162,49 @@ function VaultUnlockRecovery() {
             onChange={e => setRecoveryKey(e.target.value)}
           />
         </div>
-        <Button variant="link" className="px-0" onClick={() => setMode('passphrase')}>
+        {recoveryIntent === 'reset' ? (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="vault-reset-passphrase">Neues Passwort</Label>
+              <Input
+                id="vault-reset-passphrase"
+                type="password"
+                value={newPassphrase}
+                onChange={e => setNewPassphrase(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="vault-reset-passphrase-confirm">Neues Passwort bestätigen</Label>
+              <Input
+                id="vault-reset-passphrase-confirm"
+                type="password"
+                value={confirmNewPassphrase}
+                onChange={e => setConfirmNewPassphrase(e.target.value)}
+              />
+            </div>
+            <div className="text-xs text-warmgray-600">
+              Mindestens 12 Zeichen. Das neue Passwort ersetzt Ihr bisheriges Tresor-Passwort.
+            </div>
+            <Button
+              type="button"
+              variant="link"
+              className="px-0"
+              onClick={() => setRecoveryIntent('unlock')}
+            >
+              Nur mit Wiederherstellungsschlussel entsperren
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="button"
+            variant="link"
+            className="px-0"
+            onClick={() => setRecoveryIntent('reset')}
+          >
+            Passwort mit Wiederherstellungsschlussel zurucksetzen
+          </Button>
+        )}
+        <Button type="button" variant="link" className="px-0" onClick={() => setMode('passphrase')}>
           Passwort verwenden
         </Button>
       </div>
@@ -148,9 +212,12 @@ function VaultUnlockRecovery() {
       {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
 
       <DialogFooter className="mt-6">
-        <Button type="submit" disabled={isLoading || !recoveryKey}>
+        <Button
+          type="submit"
+          disabled={isLoading || !recoveryKey || (recoveryIntent === 'reset' && !isResetValid)}
+        >
           {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-          Entsperren
+          {recoveryIntent === 'reset' ? 'Passwort zurucksetzen' : 'Entsperren'}
         </Button>
       </DialogFooter>
     </form>
@@ -169,10 +236,24 @@ export const VaultUnlockModal: VaultUnlockModalComponent = function VaultUnlockM
 }) {
   const vault = useVault()
   const [mode, setMode] = useState<'passphrase' | 'recovery'>('passphrase')
+  const [recoveryIntent, setRecoveryIntent] = useState<'unlock' | 'reset'>('unlock')
   const [passphrase, setPassphrase] = useState('')
   const [recoveryKey, setRecoveryKey] = useState('')
+  const [newPassphrase, setNewPassphrase] = useState('')
+  const [confirmNewPassphrase, setConfirmNewPassphrase] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const handleModeChange = (nextMode: 'passphrase' | 'recovery') => {
+    setMode(nextMode)
+    setError(null)
+    if (nextMode === 'passphrase') {
+      setRecoveryIntent('unlock')
+      setRecoveryKey('')
+      setNewPassphrase('')
+      setConfirmNewPassphrase('')
+    }
+  }
 
   const handleUnlock = async () => {
     setIsLoading(true)
@@ -180,7 +261,11 @@ export const VaultUnlockModal: VaultUnlockModalComponent = function VaultUnlockM
 
     try {
       if (mode === 'recovery') {
-        await vault.unlockWithRecovery(recoveryKey)
+        if (recoveryIntent === 'reset') {
+          await vault.resetPassphraseWithRecovery(recoveryKey, newPassphrase)
+        } else {
+          await vault.unlockWithRecovery(recoveryKey)
+        }
       } else {
         await vault.unlock(passphrase)
       }
@@ -194,11 +279,17 @@ export const VaultUnlockModal: VaultUnlockModalComponent = function VaultUnlockM
 
   const contextValue: VaultUnlockContextValue = {
     mode,
-    setMode,
+    setMode: handleModeChange,
+    recoveryIntent,
+    setRecoveryIntent,
     passphrase,
     setPassphrase,
     recoveryKey,
     setRecoveryKey,
+    newPassphrase,
+    setNewPassphrase,
+    confirmNewPassphrase,
+    setConfirmNewPassphrase,
     isLoading,
     error,
     handleUnlock,

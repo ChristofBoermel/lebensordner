@@ -14,6 +14,7 @@ function createVaultMock(overrides: Record<string, unknown> = {}) {
   return {
     unlock: vi.fn(),
     unlockWithRecovery: vi.fn(),
+    resetPassphraseWithRecovery: vi.fn(),
     isUnlocked: false,
     isSetUp: true,
     masterKey: null,
@@ -88,6 +89,18 @@ describe('VaultUnlockModal', () => {
     expect(vault.unlock).toHaveBeenCalledWith('mein-passwort')
   })
 
+  it('submits passphrase form with Enter key', async () => {
+    const user = userEvent.setup()
+    const vault = createVaultMock()
+    mockUseVault.mockReturnValue(vault)
+    render(<VaultUnlockModal onClose={vi.fn()} />)
+
+    await user.type(screen.getByLabelText('Passwort'), 'mein-passwort{Enter}')
+
+    expect(vault.unlock).toHaveBeenCalledWith('mein-passwort')
+    expect(vault.unlockWithRecovery).not.toHaveBeenCalled()
+  })
+
   it('calls unlockWithRecovery with recovery key', async () => {
     const user = userEvent.setup()
     const vault = createVaultMock()
@@ -104,6 +117,53 @@ describe('VaultUnlockModal', () => {
     await user.click(screen.getByRole('button', { name: 'Entsperren' }))
 
     expect(vault.unlockWithRecovery).toHaveBeenCalledWith('recovery-key-123')
+  })
+
+  it('switch buttons do not submit the form', async () => {
+    const user = userEvent.setup()
+    const vault = createVaultMock()
+    mockUseVault.mockReturnValue(vault)
+    render(<VaultUnlockModal onClose={vi.fn()} />)
+
+    await user.type(screen.getByLabelText('Passwort'), 'mein-passwort')
+    await user.click(
+      screen.getByRole('button', { name: 'Wiederherstellungsschlussel verwenden' })
+    )
+    await user.click(screen.getByRole('button', { name: 'Passwort verwenden' }))
+
+    expect(vault.unlock).not.toHaveBeenCalled()
+    expect(vault.unlockWithRecovery).not.toHaveBeenCalled()
+  })
+
+  it('calls resetPassphraseWithRecovery when reset mode is used', async () => {
+    const user = userEvent.setup()
+    const vault = createVaultMock()
+    mockUseVault.mockReturnValue(vault)
+    render(<VaultUnlockModal onClose={vi.fn()} />)
+
+    await user.click(
+      screen.getByRole('button', { name: 'Wiederherstellungsschlussel verwenden' })
+    )
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Passwort mit Wiederherstellungsschlussel zurucksetzen',
+      })
+    )
+    await user.type(
+      screen.getByLabelText('Wiederherstellungsschlussel'),
+      'recovery-key-123'
+    )
+    await user.type(screen.getByLabelText('Neues Passwort'), 'mein-neues-passwort')
+    await user.type(
+      screen.getByLabelText('Neues Passwort bestätigen'),
+      'mein-neues-passwort'
+    )
+    await user.click(screen.getByRole('button', { name: 'Passwort zurucksetzen' }))
+
+    expect(vault.resetPassphraseWithRecovery).toHaveBeenCalledWith(
+      'recovery-key-123',
+      'mein-neues-passwort'
+    )
   })
 
   it('disables Entsperren button when active input is empty', async () => {

@@ -86,6 +86,7 @@ let mockUploadDocument: Record<string, unknown> | null = null
 let trustedPersonsQueryCount = 0
 let documentUpdateCalls: Array<{ id: string; extra_security_enabled: boolean }> = []
 let documentUpdateErrorsById = new Map<string, { code?: string; message?: string }>()
+let latestDocumentPreviewProps: { isOpen: boolean; document?: { id?: string } | null } | null = null
 
 const createMockBuilder = (tableName: string) => {
   const builder: Record<string, any> = {}
@@ -214,6 +215,19 @@ vi.mock('@/components/ui/file-upload', () => ({
       }}
     />
   ),
+}))
+
+vi.mock('@/components/ui/document-preview', () => ({
+  DocumentPreview: (props: { isOpen: boolean; document?: { id?: string } | null }) => {
+    latestDocumentPreviewProps = props
+    return (
+      <div
+        data-testid="document-preview"
+        data-open={props.isOpen ? 'true' : 'false'}
+        data-document-id={props.document?.id ?? ''}
+      />
+    )
+  },
 }))
 
 vi.mock('@/components/ui/date-picker', () => ({
@@ -369,6 +383,7 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
     lastUploadDocument = null
     mockUploadDocument = null
     trustedPersonsQueryCount = 0
+    latestDocumentPreviewProps = null
     setMockFetch()
     Object.defineProperty(window, 'innerWidth', { value: 1024, writable: true })
   })
@@ -992,6 +1007,76 @@ describe('Dokumente UI Fixes — T-03', () => {
     expect(
       screen.getByRole('button', { name: /Dokumente suchen/i })
     ).toBeInTheDocument()
+  })
+
+  it('öffnet beim Search-Highlight den passenden Unterordner und zeigt das Dokument', async () => {
+    ;(globalThis as { __TEST_SEARCH_PARAMS__?: string }).__TEST_SEARCH_PARAMS__ =
+      'kategorie=identitaet&highlight=doc-folder-1&unterordner=sub-1'
+
+    mockTables.subcategories = [
+      {
+        id: 'sub-1',
+        name: 'Ausweise',
+        parent_category: 'identitaet',
+      },
+    ]
+    mockTables.documents = [
+      {
+        id: 'doc-folder-1',
+        title: 'Reisepass im Ordner',
+        file_name: 'reisepass-ordner.pdf',
+        file_path: 'test/reisepass-ordner.pdf',
+        file_type: 'application/pdf',
+        file_size: 4321,
+        category: 'identitaet',
+        subcategory_id: 'sub-1',
+        custom_category_id: null,
+        expiry_date: null,
+        notes: null,
+        created_at: '2025-01-03T10:00:00.000Z',
+      },
+    ]
+
+    await renderPage()
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Ausweise').length).toBeGreaterThan(0)
+      expect(screen.getByText('Reisepass im Ordner')).toBeInTheDocument()
+    })
+  })
+
+  it('öffnet die Vorschau beim Linksklick auf ein Dokument', async () => {
+    mockTables.documents = [
+      {
+        id: 'doc-preview-1',
+        title: 'Personalausweis',
+        file_name: 'personalausweis.pdf',
+        file_path: 'test/personalausweis.pdf',
+        file_type: 'application/pdf',
+        file_size: 1536,
+        category: 'identitaet',
+        subcategory_id: null,
+        custom_category_id: null,
+        expiry_date: null,
+        notes: null,
+        created_at: '2025-01-01T10:00:00.000Z',
+      },
+    ]
+
+    await renderPage()
+    await userEvent.click(screen.getByRole('tab', { name: /Alle/i }))
+
+    const docItem = Array.from(document.querySelectorAll('.document-item')).find((row) =>
+      row.textContent?.includes('Personalausweis')
+    ) as HTMLElement | undefined
+    expect(docItem).toBeDefined()
+
+    await userEvent.click(docItem!)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('document-preview')).toHaveAttribute('data-open', 'true')
+      expect(latestDocumentPreviewProps?.document?.id).toBe('doc-preview-1')
+    })
   })
 
   it('custom categories section is visible when custom categories exist', async () => {

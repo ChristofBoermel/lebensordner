@@ -28,6 +28,7 @@ interface VaultContextValue {
   setup(passphrase: string, recoveryKeyHex: string, signal?: AbortSignal): Promise<void>
   unlock(passphrase: string): Promise<void>
   unlockWithRecovery(recoveryKeyHex: string): Promise<void>
+  resetPassphraseWithRecovery(recoveryKeyHex: string, newPassphrase: string): Promise<void>
   setupBiometric(): Promise<void>
   unlockWithBiometric(): Promise<void>
   lock(): void
@@ -259,6 +260,65 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const resetPassphraseWithRecovery = useCallback(
+    async (recoveryKeyHex: string, newPassphrase: string) => {
+      const response = await fetch('/api/vault/key-material')
+      if (!response.ok) {
+        throw new Error('Tresor-Schlüssel konnten nicht geladen werden')
+      }
+
+      const data = await response.json()
+      const {
+        kdf_params,
+        wrapped_mk_with_recovery,
+        recovery_key_salt,
+      } = data || {}
+
+      if (!kdf_params || !wrapped_mk_with_recovery || !recovery_key_salt) {
+        throw new Error('Tresor ist nicht vollständig eingerichtet')
+      }
+
+      const recoveryDerivedKey = await deriveMasterKey(
+        recoveryKeyHex,
+        fromBase64(recovery_key_salt),
+        kdf_params
+      )
+
+      let mk: CryptoKey
+      try {
+        mk = await unwrapKey(wrapped_mk_with_recovery, recoveryDerivedKey, 'AES-KW')
+      } catch {
+        throw new Error('Falscher Wiederherstellungsschlüssel')
+      }
+
+      const newSalt = globalThis.crypto.getRandomValues(new Uint8Array(32))
+      const newPassphraseDerivedKey = await deriveMasterKey(newPassphrase, newSalt, kdf_params)
+      const wrapped_mk = await wrapKey(mk, newPassphraseDerivedKey)
+
+      const updateResponse = await fetch('/api/vault/key-material', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kdf_salt: toBase64(newSalt),
+          kdf_params,
+          wrapped_mk,
+          wrapped_mk_with_recovery,
+          recovery_key_salt,
+        }),
+      })
+
+      if (!updateResponse.ok) {
+        throw new Error('Passwort konnte nicht aktualisiert werden')
+      }
+
+      setMasterKey(mk)
+      setIsUnlocked(true)
+      setLastUnlockTimestamp(Date.now())
+      sessionStorage.setItem(SESSION_PASSPHRASE_KEY, newPassphrase)
+    },
+    []
+  )
+
   async function setupBiometric() {
     if (!masterKey) {
       throw new Error('Vault must be unlocked to set up biometrics')
@@ -451,6 +511,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setup,
     unlock,
     unlockWithRecovery,
+    resetPassphraseWithRecovery,
     setupBiometric,
     unlockWithBiometric,
     lock,

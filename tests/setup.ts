@@ -28,7 +28,10 @@ vi.mock('next/navigation', () => ({
   }),
   redirect: vi.fn(),
   usePathname: () => '/zugriff',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => {
+    const queryString = (globalThis as { __TEST_SEARCH_PARAMS__?: string }).__TEST_SEARCH_PARAMS__ || ''
+    return new URLSearchParams(queryString)
+  },
 }))
 
 // Mock next/headers to prevent "cookies called outside request scope" errors
@@ -45,6 +48,10 @@ vi.mock('next/headers', () => ({
 
 // Start MSW server before all tests
 beforeAll(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: vi.fn(),
+  })
   server.listen({ onUnhandledRequest: 'bypass' })
 })
 
@@ -54,6 +61,7 @@ afterEach(() => {
 })
 
 beforeEach(() => {
+  ;(globalThis as { __TEST_SEARCH_PARAMS__?: string }).__TEST_SEARCH_PARAMS__ = ''
   vi.clearAllMocks()
 })
 

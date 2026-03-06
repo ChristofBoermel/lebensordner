@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect, useCallback, useMemo } from "react";
+import { use, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
@@ -301,7 +301,7 @@ function CategoryCard({
             <Button
               size="icon"
               variant="ghost"
-              className={`h-11 w-11 rounded-full transition-all ${
+              className={`category-icon-btn h-11 w-11 rounded-full transition-all ${
                 isSecured
                   ? "text-amber-600 bg-amber-100"
                   : "text-warmgray-300 hover:text-sage-600 hover:bg-sage-50"
@@ -325,7 +325,7 @@ function CategoryCard({
             <Button
               size="icon"
               variant="ghost"
-              className="h-11 w-11 rounded-full text-warmgray-300 hover:text-sage-600 hover:bg-sage-50 transition-colors senior-mode:h-14 senior-mode:w-14"
+              className="category-icon-btn h-11 w-11 rounded-full text-warmgray-300 hover:text-sage-600 hover:bg-sage-50 transition-colors senior-mode:h-14 senior-mode:w-14"
               onClick={(event) => {
                 event.stopPropagation();
                 onAddDocument(categoryKey);
@@ -574,6 +574,8 @@ export default function DocumentsPage() {
       ? "locked"
       : "unlocked";
   const isUnlockRequested = vaultContext.isUnlockRequested;
+  // allowed: imperative-sync - detect unlock modal close transitions.
+  const previousUnlockRequestedRef = useRef(isUnlockRequested);
   const { seniorMode } = useThemeSafe();
   const { capture } = usePostHog();
 
@@ -641,6 +643,19 @@ export default function DocumentsPage() {
   const hasRecentUnlock =
     vaultContext.isUnlocked &&
     Date.now() - vaultContext.lastUnlockTimestamp <= FIVE_MINUTES_MS;
+
+  useEffect(() => {
+    const wasUnlockRequested = previousUnlockRequestedRef.current;
+    previousUnlockRequestedRef.current = isUnlockRequested;
+
+    // User dismissed unlock dialog without unlocking:
+    // clear pending targets so the prompt does not immediately re-open.
+    if (wasUnlockRequested && !isUnlockRequested && !hasRecentUnlock) {
+      setPendingUnlockCategory(null);
+      setPendingUnlockDocumentId(null);
+      setHighlightedDoc(null);
+    }
+  }, [hasRecentUnlock, isUnlockRequested]);
 
   useEffect(() => {
     if (!hasRecentUnlock) {
@@ -1069,9 +1084,10 @@ export default function DocumentsPage() {
   useEffect(() => {
     const categoryParam = searchParams.get("kategorie");
     const highlightParam = searchParams.get("highlight");
+    const subcategoryParam = searchParams.get("unterordner");
 
-    if (categoryParam === "overview") {
-      setActiveTab("overview");
+    if (categoryParam === "overview" || categoryParam === "all") {
+      setActiveTab(categoryParam);
       setSelectedCategory(null);
       setSelectedCustomCategory(null);
       setCurrentFolder(null);
@@ -1106,6 +1122,13 @@ export default function DocumentsPage() {
         setCurrentFolder(null);
       }
     }
+    if (subcategoryParam) {
+      const folder = subcategories.find((entry) => entry.id === subcategoryParam);
+      if (folder) {
+        setCurrentFolder(folder);
+      }
+    }
+
     setHighlightedDoc(highlightParam);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -1125,6 +1148,26 @@ export default function DocumentsPage() {
           setPendingUnlockDocumentId(targetDoc.id);
           vaultContext.requestUnlock();
           return;
+        }
+
+        if (targetCategoryKey.startsWith("custom:")) {
+          const customId = targetCategoryKey.replace("custom:", "");
+          setActiveTab(`custom:${customId}`);
+          setSelectedCustomCategory(customId);
+          setSelectedCategory(null);
+        } else {
+          setActiveTab(targetCategoryKey);
+          setSelectedCategory(targetCategoryKey as DocumentCategory);
+          setSelectedCustomCategory(null);
+        }
+
+        if (targetDoc.subcategory_id) {
+          const folder = subcategories.find(
+            (entry) => entry.id === targetDoc.subcategory_id,
+          );
+          setCurrentFolder(folder ?? null);
+        } else {
+          setCurrentFolder(null);
         }
       }
 
@@ -1160,6 +1203,7 @@ export default function DocumentsPage() {
     documents,
     isDocumentLocked,
     securedCategories,
+    subcategories,
     vaultContext.isUnlocked,
     vaultContext,
   ]);
@@ -2083,6 +2127,8 @@ export default function DocumentsPage() {
         element.scrollIntoView({ behavior: "smooth", block: "center" });
       }
     }, 100);
+
+    void handleOpenDocument(doc);
   };
 
   // Move handlers
@@ -3207,8 +3253,7 @@ export default function DocumentsPage() {
         }}
       >
         <TabsList
-          className="w-full h-auto justify-start bg-transparent gap-2 p-0 overflow-x-auto"
-          style={{ WebkitOverflowScrolling: 'touch' }}
+          className="w-full h-auto justify-start bg-transparent gap-2 p-0 flex-wrap"
         >
           {/* Overview Tab - First */}
           <TabsTrigger

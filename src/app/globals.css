@@ -493,6 +493,11 @@ html.senior-mode {
   @apply px-6 py-4;
 }
 
+/* Senior Mode: Icon-only buttons must not get the general px-6 py-4 padding */
+.senior-mode .category-icon-btn {
+  padding: 0;
+}
+
 /* Senior Mode: Larger checkbox and radio inputs */
 .senior-mode input[type="checkbox"],
 .senior-mode input[type="radio"] {

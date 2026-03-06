@@ -18,7 +18,7 @@ vi.mock('@/lib/security/document-e2ee', () => ({
 }))
 
 function VaultProbe() {
-  const { isSetUp, isUnlocked, lock } = useVault()
+  const { isSetUp, isUnlocked, lock, resetPassphraseWithRecovery } = useVault()
 
   return (
     <div>
@@ -26,6 +26,14 @@ function VaultProbe() {
       <div data-testid="is-unlocked">{String(isUnlocked)}</div>
       <button type="button" onClick={lock}>
         Lock
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void resetPassphraseWithRecovery('recovery-key', 'new-passphrase-1234').catch(() => {})
+        }}
+      >
+        Reset passphrase
       </button>
     </div>
   )
@@ -133,6 +141,114 @@ describe('VaultProvider session cache behavior', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Lock' }))
+    expect(sessionStorage.getItem('lo_v_p')).toBeNull()
+  })
+
+  it('resets passphrase using recovery key and keeps vault unlocked', async () => {
+    const user = userEvent.setup()
+    deriveMasterKeyMock
+      .mockResolvedValueOnce('recovery-derived-key')
+      .mockResolvedValueOnce('new-passphrase-derived-key')
+    unwrapKeyMock.mockResolvedValueOnce({ id: 'mk-after-reset' } as unknown as CryptoKey)
+    wrapKeyMock.mockResolvedValueOnce('new-wrapped-mk')
+
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ exists: true, webauthn_credential_id: null }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          exists: true,
+          kdf_params: { iterations: 1, hash: 'SHA-256' },
+          wrapped_mk_with_recovery: 'wrapped-mk-with-recovery',
+          recovery_key_salt: 'recovery-salt-base64',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      })
+
+    render(
+      <VaultProvider>
+        <VaultProbe />
+      </VaultProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('is-set-up')).toHaveTextContent('true')
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Reset passphrase' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('is-unlocked')).toHaveTextContent('true')
+    })
+
+    expect(deriveMasterKeyMock).toHaveBeenNthCalledWith(
+      1,
+      'recovery-key',
+      'recovery-salt-base64',
+      { iterations: 1, hash: 'SHA-256' }
+    )
+    expect(deriveMasterKeyMock).toHaveBeenNthCalledWith(
+      2,
+      'new-passphrase-1234',
+      expect.any(Uint8Array),
+      { iterations: 1, hash: 'SHA-256' }
+    )
+    expect(unwrapKeyMock).toHaveBeenCalledWith(
+      'wrapped-mk-with-recovery',
+      'recovery-derived-key',
+      'AES-KW'
+    )
+    expect(wrapKeyMock).toHaveBeenCalledWith(
+      { id: 'mk-after-reset' },
+      'new-passphrase-derived-key'
+    )
+    expect(sessionStorage.getItem('lo_v_p')).toBe('new-passphrase-1234')
+  })
+
+  it('fails reset when recovery key is wrong', async () => {
+    const user = userEvent.setup()
+    deriveMasterKeyMock.mockResolvedValueOnce('recovery-derived-key')
+    unwrapKeyMock.mockRejectedValueOnce(new Error('invalid recovery key'))
+
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ exists: true, webauthn_credential_id: null }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          exists: true,
+          kdf_params: { iterations: 1, hash: 'SHA-256' },
+          wrapped_mk_with_recovery: 'wrapped-mk-with-recovery',
+          recovery_key_salt: 'recovery-salt-base64',
+        }),
+      })
+
+    render(
+      <VaultProvider>
+        <VaultProbe />
+      </VaultProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('is-set-up')).toHaveTextContent('true')
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Reset passphrase' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('is-unlocked')).toHaveTextContent('false')
+    })
+
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2)
+    expect(wrapKeyMock).not.toHaveBeenCalled()
     expect(sessionStorage.getItem('lo_v_p')).toBeNull()
   })
 })
