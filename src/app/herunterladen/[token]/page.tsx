@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use, useRef, useCallback } from 'react'
+import { useState, useEffect, use, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,65 +43,65 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
   const [decryptProgress, setDecryptProgress] = useState<{ current: number; total: number; currentName: string } | null>(null)
   const manualKeyInputRef = useRef<HTMLInputElement | null>(null)
 
-  const checkToken = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/download-link/${resolvedParams.token}/metadata`)
-      const data = await response.json()
-
-      if (response.status === 403 && data?.requiresRecipientVerification) {
-        setRequiresRecipientVerification(true)
-        setTokenInfo(null)
-        return
-      }
-
-      if (response.status === 429) {
-        setTokenInfo({
-          valid: false,
-          expired: false,
-          used: false,
-          error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.',
-        })
-        return
-      }
-
-      if (response.ok) {
-        setRequiresRecipientVerification(false)
-        setTokenInfo({
-          valid: true,
-          expired: false,
-          used: false,
-          senderName: data.senderName,
-          expiresAt: data.expiresAt,
-          linkType: data.linkType || 'download',
-          requiresClientDecryption: data.requiresClientDecryption,
-          documents: data.documents || [],
-        })
-      } else {
-        const isExpired = response.status === 410 && data.error?.includes('abgelaufen')
-        const isUsed = response.status === 410 && data.error?.includes('verwendet')
-        setTokenInfo({
-          valid: false,
-          expired: isExpired,
-          used: isUsed,
-          error: data.error,
-        })
-        if (response.status === 409) {
-          setError(data.error || 'Fehler beim Laden')
-        }
-      }
-    } catch {
-      setTokenInfo({
-        valid: false,
-        expired: false,
-        used: false,
-        error: 'Verbindungsfehler',
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }, [resolvedParams.token])
-
   useEffect(() => {
+    const checkToken = async () => {
+      try {
+        const response = await fetch(`/api/download-link/${resolvedParams.token}/metadata`)
+        const data = await response.json()
+
+        if (response.status === 403 && data?.requiresRecipientVerification) {
+          setRequiresRecipientVerification(true)
+          setTokenInfo(null)
+          return
+        }
+
+        if (response.status === 429) {
+          setTokenInfo({
+            valid: false,
+            expired: false,
+            used: false,
+            error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.',
+          })
+          return
+        }
+
+        if (response.ok) {
+          setRequiresRecipientVerification(false)
+          setTokenInfo({
+            valid: true,
+            expired: false,
+            used: false,
+            senderName: data.senderName,
+            expiresAt: data.expiresAt,
+            linkType: data.linkType || 'download',
+            requiresClientDecryption: data.requiresClientDecryption,
+            documents: data.documents || [],
+          })
+        } else {
+          const isExpired = response.status === 410 && data.error?.includes('abgelaufen')
+          const isUsed = response.status === 410 && data.error?.includes('verwendet')
+          setTokenInfo({
+            valid: false,
+            expired: isExpired,
+            used: isUsed,
+            error: data.error,
+          })
+          if (response.status === 409) {
+            setError(data.error || 'Fehler beim Laden')
+          }
+        }
+      } catch {
+        setTokenInfo({
+          valid: false,
+          expired: false,
+          used: false,
+          error: 'Verbindungsfehler',
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.slice(1)
       if (hash) {
@@ -109,8 +109,8 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
       }
       window.history.replaceState(null, '', window.location.pathname)
     }
-    checkToken()
-  }, [checkToken, recipientVerified])
+    void checkToken()
+  }, [resolvedParams.token, recipientVerified])
 
   const categoryNames: Record<string, string> = {
     identitaet: 'Identität',

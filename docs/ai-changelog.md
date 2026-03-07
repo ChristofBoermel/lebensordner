@@ -1839,3 +1839,27 @@ Rollback:
   - `tests/lib/security/trusted-person-guard.test.ts`
   - `tests/api/download-link-token-hash.test.ts`
   - `Lebensordner-threat-model.md`
+
+## 2026-03-07 01:06 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Triaged failed CI run `22773626462` and fixed `hook-discipline-guard` regression.
+- Removed an unnecessary `useCallback` from `src/app/herunterladen/[token]/page.tsx` and inlined token-check logic inside `useEffect`.
+- Simplified `src/components/download/RecipientVerificationForm.tsx` by removing effect-driven focus behavior and keeping accessible alert semantics via `role="alert"`/`aria-live`.
+- Updated `scripts/ops/hook-discipline-audit.py` baseline for `useEffect(` from `100` to `101` to account for the new emergency-settings data-load effect introduced in the current release.
+
+Risk / Regression Watch:
+- Recipient verification error messaging no longer force-focuses the alert container; screen-reader announcement now relies on alert semantics.
+- Hook baseline increase allows one additional `useEffect`; future growth above `101` still fails guard.
+
+Verification:
+- `python scripts/ops/hook-discipline-audit.py`
+- `npm run lint`
+- `npm run type-check`
+
+Rollback:
+- Revert:
+  - `src/app/herunterladen/[token]/page.tsx`
+  - `src/components/download/RecipientVerificationForm.tsx`
+  - `scripts/ops/hook-discipline-audit.py`
+  - `docs/ai-changelog.md`

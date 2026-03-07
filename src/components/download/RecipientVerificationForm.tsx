@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Loader2, Lock } from 'lucide-react'
@@ -17,14 +17,6 @@ export function RecipientVerificationForm({
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // allowed: imperative-sync - focus error region for screen readers on update
-  const errorRef = useRef<HTMLDivElement | null>(null)
-
-  // allowed: imperative-sync - focus error region when error appears
-  useEffect(() => {
-    if (error) errorRef.current?.focus()
-  }, [error])
-
   async function handleSubmit() {
     if (!email.trim()) return
     setSubmitting(true)
@@ -91,9 +83,8 @@ export function RecipientVerificationForm({
       {error && (
         <div
           id="verification-error"
-          ref={errorRef}
-          tabIndex={-1}
           role="alert"
+          aria-live="polite"
           className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm"
         >
           {error}
