@@ -1,0 +1,28 @@
+{
+  "name": "@repo/mobile",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "expo start",
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "build": "expo export --platform all --output-dir dist",
+    "lint": "echo \"No mobile lint configured yet\"",
+    "type-check": "tsc --noEmit",
+    "test": "echo \"No mobile tests configured yet\""
+  },
+  "dependencies": {
+    "@repo/shared": "*",
+    "expo": "~55.0.5",
+    "expo-status-bar": "~55.0.4",
+    "react": "19.2.0",
+    "react-native": "0.83.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}

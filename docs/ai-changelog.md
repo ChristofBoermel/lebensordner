@@ -2,6 +2,43 @@
 
 Rolling memory for major AI-driven changes. Newest entry first.
 
+## 2026-03-07 01:41 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+
+- Implemented Turborepo + Expo monorepo foundation without breaking the existing web app runtime location:
+- Added root workspaces (`apps/*`, `packages/*`), `turbo` dependency, and `turbo.json` task pipeline.
+- Scaffolded Expo mobile workspace at `apps/mobile` and standardized workspace scripts (`dev`, `build`, `type-check`, etc.).
+- Added transitional `apps/web` workspace wrapper so Turbo can orchestrate web tasks immediately while Next.js source remains at repo root.
+- Added shared workspace package `packages/shared` and connected it to Expo app (`@repo/shared` import in mobile `App.tsx`).
+- Added reference plan doc at `docs/plans/turborepo-next-expo-monorepo-plan.md`.
+- Updated root `tsconfig.json` include/exclude boundaries to avoid cross-workspace type pollution after Expo install.
+
+Risk / Regression Watch:
+
+- `apps/web` is currently a wrapper package that delegates to root commands (`--prefix ../..`); this is a migration bridge, not the final “web code moved to apps/web” state.
+- Expo workspace lint/test scripts are placeholders and should be replaced with real checks before enforcing in CI gates.
+- Root lockfile grew significantly due Expo workspace dependencies.
+
+Verification:
+
+- `npm run type-check`
+- `npx turbo run type-check`
+- `npx turbo run lint --filter=@repo/shared --filter=@repo/mobile`
+
+Rollback:
+
+- Revert:
+  - `package.json`
+  - `package-lock.json`
+  - `tsconfig.json`
+  - `turbo.json`
+  - `apps/mobile/*`
+  - `apps/web/package.json`
+  - `packages/shared/*`
+  - `docs/plans/turborepo-next-expo-monorepo-plan.md`
+  - this changelog entry
+
 ## 2026-03-06 16:12 UTC | Agent: Codex | Commit: uncommitted
 
 Change:

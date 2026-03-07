@@ -21,6 +21,11 @@
         "name": "next"
       }
     ],
+    "types": [
+      "node",
+      "react",
+      "react-dom"
+    ],
     "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
@@ -32,14 +37,18 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "scripts/**/*.ts",
+    "middleware.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "supabase/functions",
-    "tests"
+    "tests",
+    "apps",
+    "packages"
   ]
 }

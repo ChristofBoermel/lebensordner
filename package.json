@@ -3,8 +3,17 @@
   "version": "1.0.0",
   "description": "Lebensordner Digital - Der sichere digitale Lebensorganisator",
   "private": true,
+  "packageManager": "npm@11.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
+    "turbo": "turbo",
     "dev": "next dev",
+    "dev:web": "npm run dev --workspace @repo/web",
+    "dev:mobile": "npm run dev --workspace @repo/mobile",
+    "dev:all": "turbo run dev --parallel --continue",
     "build": "next build",
     "start": "next start",
     "lint": "eslint src tests scripts --cache --cache-location .cache/eslint --max-warnings=0",
@@ -89,6 +98,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/jspdf": "^1.3.3",
+    "@types/react-dom": "^19.2.3",
     "@types/twilio": "^3.19.2",
     "autoprefixer": "^10.4.23",
     "babel-plugin-react-compiler": "^1.0.0",
@@ -98,6 +108,7 @@
     "msw": "^2.12.7",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
+    "turbo": "^2.6.1",
     "vitest": "^3.2.4"
   }
 }

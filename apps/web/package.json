@@ -1,0 +1,13 @@
+{
+  "name": "@repo/web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev ../..",
+    "build": "next build ../..",
+    "start": "next start ../..",
+    "lint": "npm run lint --prefix ../..",
+    "type-check": "npm run type-check --prefix ../..",
+    "test": "npm run test --prefix ../.."
+  }
+}
