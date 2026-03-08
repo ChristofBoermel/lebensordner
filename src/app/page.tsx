@@ -378,6 +378,10 @@ export default function HomePage() {
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
                   <span className="text-warmgray-700">Sicherer Zugriff</span>
                 </li>
+                <li className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
+                  <span className="text-warmgray-700">Zwei-Faktor-Authentifizierung</span>
+                </li>
               </ul>
 
               <Link href="/registrieren" className="mt-auto">
@@ -388,10 +392,7 @@ export default function HomePage() {
             </div>
 
             {/* Basic Tier */}
-            <div className="card-elevated p-8 text-center border-2 border-sage-500 relative flex flex-col">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-sage-600 text-white text-sm font-medium rounded-full">
-                Empfohlen
-              </div>
+            <div className="card-elevated p-8 text-center relative flex flex-col">
               <h3 className="text-2xl font-semibold text-warmgray-900 mb-2">
                 Basis
               </h3>
@@ -435,15 +436,18 @@ export default function HomePage() {
               </ul>
 
               <Link href="/registrieren" className="mt-auto">
-                <Button size="lg" className="w-full text-lg">
+                <Button variant="outline" size="lg" className="w-full text-lg">
                   30 Tage kostenlos testen
                 </Button>
               </Link>
             </div>
 
             {/* Vorsorge Tier */}
-            <div className="card-elevated p-8 text-center flex flex-col">
-              <h3 className="text-2xl font-semibold text-warmgray-900 mb-2">
+            <div className="card-elevated p-8 text-center border-2 border-sage-500 relative flex flex-col shadow-xl scale-[1.02]">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-sage-600 text-white text-sm font-semibold rounded-full shadow-lg">
+                Meistgewählt
+              </div>
+              <h3 className="text-2xl font-semibold text-warmgray-900 mb-2 mt-2">
                 Vorsorge
               </h3>
               <p className="text-warmgray-600 mb-1">
@@ -468,7 +472,7 @@ export default function HomePage() {
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">4 GB Speicher</span>
+                  <span className="text-warmgray-700">4 GB Speicher — Platz für ein Leben voller wichtiger Unterlagen</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
@@ -489,12 +493,12 @@ export default function HomePage() {
                 </li>
                 <li className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-sage-600 flex-shrink-0" />
-                  <span className="text-warmgray-700">Persönlicher Support</span>
+                  <span className="text-warmgray-700">Persönlicher Support, wenn Sie ihn brauchen</span>
                 </li>
               </ul>
 
               <Link href="/registrieren" className="mt-auto">
-                <Button variant="outline" size="lg" className="w-full text-lg">
+                <Button size="lg" className="w-full text-lg">
                   30 Tage kostenlos testen
                 </Button>
               </Link>

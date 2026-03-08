@@ -70,7 +70,12 @@
       "Bash(WT=\"D:/Projects/Lebensordner/.worktrees/monetization-frontend-update\" grep -n \"einstellungen\\\\|EmergencyAccess\\\\|NotfallZugang\\\\|Notfallzugang\" \"$WT/src/app/\\(dashboard\\)/einstellungen/page.tsx\")",
       "Bash(python3:*)",
       "Bash(grep -v \"tier.id === ''premium''\")",
-      "Bash(grep -v \"case ''premium''\")"
+      "Bash(grep -v \"case ''premium''\")",
+      "mcp__claude_ai_Microsoft_Learn__microsoft_docs_fetch",
+      "WebFetch(domain:docs.stripe.com)",
+      "WebFetch(domain:stripe.com)",
+      "WebFetch(domain:influenceflow.io)",
+      "WebFetch(domain:designrevision.com)"
     ]
   }
 }

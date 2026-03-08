@@ -50,7 +50,7 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {showCloseButton ? (
-        <DialogPrimitive.Close className="absolute right-3 top-3 z-20 h-10 w-10 senior-mode:h-12 senior-mode:w-12 flex items-center justify-center rounded-md border border-warmgray-300 bg-white text-warmgray-700 shadow-sm transition-colors hover:bg-warmgray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 focus-visible:ring-offset-2 disabled:pointer-events-none">
+        <DialogPrimitive.Close className="btn-icon absolute right-3 top-3 z-20 h-10 w-10 senior-mode:h-12 senior-mode:w-12 flex items-center justify-center rounded-md border border-warmgray-300 bg-white text-warmgray-700 shadow-sm transition-colors hover:bg-warmgray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 focus-visible:ring-offset-2 disabled:pointer-events-none">
           <X className="h-5 w-5 senior-mode:h-7 senior-mode:w-7" />
           <span className="sr-only">Schließen</span>
         </DialogPrimitive.Close>

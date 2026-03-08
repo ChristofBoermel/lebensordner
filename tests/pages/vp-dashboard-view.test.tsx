@@ -34,6 +34,10 @@ describe('VpDashboardViewPage access level UX', () => {
     global.fetch = vi.fn(() =>
       Promise.resolve(new Response(JSON.stringify({ tokens: [] }), { status: 200 }))
     )
+    // jsdom stubs for browser APIs used in success paths
+    global.URL.createObjectURL = vi.fn(() => 'blob:mock')
+    global.URL.revokeObjectURL = vi.fn()
+    window.open = vi.fn()
     mockSupabase.from.mockReturnValue(mockSupabase)
     mockSupabase.select.mockReturnValue(mockSupabase)
     mockSupabase.eq.mockReturnValue(mockSupabase)

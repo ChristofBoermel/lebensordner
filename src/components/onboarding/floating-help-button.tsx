@@ -67,7 +67,7 @@ export function FloatingHelpButton({ currentStep }: FloatingHelpButtonProps) {
               <button
                 type="button"
                 aria-label="Schließen"
-                className="rounded-md border border-warmgray-300 bg-white p-1 text-warmgray-700 shadow-sm transition-colors hover:bg-warmgray-50 hover:text-warmgray-900 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-2"
+                className="btn-icon rounded-md border border-warmgray-300 bg-white p-1 text-warmgray-700 shadow-sm transition-colors hover:bg-warmgray-50 hover:text-warmgray-900 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500 focus-visible:ring-offset-2"
               >
                 <X className="h-5 w-5" />
               </button>

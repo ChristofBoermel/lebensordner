@@ -69,7 +69,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       maxCustomCategories: 0,
       emailReminders: false,
       documentExpiry: false,
-      twoFactorAuth: false,
+      twoFactorAuth: true,
       prioritySupport: false,
       familyMembers: 0,
       smsNotifications: false,

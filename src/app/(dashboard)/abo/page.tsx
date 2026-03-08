@@ -181,6 +181,32 @@ export default function AboPage() {
 
   const isSubscribed = subscription?.status === 'active' || subscription?.status === 'trialing'
 
+  const TIER_ORDER: Record<SubscriptionTier, number> = { free: 0, basic: 1, premium: 2 }
+
+  const handleUpgrade = async (tier: TierConfig) => {
+    setIsProcessing(tier.id)
+    setError(null)
+    try {
+      const priceId = getPriceId(tier.id as Exclude<SubscriptionTier, 'free'>, billingPeriod)
+      if (!priceId) throw new Error('Preis nicht konfiguriert')
+
+      const response = await fetch('/api/stripe/upgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceId }),
+      })
+      const data = await response.json()
+      if (data.error) throw new Error(data.error)
+
+      // Refetch subscription after short delay for webhook to process
+      setTimeout(() => fetchSubscription(), 2000)
+    } catch (err: any) {
+      setError(err.message || 'Ein Fehler ist aufgetreten')
+    } finally {
+      setIsProcessing(null)
+    }
+  }
+
   // Determine current tier based on price ID
   // This mirrors the server-side getTierFromSubscription logic exactly
   const getCurrentTier = (): SubscriptionTier => {
@@ -245,12 +271,12 @@ export default function AboPage() {
   const featureComparison = [
     { name: 'Dokumente', free: '20', basic: '50', premium: 'Unbegrenzt' },
     { name: 'Speicherplatz', free: '100 MB', basic: '500 MB', premium: '4 GB' },
-    { name: 'Vertrauenspersonen', free: '1', basic: '3', premium: '5' },
+    { name: 'Vertrauenspersonen', free: false, basic: '3', premium: '5' },
     { name: 'Ordner', free: '3', basic: '10', premium: 'Unbegrenzt' },
     { name: 'E-Mail-Erinnerungen', free: false, basic: true, premium: true },
     { name: 'Dokument-Ablaufdatum', free: false, basic: true, premium: true },
     { name: 'Eigene Kategorien', free: false, basic: '5', premium: 'Unbegrenzt' },
-    { name: 'Zwei-Faktor-Auth', free: false, basic: true, premium: true },
+    { name: 'Zwei-Faktor-Auth', free: true, basic: true, premium: true },
     { name: 'Notfallzugang', free: false, basic: false, premium: true },
     { name: 'Prioritäts-Support', free: false, basic: false, premium: true },
   ]
@@ -349,6 +375,8 @@ export default function AboPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {getActiveTiers().map((tier) => {
           const isCurrent = tier.id === currentTier
+          const isUpgrade = isSubscribed && TIER_ORDER[tier.id] > TIER_ORDER[currentTier]
+          const isDowngrade = isSubscribed && TIER_ORDER[tier.id] < TIER_ORDER[currentTier] && tier.id !== 'free'
           const savings = getSavings(tier)
           const tierFeatures = featureComparison.map(f => ({
             name: f.name,
@@ -438,30 +466,47 @@ export default function AboPage() {
                 </ul>
 
                 {/* CTA Button */}
-                <Button
-                  className={`w-full text-lg py-6 ${tier.highlighted ? 'shadow-md' : ''}`}
-                  size="lg"
-                  variant={tier.highlighted ? 'default' : 'outline'}
-                  disabled={
-                    isCurrent ||
-                    tier.id === 'free' ||
-                    isProcessing === tier.id ||
-                    (!['free'].includes(tier.id) && !getPriceId(tier.id as Exclude<SubscriptionTier, 'free'>, billingPeriod))
-                  }
-                  onClick={() => {
-                    capture(ANALYTICS_EVENTS.CHECKOUT_STARTED, { tier: tier.id, billing_period: billingPeriod })
-                    handleSubscribe(tier)
-                  }}
-                >
-                  {isProcessing === tier.id ? (
-                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  ) : null}
-                  {isCurrent
-                    ? 'Ihr aktueller Tarif'
-                    : tier.id === 'free'
-                      ? 'Kostenlos starten'
-                      : '30 Tage kostenlos testen'}
-                </Button>
+                <div className="mt-auto space-y-2">
+                  <Button
+                    className={`w-full text-lg py-6 ${tier.highlighted ? 'shadow-md' : ''}`}
+                    size="lg"
+                    variant={tier.highlighted && !isCurrent ? 'default' : 'outline'}
+                    disabled={
+                      isCurrent ||
+                      tier.id === 'free' ||
+                      isProcessing === tier.id ||
+                      (!['free'].includes(tier.id) && !getPriceId(tier.id as Exclude<SubscriptionTier, 'free'>, billingPeriod))
+                    }
+                    onClick={() => {
+                      capture(ANALYTICS_EVENTS.CHECKOUT_STARTED, { tier: tier.id, billing_period: billingPeriod })
+                      if (isUpgrade) {
+                        handleUpgrade(tier)
+                      } else if (isDowngrade) {
+                        handleManageSubscription()
+                      } else {
+                        handleSubscribe(tier)
+                      }
+                    }}
+                  >
+                    {isProcessing === tier.id ? (
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    ) : null}
+                    {isCurrent
+                      ? 'Ihr aktueller Tarif'
+                      : tier.id === 'free'
+                        ? 'Kostenlos starten'
+                        : isUpgrade
+                          ? `Auf ${tier.name} upgraden`
+                          : isDowngrade
+                            ? `Auf ${tier.name} wechseln`
+                            : '30 Tage kostenlos testen'}
+                  </Button>
+                  {isUpgrade && (
+                    <p className="text-xs text-center text-warmgray-500">
+                      Anteilige Kosten werden mit Ihrer nächsten Rechnung verrechnet.
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           )

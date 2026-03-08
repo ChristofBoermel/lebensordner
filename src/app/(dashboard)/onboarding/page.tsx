@@ -1864,7 +1864,7 @@ export default function OnboardingPage() {
                 : 'Ein Notfallkontakt ist wichtig für Ihre Sicherheit. Ohne Kontakt können Vertrauenspersonen im Notfall nicht benachrichtigt werden.'}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex flex-row gap-3 pt-4">
+          <DialogFooter className="flex-col sm:flex-row gap-3 pt-4">
             <Button
               onClick={() => setShowSkipDialog(false)}
               size="onboarding"
@@ -2001,7 +2001,7 @@ export default function OnboardingPage() {
             />
           </div>
 
-          <DialogFooter className="flex flex-row gap-3 pt-4">
+          <DialogFooter className="flex-col sm:flex-row gap-3 pt-4">
             <Button
               onClick={handleExitSurveySubmit}
               size="onboarding"

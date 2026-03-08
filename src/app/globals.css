@@ -494,7 +494,8 @@ html.senior-mode {
 }
 
 /* Senior Mode: Icon-only buttons must not get the general px-6 py-4 padding */
-.senior-mode .category-icon-btn {
+.senior-mode .category-icon-btn,
+.senior-mode .btn-icon {
   padding: 0;
 }
 
