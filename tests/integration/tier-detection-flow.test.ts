@@ -225,7 +225,7 @@ describe('Tier Detection Integration Flow', () => {
       expect(tier.limits.maxTrustedPersons).toBe(0)
       expect(tier.limits.emailReminders).toBe(false)
       expect(tier.limits.documentExpiry).toBe(false)
-      expect(tier.limits.twoFactorAuth).toBe(false)
+      expect(tier.limits.twoFactorAuth).toBe(true) // 2FA available on free tier
       expect(tier.limits.prioritySupport).toBe(false)
       expect(tier.limits.smsNotifications).toBe(false)
       expect(tier.limits.familyDashboard).toBe(false)

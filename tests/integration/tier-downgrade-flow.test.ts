@@ -150,12 +150,12 @@ describe('Tier Downgrade Flow Integration', () => {
       expect(hasFeatureAccess(freeTier, 'emailReminders')).toBe(false)
     })
 
-    it('2FA restrictions enforced after downgrade (enabled -> disabled)', () => {
+    it('2FA remains available after downgrade to free tier', () => {
       const premiumTier = SUBSCRIPTION_TIERS.premium
       const freeTier = SUBSCRIPTION_TIERS.free
 
       expect(hasFeatureAccess(premiumTier, 'twoFactorAuth')).toBe(true)
-      expect(hasFeatureAccess(freeTier, 'twoFactorAuth')).toBe(false)
+      expect(hasFeatureAccess(freeTier, 'twoFactorAuth')).toBe(true)
     })
   })
 
