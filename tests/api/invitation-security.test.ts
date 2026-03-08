@@ -8,6 +8,7 @@ const updateMock = vi.fn(() => queryBuilder)
 queryBuilder = {
   select: vi.fn(() => queryBuilder),
   eq: vi.fn(() => queryBuilder),
+  in: vi.fn(() => queryBuilder),
   neq: vi.fn(() => queryBuilder),
   ilike: vi.fn(() => queryBuilder),
   update: (...args: unknown[]) => updateMock(...args),
@@ -114,5 +115,63 @@ describe('/api/invitation security hardening', () => {
 
     expect(response.status).toBe(409)
     expect(updateMock).not.toHaveBeenCalled()
+  })
+
+  it('accepts invitation when status is sent (legacy open state)', async () => {
+    singleMock.mockResolvedValueOnce({
+      data: {
+        id: 'tp-1',
+        user_id: 'owner-1',
+        email: 'invitee@example.com',
+        invitation_status: 'sent',
+      },
+      error: null,
+    })
+    maybeSingleMock.mockResolvedValueOnce({ data: null, error: null })
+    maybeSingleMock.mockResolvedValueOnce({ data: { id: 'tp-1' }, error: null })
+
+    const { POST } = await import('@/app/api/invitation/route')
+    const response = await POST(
+      new Request('http://localhost/api/invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: 'token-1',
+          action: 'accept',
+          email: 'invitee@example.com',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+  })
+
+  it('accepts invitation when status is failed (legacy open state)', async () => {
+    singleMock.mockResolvedValueOnce({
+      data: {
+        id: 'tp-1',
+        user_id: 'owner-1',
+        email: 'invitee@example.com',
+        invitation_status: 'failed',
+      },
+      error: null,
+    })
+    maybeSingleMock.mockResolvedValueOnce({ data: null, error: null })
+    maybeSingleMock.mockResolvedValueOnce({ data: { id: 'tp-1' }, error: null })
+
+    const { POST } = await import('@/app/api/invitation/route')
+    const response = await POST(
+      new Request('http://localhost/api/invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: 'token-1',
+          action: 'accept',
+          email: 'invitee@example.com',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
   })
 })

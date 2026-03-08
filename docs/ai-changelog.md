@@ -1900,3 +1900,36 @@ Rollback:
   - `src/components/download/RecipientVerificationForm.tsx`
   - `scripts/ops/hook-discipline-audit.py`
   - `docs/ai-changelog.md`
+
+## 2026-03-08 22:53 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed trusted-person invitation acceptance regression where invite delivery state could block valid acceptance.
+- `src/app/api/trusted-person/invite/route.ts`
+  - Stopped mutating `invitation_status` to `sent`/`failed` during email delivery updates.
+  - Keeps invitation lifecycle open (`pending`) until explicit accept/decline.
+- `src/app/api/invitation/route.ts`
+  - Accept/decline now treats legacy `sent`/`failed` rows as open invitation states.
+  - Added typed structured warn/error metadata for lookup/fetch/processed/mismatch/retry-reject paths using token fingerprints.
+- Added migration `supabase/migrations/20260308000000_trusted_person_invitation_token_unique.sql`
+  - De-duplicates existing repeated non-null invitation tokens.
+  - Enforces unique non-null `trusted_persons.invitation_token` index.
+- Expanded tests in `tests/api/invitation-security.test.ts`
+  - Added acceptance coverage for legacy `sent` and `failed` invitation statuses.
+
+Risk / Regression Watch:
+- Migration rewrites duplicate invitation tokens for non-primary duplicates; affected users would need the latest invitation link for those duplicate rows.
+- New warn logs include token fingerprints in metadata and are subject to existing structured logger redaction/rate limits.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm test -- --run tests/api/invitation-security.test.ts tests/api/email-invitation.test.ts`
+
+Rollback:
+- Revert:
+  - `src/app/api/invitation/route.ts`
+  - `src/app/api/trusted-person/invite/route.ts`
+  - `tests/api/invitation-security.test.ts`
+  - `supabase/migrations/20260308000000_trusted_person_invitation_token_unique.sql`
+  - `docs/ai-changelog.md`

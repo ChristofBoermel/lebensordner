@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
+import { createHash } from 'crypto'
 
 // Use service role to bypass RLS for public invitation pages
 const getSupabaseAdmin = () => {
@@ -10,9 +11,17 @@ const getSupabaseAdmin = () => {
   )
 }
 
+const OPEN_INVITATION_STATUSES = ['pending', 'sent', 'failed'] as const
+const CLOSED_INVITATION_STATUSES = ['accepted', 'declined'] as const
+
+function getTokenFingerprint(token: string): string {
+  return createHash('sha256').update(token).digest('hex').slice(0, 12)
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const token = searchParams.get('token')
+  const host = request.headers.get('host') || 'unknown'
 
   if (!token) {
     return NextResponse.json({ error: 'Token fehlt' }, { status: 400 })
@@ -39,10 +48,16 @@ export async function GET(request: Request) {
       .single()
 
     if (error || !data) {
+      const reason = error?.code === 'PGRST116' ? 'no_row_or_multiple_rows' : 'db_error'
       emitStructuredError({
         error_type: 'api',
         error_message: `Invitation lookup error: ${error?.message ?? 'not found'}`,
         endpoint: '/api/invitation',
+        metadata: {
+          reason,
+          invite_fp: getTokenFingerprint(token),
+          host,
+        },
       })
       return NextResponse.json({ error: 'Einladung nicht gefunden' }, { status: 404 })
     }
@@ -70,6 +85,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const { token, action, email } = await request.json()
+    const host = request.headers.get('host') || 'unknown'
 
     if (!token || !action) {
       return NextResponse.json({ error: 'Token und Aktion erforderlich' }, { status: 400 })
@@ -87,15 +103,31 @@ export async function POST(request: Request) {
       .single()
 
     if (fetchError || !invitation) {
+      const reason = fetchError?.code === 'PGRST116' ? 'no_row_or_multiple_rows' : 'db_error'
       emitStructuredError({
         error_type: 'api',
         error_message: `Invitation fetch error: ${fetchError?.message ?? 'not found'}`,
         endpoint: '/api/invitation',
+        metadata: {
+          reason,
+          invite_fp: getTokenFingerprint(token),
+          host,
+        },
       })
       return NextResponse.json({ error: 'Einladung nicht gefunden' }, { status: 404 })
     }
 
-    if (invitation.invitation_status !== 'pending') {
+    if (CLOSED_INVITATION_STATUSES.includes(invitation.invitation_status)) {
+      emitStructuredWarn({
+        event_type: 'api',
+        event_message: 'Invitation already processed',
+        endpoint: '/api/invitation',
+        metadata: {
+          invite_fp: getTokenFingerprint(token),
+          status: invitation.invitation_status,
+          host,
+        },
+      })
       return NextResponse.json(
         { error: 'Diese Einladung wurde bereits bearbeitet' },
         { status: 409 }
@@ -121,6 +153,16 @@ export async function POST(request: Request) {
 
       // Token-only model remains, but acceptance email must match the invited email exactly.
       if (normalizedEmail !== invitation.email.toLowerCase().trim()) {
+        emitStructuredWarn({
+          event_type: 'auth',
+          event_message: 'Invitation accept email mismatch',
+          endpoint: '/api/invitation',
+          metadata: {
+            invite_fp: getTokenFingerprint(token),
+            status: invitation.invitation_status,
+            host,
+          },
+        })
         return NextResponse.json(
           { error: 'Diese Einladung ist nur für die ursprünglich eingeladene E-Mail gültig' },
           { status: 403 }
@@ -150,7 +192,7 @@ export async function POST(request: Request) {
       .from('trusted_persons')
       .update(updateData)
       .eq('id', invitation.id)
-      .eq('invitation_status', 'pending')
+      .in('invitation_status', OPEN_INVITATION_STATUSES as unknown as string[])
       .select('id')
       .maybeSingle()
 
@@ -164,6 +206,15 @@ export async function POST(request: Request) {
     }
 
     if (!updatedRow) {
+      emitStructuredWarn({
+        event_type: 'api',
+        event_message: 'Invitation optimistic update rejected',
+        endpoint: '/api/invitation',
+        metadata: {
+          invite_fp: getTokenFingerprint(token),
+          host,
+        },
+      })
       return NextResponse.json(
         { error: 'Diese Einladung wurde bereits bearbeitet' },
         { status: 409 }
