@@ -72,6 +72,17 @@ export default async function DashboardLayout({
     redirect('/anmelden')
   }
 
+  if (user.email) {
+    const normalizedEmail = user.email.toLowerCase().trim()
+    await supabase
+      .from('trusted_persons')
+      .update({ linked_user_id: user.id })
+      .ilike('email', normalizedEmail)
+      .eq('invitation_status', 'accepted')
+      .eq('is_active', true)
+      .is('linked_user_id', null)
+  }
+
   // Note: Profile and Tier fetching is now handled in NavWithTier to avoid blocking the initial shell render
 
   return (

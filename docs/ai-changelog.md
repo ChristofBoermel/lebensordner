@@ -1942,7 +1942,7 @@ Change:
 - Hardened invitation acceptance in `src/app/api/invitation/route.ts` to auto-link accepted invites to an existing account (by normalized invited email) when possible.
 - Updated auth callback linking in `src/app/auth/callback/route.ts` to case-insensitive email matching to avoid missed links due to email casing.
 - Added periodic self-heal endpoint `src/app/api/cron/reconcile-trusted-person-links/route.ts` to relink accepted/unlinked trusted-person rows.
-- Added dashboard auto-repair trigger in `src/app/(dashboard)/vault-client-wrapper.tsx` that calls `/api/trusted-person/link` once per session.
+- Added dashboard server-side auto-repair in `src/app/(dashboard)/layout.tsx` that re-links accepted/unlinked trusted-person rows for the authenticated user's normalized email.
 - Updated Zugriff UI/behavior in `src/app/(dashboard)/zugriff/page.tsx`:
   - show `Verbunden` only when `accepted && linked_user_id != null`,
   - show `Wartet auf Kontoverknüpfung` for accepted-but-unlinked rows,
@@ -1965,7 +1965,7 @@ Rollback:
 - Revert:
   - `src/app/api/invitation/route.ts`
   - `src/app/auth/callback/route.ts`
-  - `src/app/(dashboard)/vault-client-wrapper.tsx`
+  - `src/app/(dashboard)/layout.tsx`
   - `src/app/(dashboard)/zugriff/page.tsx`
   - `src/app/api/cron/reconcile-trusted-person-links/route.ts`
   - `supabase/migrations/20260309000000_trusted_person_link_backfill.sql`
