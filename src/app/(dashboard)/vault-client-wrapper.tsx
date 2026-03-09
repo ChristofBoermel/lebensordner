@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { VaultSetup, VaultSetupModal } from '@/components/vault/VaultSetupModal'
 import { VaultProvider, useVault } from '@/lib/vault/VaultContext'
 import { InactivityLogout } from '@/components/auth/inactivity-logout'
@@ -24,6 +25,11 @@ function VaultSetupModalHost() {
 }
 
 export function VaultClientWrapper({ children }: { children: React.ReactNode }) {
+  // allowed: I/O - run idempotent trusted-person account-link repair after dashboard auth session is active
+  useEffect(() => {
+    void fetch('/api/trusted-person/link', { method: 'POST' })
+  }, [])
+
   return (
     <VaultProvider>
       <InactivityLogout />

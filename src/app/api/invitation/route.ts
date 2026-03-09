@@ -18,6 +18,23 @@ function getTokenFingerprint(token: string): string {
   return createHash('sha256').update(token).digest('hex').slice(0, 12)
 }
 
+async function resolveLinkedUserIdByEmail(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  normalizedEmail: string
+): Promise<string | null> {
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .ilike('email', normalizedEmail)
+    .maybeSingle()
+
+  if (error) {
+    return null
+  }
+
+  return profile?.id ?? null
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const token = searchParams.get('token')
@@ -186,6 +203,11 @@ export async function POST(request: Request) {
       }
 
       updateData.invitation_accepted_at = new Date().toISOString()
+
+      const linkedUserId = await resolveLinkedUserIdByEmail(supabase, normalizedEmail)
+      if (linkedUserId) {
+        updateData.linked_user_id = linkedUserId
+      }
     }
 
     const { data: updatedRow, error } = await supabase

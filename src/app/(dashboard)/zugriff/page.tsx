@@ -549,6 +549,12 @@ export default function ZugriffPage() {
   }
 
   const handleGenerateRelationshipKey = async (person: TrustedPerson) => {
+    const isConnected = person.invitation_status === 'accepted' && person.linked_user_id !== null
+    if (!isConnected) {
+      setError('Diese Vertrauensperson muss ihr Konto zuerst verknüpfen.')
+      return
+    }
+
     if (!vaultContext.isUnlocked || !vaultContext.masterKey) {
       vaultContext.requestUnlock()
       return
@@ -562,7 +568,7 @@ export default function ZugriffPage() {
       const rkCryptoKey = await importRawHexKey(rk, ['wrapKey', 'unwrapKey'])
       const wrapped_rk = await wrapKey(rkCryptoKey, vaultContext.masterKey)
 
-      await fetch('/api/trusted-person/relationship-key', {
+      const relationshipKeyResponse = await fetch('/api/trusted-person/relationship-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -570,6 +576,9 @@ export default function ZugriffPage() {
           wrapped_rk,
         }),
       })
+      if (!relationshipKeyResponse.ok) {
+        throw new Error('Verknüpfungsschlüssel konnte nicht gespeichert werden')
+      }
 
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
@@ -586,13 +595,13 @@ export default function ZugriffPage() {
         throw new Error('Fehler beim Laden der Dokumente')
       }
 
-      await Promise.all(
+      const shareResults = await Promise.all(
         (documents || []).map(async (doc) => {
           try {
             const dek = await unwrapKey(doc.wrapped_dek, vaultContext.masterKey!, 'AES-GCM')
             const wrapped_dek_for_tp = await wrapKey(dek, rkCryptoKey)
 
-            await fetch('/api/documents/share-token', {
+            const shareResponse = await fetch('/api/documents/share-token', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -601,16 +610,26 @@ export default function ZugriffPage() {
                 wrapped_dek_for_tp,
               }),
             })
+            return shareResponse.ok
           } catch {
             // Skip documents that fail to re-wrap for this trusted person.
+            return false
           }
         })
       )
+
+      const successfulShares = shareResults.filter(Boolean).length
+      if (successfulShares === 0) {
+        throw new Error('Keine Dokumente konnten für diese Vertrauensperson freigegeben werden')
+      }
 
       const shareUrl = `${window.location.origin}/zugriff/access?ownerId=${user.id}#${rk}`
 
       setRkShareUrl(shareUrl)
       setRkDialogOpen(true)
+      if (successfulShares < (documents || []).length) {
+        setError('Einige Dokumente konnten nicht freigegeben werden. Bitte prüfen Sie die aktiven Freigaben.')
+      }
     } catch (err: any) {
       alert('Fehler beim Erstellen des Zugriffslinks: ' + err.message)
     } finally {
@@ -1113,13 +1132,18 @@ export default function ZugriffPage() {
                                 Einladung gesendet
                               </span>
                             )}
-                            {person.invitation_status === 'accepted' && (
+                            {person.invitation_status === 'accepted' && person.linked_user_id !== null && (
                               <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded flex items-center gap-1">
                                 <CheckCircle2 className="w-3 h-3" />
                                 Verbunden
                               </span>
                             )}
-                            {person.invitation_status === 'accepted' && (
+                            {person.invitation_status === 'accepted' && person.linked_user_id === null && (
+                              <span className="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded">
+                                Wartet auf Kontoverknüpfung
+                              </span>
+                            )}
+                            {person.invitation_status === 'accepted' && person.linked_user_id !== null && (
                               <Button
                                 variant="outline"
                                 size="sm"

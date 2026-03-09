@@ -25,6 +25,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 // --- Admin client per-table dispatch ---
 let mockAdminProfileSingle = vi.fn()
+let mockTrustedPersonIlike = vi.fn()
 
 const createAdminTableDispatch = () =>
   vi.fn((table: string) => {
@@ -46,6 +47,7 @@ const createAdminTableDispatch = () =>
       )
       builder.update = vi.fn(() => builder)
       builder.eq = vi.fn(() => builder)
+      builder.ilike = (...args: unknown[]) => mockTrustedPersonIlike(...args)
       builder.is = vi.fn(() => builder)
       builder.select = vi.fn(() => builder)
       builder.then = then
@@ -123,6 +125,17 @@ beforeEach(async () => {
   mockResetPasswordForEmail.mockResolvedValue({ data: {}, error: null })
   mockExchangeCodeForSession.mockResolvedValue({ data: { user: null }, error: new Error('not configured') })
   mockAdminProfileSingle = vi.fn().mockResolvedValue({ data: null, error: null })
+  mockTrustedPersonIlike = vi.fn(() => {
+    const builder: Record<string, unknown> = {}
+    builder.eq = vi.fn(() => builder)
+    builder.is = vi.fn(() => builder)
+    builder.select = vi.fn(() => builder)
+    builder.then = vi.fn().mockImplementation(
+      (onFulfilled?: ((v: { data: unknown[]; error: null }) => unknown) | null) =>
+        Promise.resolve({ data: [], error: null }).then(onFulfilled)
+    )
+    return builder
+  })
 
   const { checkRateLimit, incrementRateLimit } = await import('@/lib/security/rate-limit')
   vi.mocked(checkRateLimit).mockResolvedValue({
@@ -404,6 +417,27 @@ describe('Auth callback — existing user, onboarding complete', () => {
     )
 
     expect(response.headers.get('location')).toMatch(/\/dashboard$/)
+  })
+
+  it('links trusted persons with normalized case-insensitive email', async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: { id: 'uid', email: 'User@Example.com ' } },
+      error: null,
+    })
+    mockAdminProfileSingle.mockResolvedValue({
+      data: { id: 'uid', onboarding_completed: true },
+      error: null,
+    })
+    supabaseJsClient.from = createAdminTableDispatch()
+
+    vi.resetModules()
+    const { GET } = await import('@/app/auth/callback/route')
+
+    await GET(
+      new Request('http://localhost/auth/callback?code=abc')
+    )
+
+    expect(mockTrustedPersonIlike).toHaveBeenCalledWith('email', 'user@example.com')
   })
 })
 

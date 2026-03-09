@@ -65,7 +65,9 @@ describe('/api/invitation security hardening', () => {
       },
       error: null,
     })
+    maybeSingleMock.mockResolvedValue({ data: { id: 'tp-1' }, error: null })
     maybeSingleMock.mockResolvedValueOnce({ data: null, error: null })
+    maybeSingleMock.mockResolvedValueOnce({ data: { id: 'invitee-user-id' }, error: null })
     maybeSingleMock.mockResolvedValueOnce({ data: { id: 'tp-1' }, error: null })
 
     const { POST } = await import('@/app/api/invitation/route')
@@ -86,6 +88,7 @@ describe('/api/invitation security hardening', () => {
     expect(updatePayload).toBeTruthy()
     expect(updatePayload.invitation_status).toBe('accepted')
     expect(updatePayload.invitation_accepted_at).toBeTypeOf('string')
+    expect(updatePayload.linked_user_id).toBe('invitee-user-id')
     expect(updatePayload).not.toHaveProperty('email')
   })
 
@@ -127,7 +130,9 @@ describe('/api/invitation security hardening', () => {
       },
       error: null,
     })
+    maybeSingleMock.mockResolvedValue({ data: { id: 'tp-1' }, error: null })
     maybeSingleMock.mockResolvedValueOnce({ data: null, error: null })
+    maybeSingleMock.mockResolvedValueOnce({ data: { id: 'invitee-user-id' }, error: null })
     maybeSingleMock.mockResolvedValueOnce({ data: { id: 'tp-1' }, error: null })
 
     const { POST } = await import('@/app/api/invitation/route')
@@ -156,6 +161,39 @@ describe('/api/invitation security hardening', () => {
       },
       error: null,
     })
+    maybeSingleMock.mockResolvedValue({ data: { id: 'tp-1' }, error: null })
+    maybeSingleMock.mockResolvedValueOnce({ data: null, error: null })
+    maybeSingleMock.mockResolvedValueOnce({ data: { id: 'invitee-user-id' }, error: null })
+    maybeSingleMock.mockResolvedValueOnce({ data: { id: 'tp-1' }, error: null })
+
+    const { POST } = await import('@/app/api/invitation/route')
+    const response = await POST(
+      new Request('http://localhost/api/invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: 'token-1',
+          action: 'accept',
+          email: 'invitee@example.com',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+  })
+
+  it('accepts invitation even when no existing account can be linked', async () => {
+    singleMock.mockResolvedValueOnce({
+      data: {
+        id: 'tp-1',
+        user_id: 'owner-1',
+        email: 'invitee@example.com',
+        invitation_status: 'pending',
+      },
+      error: null,
+    })
+    maybeSingleMock.mockResolvedValue({ data: { id: 'tp-1' }, error: null })
+    maybeSingleMock.mockResolvedValueOnce({ data: null, error: null })
     maybeSingleMock.mockResolvedValueOnce({ data: null, error: null })
     maybeSingleMock.mockResolvedValueOnce({ data: { id: 'tp-1' }, error: null })
 
@@ -173,5 +211,7 @@ describe('/api/invitation security hardening', () => {
     )
 
     expect(response.status).toBe(200)
+    const updatePayload = updateMock.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(updatePayload.linked_user_id).toBeUndefined()
   })
 })

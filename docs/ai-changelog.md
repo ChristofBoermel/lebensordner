@@ -1933,3 +1933,42 @@ Rollback:
   - `tests/api/invitation-security.test.ts`
   - `supabase/migrations/20260308000000_trusted_person_invitation_token_unique.sql`
   - `docs/ai-changelog.md`
+
+## 2026-03-09 01:13 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed trusted-person connection consistency so “connected” requires both invitation acceptance and account linkage.
+- Added backfill migration `supabase/migrations/20260309000000_trusted_person_link_backfill.sql` to relink existing `accepted && linked_user_id is null` rows using case-insensitive email matches.
+- Hardened invitation acceptance in `src/app/api/invitation/route.ts` to auto-link accepted invites to an existing account (by normalized invited email) when possible.
+- Updated auth callback linking in `src/app/auth/callback/route.ts` to case-insensitive email matching to avoid missed links due to email casing.
+- Added periodic self-heal endpoint `src/app/api/cron/reconcile-trusted-person-links/route.ts` to relink accepted/unlinked trusted-person rows.
+- Added dashboard auto-repair trigger in `src/app/(dashboard)/vault-client-wrapper.tsx` that calls `/api/trusted-person/link` once per session.
+- Updated Zugriff UI/behavior in `src/app/(dashboard)/zugriff/page.tsx`:
+  - show `Verbunden` only when `accepted && linked_user_id != null`,
+  - show `Wartet auf Kontoverknüpfung` for accepted-but-unlinked rows,
+  - gate relationship-key generation and verify share API responses to prevent false success.
+- Expanded/updated tests:
+  - `tests/api/invitation-security.test.ts`
+  - `tests/api/password-reset.test.ts`
+
+Risk / Regression Watch:
+- New dashboard auto-link call introduces one extra authenticated POST per dashboard session.
+- Reconciler currently scans up to 500 accepted/unlinked rows per run and full non-null profile emails each run; monitor runtime if user volume grows.
+- Backfill and reconciler rely on normalized email matching and profile email availability.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm test -- --run tests/api/invitation-security.test.ts tests/api/password-reset.test.ts tests/api/trusted-person-link-security.test.ts`
+
+Rollback:
+- Revert:
+  - `src/app/api/invitation/route.ts`
+  - `src/app/auth/callback/route.ts`
+  - `src/app/(dashboard)/vault-client-wrapper.tsx`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `src/app/api/cron/reconcile-trusted-person-links/route.ts`
+  - `supabase/migrations/20260309000000_trusted_person_link_backfill.sql`
+  - `tests/api/invitation-security.test.ts`
+  - `tests/api/password-reset.test.ts`
+  - `docs/ai-changelog.md`

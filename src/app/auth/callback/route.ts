@@ -38,6 +38,8 @@ const resolvePublicOrigin = (requestUrl: string) => {
   return normalizeOrigin(new URL(requestUrl).origin) ?? 'http://localhost:3000'
 }
 
+const normalizeEmail = (email: string) => email.toLowerCase().trim()
+
 async function syncConsentFromCookie(userId: string) {
   try {
     const cookieStore = await cookies()
@@ -106,12 +108,13 @@ export async function GET(request: Request) {
 
         // Link any pending trusted person invitations
         if (data.user.email) {
-          console.log('Attempting to link trusted persons for new user email:', data.user.email)
+          const normalizedEmail = normalizeEmail(data.user.email)
+          console.log('Attempting to link trusted persons for new user email:', normalizedEmail)
 
           const { data: updateResult, error: linkError } = await supabaseAdmin
             .from('trusted_persons')
             .update({ linked_user_id: data.user.id })
-            .eq('email', data.user.email)
+            .ilike('email', normalizedEmail)
             .eq('invitation_status', 'accepted')
             .is('linked_user_id', null)
             .select('id, name, user_id')
@@ -121,7 +124,7 @@ export async function GET(request: Request) {
           } else if (updateResult && updateResult.length > 0) {
             console.log('Successfully linked trusted person records:', updateResult)
           } else {
-            console.log('No pending trusted person invitations found for email:', data.user.email)
+            console.log('No pending trusted person invitations found for email:', normalizedEmail)
           }
         }
 
@@ -134,12 +137,13 @@ export async function GET(request: Request) {
 
       // For existing users, also check for pending links
       if (data.user.email) {
-        console.log('Checking for pending trusted person links for existing user:', data.user.email)
+        const normalizedEmail = normalizeEmail(data.user.email)
+        console.log('Checking for pending trusted person links for existing user:', normalizedEmail)
 
         const { data: updateResult, error: linkError } = await supabaseAdmin
           .from('trusted_persons')
           .update({ linked_user_id: data.user.id })
-          .eq('email', data.user.email)
+          .ilike('email', normalizedEmail)
           .eq('invitation_status', 'accepted')
           .is('linked_user_id', null)
           .select('id, name, user_id')
