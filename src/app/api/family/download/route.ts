@@ -7,6 +7,7 @@ import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/se
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { guardTrustedPersonAccess } from '@/lib/security/trusted-person-guard'
+import { getActiveTrustedPersonShareTokens } from '@/lib/security/trusted-person-shares'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -82,11 +83,25 @@ export async function GET(request: Request) {
 
     const ownerName = ownerProfile?.full_name || ownerProfile?.email || 'Lebensordner'
 
-    // Get all documents for the owner
+    const { tokenMap, documentIds } = await getActiveTrustedPersonShareTokens(
+      adminClient,
+      ownerId,
+      trustedPerson.id
+    )
+
+    if (documentIds.length === 0) {
+      return NextResponse.json(
+        { error: 'Keine freigegebenen Dokumente zum Herunterladen vorhanden' },
+        { status: 404 }
+      )
+    }
+
+    // Get shared documents for this trusted person only
     const { data: documents, error: docsError } = await adminClient
       .from('documents')
       .select('*')
       .eq('user_id', ownerId)
+      .in('id', documentIds)
       .order('category')
       .order('title')
 
@@ -103,88 +118,25 @@ export async function GET(request: Request) {
     }
 
     if (documents && documents.some((doc) => doc.is_encrypted)) {
-      const { data: trustedPersonRows, error: tpIdsError } = await adminClient
-        .from('trusted_persons')
-        .select('id')
-        .eq('linked_user_id', user.id)
-        .eq('user_id', ownerId)
-
-      if (tpIdsError) {
-        emitStructuredError({
-          error_type: 'api',
-          error_message: `Error fetching trusted person ids: ${tpIdsError.message}`,
-          endpoint: '/api/family/download',
-        })
-        return NextResponse.json(
-          { error: 'Fehler beim Laden der Dokumente' },
-          { status: 500 }
-        )
-      }
-
-      const trustedPersonIds = (trustedPersonRows || []).map((row) => row.id)
-
-      const { data: shareTokens, error: shareTokensError } = await adminClient
-        .from('document_share_tokens')
-        .select('document_id, wrapped_dek_for_tp')
-        .eq('owner_id', ownerId)
-        .in('trusted_person_id', trustedPersonIds)
-
-      if (shareTokensError) {
-        emitStructuredError({
-          error_type: 'api',
-          error_message: `Error fetching share tokens: ${shareTokensError.message}`,
-          endpoint: '/api/family/download',
-        })
-        return NextResponse.json(
-          { error: 'Fehler beim Laden der Dokumente' },
-          { status: 500 }
-        )
-      }
-
-      const tokenMap: Record<string, string> = {}
-      for (const token of shareTokens || []) {
-        tokenMap[token.document_id] = token.wrapped_dek_for_tp
-      }
-
       const responseDocuments: Array<{
         id: string
-        file_path: string
         file_name: string
         file_type: string
         category: string
         is_encrypted: boolean
         wrapped_dek_for_tp: string | null
         file_iv: string | null
-        signedUrl: string
       }> = []
 
       for (const doc of documents) {
-        const { data: signedUrlData, error: signedUrlError } = await adminClient.storage
-          .from('documents')
-          .createSignedUrl(doc.file_path, 3600)
-
-        if (signedUrlError || !signedUrlData?.signedUrl) {
-          emitStructuredError({
-            error_type: 'api',
-            error_message: `Error creating signed URL: ${signedUrlError?.message ?? 'unknown error'}`,
-            endpoint: '/api/family/download',
-          })
-          return NextResponse.json(
-            { error: 'Fehler beim Laden der Dokumente' },
-            { status: 500 }
-          )
-        }
-
         responseDocuments.push({
           id: doc.id,
-          file_path: doc.file_path,
           file_name: doc.file_name,
           file_type: doc.file_type,
           category: doc.category,
           is_encrypted: doc.is_encrypted,
           wrapped_dek_for_tp: tokenMap[doc.id] ?? null,
           file_iv: doc.file_iv ?? null,
-          signedUrl: signedUrlData.signedUrl,
         })
       }
 
@@ -196,7 +148,7 @@ export async function GET(request: Request) {
           owner_id: ownerId,
           trusted_person_id: trustedPerson.id,
           trusted_person_user_id: user.id,
-          document_count: documents.length,
+          document_count: responseDocuments.length,
           action: 'download',
         },
         request: request as NextRequest,

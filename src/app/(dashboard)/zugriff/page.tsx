@@ -388,17 +388,72 @@ export default function ZugriffPage() {
         throw new Error(data.error || 'Download fehlgeschlagen')
       }
 
-      // Get the filename from the Content-Disposition header
-      const contentDisposition = response.headers.get('Content-Disposition')
-      let filename = `Lebensordner_${memberName.replace(/\s+/g, '_')}.zip`
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename="(.+)"/)
-        if (match) filename = match[1]
+      const contentType = response.headers.get('Content-Type') || ''
+
+      if (contentType.includes('application/zip')) {
+        // Get the filename from the Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition')
+        let filename = `Lebensordner_${memberName.replace(/\s+/g, '_')}.zip`
+        if (contentDisposition) {
+          const match = contentDisposition.match(/filename="(.+)"/)
+          if (match) filename = match[1]
+        }
+
+        // Create blob and download
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+        return
       }
 
-      // Create blob and download
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
+      const data = await response.json()
+      if (!data?.requiresClientDecryption) {
+        throw new Error(data?.error || 'Download fehlgeschlagen')
+      }
+
+      const relationshipKey = window.localStorage.getItem(`rk_${memberId}`)
+      if (!relationshipKey) {
+        throw new Error('Kein Zugriffsschlüssel gefunden. Bitte den Zugriffslink erneut öffnen.')
+      }
+
+      const JSZip = (await import('jszip')).default
+      const { importRawHexKey, unwrapKey, decryptFile } = await import('@/lib/security/document-e2ee')
+      const rkKey = await importRawHexKey(relationshipKey, ['wrapKey', 'unwrapKey'])
+      const zip = new JSZip()
+
+      for (const doc of data.documents || []) {
+        const bytesRes = await fetch(`/api/family/view/bytes?docId=${doc.id}&ownerId=${memberId}`)
+        if (!bytesRes.ok) {
+          throw new Error('Fehler beim Laden einer freigegebenen Datei')
+        }
+
+        const buffer = await bytesRes.arrayBuffer()
+        if (doc.is_encrypted) {
+          if (!doc.wrapped_dek_for_tp || !doc.file_iv) {
+            throw new Error('Freigabeinformationen für ein verschlüsseltes Dokument fehlen')
+          }
+          const dek = await unwrapKey(doc.wrapped_dek_for_tp, rkKey, 'AES-GCM')
+          const plaintext = await decryptFile(buffer, dek, doc.file_iv)
+          zip.file(`${doc.category}/${doc.file_name}`, plaintext)
+        } else {
+          zip.file(`${doc.category}/${doc.file_name}`, buffer)
+        }
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      const safeOwnerName = (data.ownerName || memberName)
+        .replace(/[^a-zA-Z0-9äöüÄÖÜß\s-]/g, '')
+        .replace(/\s+/g, '_')
+      const dateStr = new Date().toISOString().split('T')[0]
+      const filename = `Lebensordner_${safeOwnerName}_${dateStr}.zip`
+
+      const url = window.URL.createObjectURL(zipBlob)
       const a = document.createElement('a')
       a.href = url
       a.download = filename
@@ -406,6 +461,7 @@ export default function ZugriffPage() {
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
+
     } catch (err: any) {
       setError(err.message)
     } finally {

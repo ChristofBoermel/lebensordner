@@ -6,6 +6,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/security/audit-log'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 import { guardTrustedPersonAccess } from '@/lib/security/trusted-person-guard'
+import { getActiveTrustedPersonShareTokens } from '@/lib/security/trusted-person-shares'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -123,6 +124,19 @@ export async function GET(request: Request) {
     if (ownerTier.id === 'free') {
       return NextResponse.json(
         { error: 'Der Besitzer hat ein kostenloses Abo. Ansicht ist nur mit einem kostenpflichtigen Abo verfügbar.' },
+        { status: 403 }
+      )
+    }
+
+    const { documentIds } = await getActiveTrustedPersonShareTokens(
+      adminClient,
+      ownerId,
+      trustedPerson.id
+    )
+
+    if (!documentIds.includes(docId)) {
+      return NextResponse.json(
+        { error: 'Dokument nicht freigegeben' },
         { status: 403 }
       )
     }

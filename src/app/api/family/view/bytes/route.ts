@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getTierFromSubscription } from '@/lib/subscription-tiers'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 import { guardTrustedPersonAccess } from '@/lib/security/trusted-person-guard'
+import { getActiveTrustedPersonShareTokens } from '@/lib/security/trusted-person-shares'
 
 export async function GET(request: Request) {
   try {
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
     )
 
     const guard = await guardTrustedPersonAccess(adminClient, ownerId, user.id, 'view')
-    if (!guard.allowed) {
+    if (!guard.allowed || !guard.trustedPerson) {
       return NextResponse.json(
         { error: guard.details || 'Keine Berechtigung für diese Ansicht' },
         { status: 403 }
@@ -52,6 +53,19 @@ export async function GET(request: Request) {
           error:
             'Der Besitzer hat ein kostenloses Abo. Ansicht ist nur mit einem kostenpflichtigen Abo verfügbar.'
         },
+        { status: 403 }
+      )
+    }
+
+    const { documentIds } = await getActiveTrustedPersonShareTokens(
+      adminClient,
+      ownerId,
+      guard.trustedPerson.id
+    )
+
+    if (!documentIds.includes(docId)) {
+      return NextResponse.json(
+        { error: 'Dokument nicht freigegeben' },
         { status: 403 }
       )
     }

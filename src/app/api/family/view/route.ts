@@ -7,6 +7,7 @@ import { logSecurityEvent, EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED } from '@/lib/se
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { guardTrustedPersonAccess } from '@/lib/security/trusted-person-guard'
+import { getActiveTrustedPersonShareTokens } from '@/lib/security/trusted-person-shares'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -119,11 +120,27 @@ export async function GET(request: Request) {
 
     const ownerName = ownerProfile.full_name || ownerProfile.email || 'Unbekannt'
 
-    // Get all documents for the owner
+    const { documentIds } = await getActiveTrustedPersonShareTokens(
+      adminClient,
+      ownerId,
+      trustedPerson.id
+    )
+
+    if (documentIds.length === 0) {
+      return NextResponse.json({
+        ownerName,
+        ownerTier: ownerTier.id,
+        documents: [],
+        categories: categoryNames,
+      })
+    }
+
+    // Get shared documents for the owner/trusted-person pair
     const { data: documents, error: docsError } = await adminClient
       .from('documents')
       .select('*')
       .eq('user_id', ownerId)
+      .in('id', documentIds)
       .order('category')
       .order('title')
 

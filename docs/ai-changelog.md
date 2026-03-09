@@ -1972,3 +1972,37 @@ Rollback:
   - `tests/api/invitation-security.test.ts`
   - `tests/api/password-reset.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-09 01:43 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Enforced explicit document-share scope for trusted-person family access so relationship alone no longer grants access to all owner documents.
+- Added `src/lib/security/trusted-person-shares.ts` to resolve active (non-revoked, non-expired) share tokens and shared document IDs per owner/trusted-person pair.
+- Updated family endpoints to require explicit shares:
+  - `src/app/api/family/view/route.ts` now returns only explicitly shared documents.
+  - `src/app/api/family/download/route.ts` now downloads only explicitly shared documents; encrypted flow returns share-scoped client-decryption payload.
+  - `src/app/api/family/view/bytes/route.ts` now denies direct bytes access for non-shared docs.
+  - `src/app/api/family/view/stream/route.ts` now denies stream access for non-shared docs.
+- Fixed trusted-user ZIP issue in `src/app/(dashboard)/zugriff/page.tsx`:
+  - download handler now branches by content type,
+  - handles encrypted JSON payload with client-side decryption/zip assembly,
+  - avoids saving JSON as broken `.zip`.
+
+Risk / Regression Watch:
+- Trusted-person “family” view/download now depends on existing `document_share_tokens`; users with relationship but no explicit shares will see no documents.
+- Access attempts to non-shared doc IDs now return 403 on bytes/stream endpoints, which may surface in clients relying on old all-doc assumptions.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm test -- --run tests/pages/zugriff.test.tsx tests/pages/vp-dashboard-view.test.tsx tests/api/share-token.test.ts`
+
+Rollback:
+- Revert:
+  - `src/lib/security/trusted-person-shares.ts`
+  - `src/app/api/family/view/route.ts`
+  - `src/app/api/family/download/route.ts`
+  - `src/app/api/family/view/bytes/route.ts`
+  - `src/app/api/family/view/stream/route.ts`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `docs/ai-changelog.md`
