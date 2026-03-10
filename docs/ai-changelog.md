@@ -2323,3 +2323,21 @@ Rollback:
 - Revert:
   - `src/app/(dashboard)/zugriff/page.tsx`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 22:08 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Updated GitHub Actions pins in CI/deploy workflows to Node 24-compatible releases for `actions/checkout`, `actions/setup-node`, `actions/cache`, and `actions/upload-artifact`.
+- Kept SHA pinning intact while removing the Node 20 deprecation warnings seen on recent CI runs.
+
+Risk / Regression Watch:
+- Workflow behavior should remain the same, but any upstream action runtime change can still alter cache behavior or checkout defaults; the next CI/deploy runs are the validation point.
+
+Verification:
+- `gh run watch <next CI run> --exit-status`
+
+Rollback:
+- Revert:
+  - `.github/workflows/ci.yml`
+  - `.github/workflows/deploy.yml`
+  - `docs/ai-changelog.md`
