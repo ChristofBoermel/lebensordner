@@ -2230,3 +2230,30 @@ Rollback:
 - Revert:
   - `.github/workflows/ci.yml`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 13:45 UTC | Agent: Codex | Commit: b8c358e
+
+Change:
+- Made `/api/family/members` share-scoped so linked trusted-person relationships only expose explicit-share counts and action flags, not implicit access from relationship plus subscription tier alone.
+- Updated the `Zugriff & Familie` dashboard to render linked/no-share, view-only, and download-capable states separately and removed copy that implied accepted trusted persons automatically had access to all documents.
+- Preserved invite context through invited signup so post-confirmation registration returns trusted persons to `/zugriff#familie`, and auto-confirmed signups now trigger trusted-person linking before redirect.
+
+Risk / Regression Watch:
+- The family dashboard now depends on `document_share_tokens` being the complete source of truth for explicit shares; stale tokens will surface as stale counts until revoked or expired.
+- Invited signups now redirect to `/zugriff#familie` instead of onboarding by default for invite-driven flows.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `npx vitest run tests/pages/zugriff.test.tsx tests/pages/vp-dashboard-view.test.tsx tests/api/password-reset.test.ts tests/api/trusted-person-link-security.test.ts`
+- `python scripts/ops/logging-audit.py`
+
+Rollback:
+- Revert:
+  - `src/app/api/family/members/route.ts`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `src/app/(public)/einladung/[token]/page.tsx`
+  - `src/app/(auth)/registrieren/page.tsx`
+  - `tests/fixtures/family-members.ts`
+  - `tests/pages/zugriff.test.tsx`
+  - `docs/ai-changelog.md`

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Loader2, CheckCircle2, XCircle, Users, Shield, Leaf } from 'lucide-react'
@@ -19,7 +19,6 @@ interface InvitationData {
 
 export default function InvitationPage() {
   const params = useParams()
-  const router = useRouter()
   const token = params.token as string
 
   const [isLoading, setIsLoading] = useState(true)
@@ -28,6 +27,7 @@ export default function InvitationPage() {
   const [error, setError] = useState<string | null>(null)
   const [accepted, setAccepted] = useState(false)
   const [declined, setDeclined] = useState(false)
+  const invitedNext = '/zugriff#familie'
 
   useEffect(() => {
     const fetchInvitation = async () => {
@@ -141,7 +141,11 @@ export default function InvitationPage() {
                 Erstellen Sie ein Konto, um im Notfall auf die freigegebenen Dokumente zugreifen zu können.
               </p>
               <Button asChild>
-                <Link href={`/registrieren?email=${encodeURIComponent(invitation?.email || '')}&invited=true`}>Konto erstellen</Link>
+                <Link
+                  href={`/registrieren?email=${encodeURIComponent(invitation?.email || '')}&invited=true&next=${encodeURIComponent(invitedNext)}`}
+                >
+                  Konto erstellen
+                </Link>
               </Button>
             </div>
           ) : declined ? (

@@ -69,6 +69,10 @@ interface FamilyMember {
   direction: 'incoming' | 'outgoing'
   linkedAt: string | null
   docsCount?: number
+  sharedDocsCount: number
+  hasSharedDocuments: boolean
+  canViewSharedDocuments: boolean
+  canDownloadSharedDocuments: boolean
   tier?: {
     id: string
     name: string
@@ -1411,9 +1415,16 @@ export default function ZugriffPage() {
 
               {/* Access-level summary banner */}
               {accessibleMembers.length > 0 && (() => {
-                const hasDownloadAccess = accessibleMembers.some(m => m.tier?.canDownload)
-                const hasViewOnlyAccess = accessibleMembers.some(m => m.tier?.viewOnly && !m.tier?.canDownload)
-                const hasNoAccess = accessibleMembers.some(m => !m.tier?.canDownload && !m.tier?.viewOnly)
+                const hasDownloadAccess = accessibleMembers.some(m => m.canDownloadSharedDocuments)
+                const hasViewOnlyAccess = accessibleMembers.some(
+                  m => m.canViewSharedDocuments && !m.canDownloadSharedDocuments
+                )
+                const hasLinkedWithoutShares = accessibleMembers.some(
+                  m => !m.hasSharedDocuments
+                )
+                const hasNoAccess = accessibleMembers.some(
+                  m => m.hasSharedDocuments && !m.canViewSharedDocuments && !m.canDownloadSharedDocuments
+                )
 
                 if (hasDownloadAccess) {
                   return (
@@ -1422,7 +1433,7 @@ export default function ZugriffPage() {
                       <div>
                         <p className="font-medium text-green-800">Vollständiger Download-Zugriff verfügbar</p>
                         <p className="text-sm text-green-700">
-                          Sie können Dokumente von Familienmitgliedern mit Vorsorge-Abo herunterladen.
+                          Sie können ausdrücklich freigegebene Dokumente von Familienmitgliedern herunterladen.
                         </p>
                       </div>
                     </div>
@@ -1434,7 +1445,19 @@ export default function ZugriffPage() {
                       <div>
                         <p className="font-medium text-blue-800">Nur-Ansicht-Zugriff verfügbar</p>
                         <p className="text-sm text-blue-700">
-                          Sie können Dokumente ansehen, aber nicht herunterladen. Downloads erfordern ein Vorsorge-Abo des Dokumenteninhabers.
+                          Sie können ausdrücklich freigegebene Dokumente ansehen, aber nicht herunterladen.
+                        </p>
+                      </div>
+                    </div>
+                  )
+                } else if (hasLinkedWithoutShares) {
+                  return (
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-lg bg-slate-50 border border-slate-200">
+                      <Link2 className="w-6 h-6 sm:w-5 sm:h-5 text-slate-600 flex-shrink-0" aria-hidden="true" />
+                      <div>
+                        <p className="font-medium text-slate-800">Verknüpft, aber noch keine Freigaben</p>
+                        <p className="text-sm text-slate-700">
+                          Die Verbindung steht. Dokumente erscheinen erst, wenn sie ausdrücklich mit Ihnen geteilt werden.
                         </p>
                       </div>
                     </div>
@@ -1446,7 +1469,7 @@ export default function ZugriffPage() {
                       <div>
                         <p className="font-medium text-warmgray-700">Kein Zugriff verfügbar</p>
                         <p className="text-sm text-warmgray-600">
-                          Die verbundenen Familienmitglieder benötigen ein kostenpflichtiges Abo, um Ihnen Zugriff zu gewähren.
+                          Vorhandene Freigaben können mit dem aktuellen Zugriffslevel oder Abo nicht geöffnet werden.
                         </p>
                       </div>
                     </div>
@@ -1486,8 +1509,9 @@ export default function ZugriffPage() {
                           <Card
                             key={member.id}
                             className={`hover:border-sage-300 transition-colors border-l-4 ${
-                              member.tier?.canDownload ? 'border-l-green-500' :
-                              member.tier?.viewOnly ? 'border-l-blue-500' : 'border-l-warmgray-300'
+                              member.canDownloadSharedDocuments ? 'border-l-green-500' :
+                              member.canViewSharedDocuments ? 'border-l-blue-500' :
+                              member.hasSharedDocuments ? 'border-l-warmgray-400' : 'border-l-slate-300'
                             }`}
                             role="article"
                           >
@@ -1539,14 +1563,14 @@ export default function ZugriffPage() {
                                     {typeof member.docsCount === 'number' && (
                                       <div className="flex items-center gap-1.5 mt-1 text-xs sm:text-sm text-warmgray-500">
                                         <FileText className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
-                                        {member.docsCount} {member.docsCount === 1 ? 'Dokument' : 'Dokumente'}
+                                        {member.docsCount} {member.docsCount === 1 ? 'freigegebenes Dokument' : 'freigegebene Dokumente'}
                                       </div>
                                     )}
                                   </div>
                                 </div>
 
                                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
-                                  {member.tier?.canDownload ? (
+                                  {member.canDownloadSharedDocuments ? (
                                     <Button
                                       onClick={() => handleDownloadDocuments(member.id, member.name)}
                                       disabled={downloadingFor === member.id}
@@ -1565,7 +1589,7 @@ export default function ZugriffPage() {
                                         </>
                                       )}
                                     </Button>
-                                  ) : member.tier?.viewOnly ? (
+                                  ) : member.canViewSharedDocuments ? (
                                     <div className="flex flex-col items-stretch sm:items-start gap-1 w-full sm:w-auto">
                                       <Button
                                         onClick={() => handleViewDocuments(member)}
@@ -1577,7 +1601,17 @@ export default function ZugriffPage() {
                                         Nur Ansicht
                                       </Button>
                                       <span className="text-xs text-center sm:text-left text-warmgray-500">
-                                        Downloads mit Vorsorge verfügbar
+                                        Downloads sind für diese Freigaben nicht verfügbar
+                                      </span>
+                                    </div>
+                                  ) : !member.hasSharedDocuments ? (
+                                    <div className="flex flex-col items-stretch sm:items-start gap-1 w-full sm:w-auto">
+                                      <div className="text-xs sm:text-sm text-slate-700 bg-slate-50 px-3 py-2 sm:px-4 sm:py-2 rounded-full flex items-center justify-center sm:justify-start gap-2 w-full sm:w-auto border border-slate-200">
+                                        <Link2 className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                                        Verbunden, aber noch keine Freigaben
+                                      </div>
+                                      <span className="text-xs text-center sm:text-left text-warmgray-500">
+                                        Dokumente erscheinen erst nach einer ausdrücklichen Freigabe
                                       </span>
                                     </div>
                                   ) : (
@@ -1589,10 +1623,10 @@ export default function ZugriffPage() {
                                         aria-label="Zugriff nicht verfügbar"
                                       >
                                         <Lock className="w-4 h-4 mr-2" aria-hidden="true" />
-                                        Abo erforderlich
+                                        Zugriff eingeschränkt
                                       </Button>
                                       <span className="text-xs text-center sm:text-left text-warmgray-500">
-                                        Diese Person benötigt ein Basis- oder Vorsorge-Abo
+                                        Das aktuelle Zugriffslevel oder Abo erlaubt diese Freigaben nicht
                                       </span>
                                     </div>
                                   )}
@@ -1611,7 +1645,7 @@ export default function ZugriffPage() {
                       <div>
                         <h3 className="text-lg sm:text-xl font-semibold text-warmgray-900">Ihre Vertrauenspersonen</h3>
                         <p className="text-warmgray-600 text-sm mt-1">
-                          Diese Personen haben Ihre Einladung akzeptiert und können Ihre Dokumente sehen
+                          Diese Personen sind mit Ihrem Konto verknüpft. Dokumentzugriff entsteht erst durch Ihre Freigaben.
                         </p>
                       </div>
 
@@ -1636,10 +1670,17 @@ export default function ZugriffPage() {
                                   </div>
                                 </div>
 
-                                <span className="text-xs sm:text-sm text-green-600 bg-green-50 px-3 py-2 sm:px-4 sm:py-2 rounded-full flex items-center justify-center sm:justify-start gap-2 w-full sm:w-auto border border-green-100">
-                                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-                                  Hat Zugriff auf Ihre Dokumente
-                                </span>
+                                {member.hasSharedDocuments ? (
+                                  <span className="text-xs sm:text-sm text-green-600 bg-green-50 px-3 py-2 sm:px-4 sm:py-2 rounded-full flex items-center justify-center sm:justify-start gap-2 w-full sm:w-auto border border-green-100">
+                                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                                    {member.sharedDocsCount} {member.sharedDocsCount === 1 ? 'Freigabe aktiv' : 'Freigaben aktiv'}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs sm:text-sm text-slate-700 bg-slate-50 px-3 py-2 sm:px-4 sm:py-2 rounded-full flex items-center justify-center sm:justify-start gap-2 w-full sm:w-auto border border-slate-200">
+                                    <Link2 className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                                    Verbunden, noch keine Freigaben
+                                  </span>
+                                )}
                               </div>
                             </CardContent>
                           </Card>

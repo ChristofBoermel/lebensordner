@@ -16,6 +16,7 @@ export default function RegisterPage() {
   const searchParams = useSearchParams()
   const invitedEmail = searchParams.get('email')
   const isInvited = searchParams.get('invited') === 'true'
+  const next = searchParams.get('next') || (isInvited ? '/zugriff#familie' : '/onboarding')
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState(invitedEmail ?? '')
   const [password, setPassword] = useState('')
@@ -83,7 +84,7 @@ export default function RegisterPage() {
           data: {
             full_name: fullName,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
         },
       })
 
@@ -108,7 +109,12 @@ export default function RegisterPage() {
 
       // Handle auto-confirmed accounts (if email confirmation is disabled)
       if (data.session) {
-        router.push('/onboarding')
+        try {
+          await fetch('/api/trusted-person/link', { method: 'POST' })
+        } catch {
+          // Linking is retried on dashboard load as well.
+        }
+        router.push(next)
         return
       }
 
@@ -162,10 +168,10 @@ export default function RegisterPage() {
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
           {!isCheckingSession && (
-            <p className="text-sm text-warmgray-500 text-center">
-              Bereits bestätigt?{' '}
-              <Link href="/onboarding" className="text-sage-600 hover:text-sage-700 font-medium">
-                Weiter zur Einrichtung
+              <p className="text-sm text-warmgray-500 text-center">
+                Bereits bestätigt?{' '}
+              <Link href={next} className="text-sage-600 hover:text-sage-700 font-medium">
+                Weiter
               </Link>
             </p>
           )}

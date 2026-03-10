@@ -533,23 +533,27 @@ describe('Familie Tab Mobile Responsiveness', () => {
 
 // Familie Tab Document Count Tests
 describe('Familie Tab Document Count', () => {
-  it('should have docsCount property on family members', () => {
+  it('should have explicit share state on family members', () => {
     const incomingMembers = mockFamilyMembers.filter(m => m.direction === 'incoming')
 
     incomingMembers.forEach(member => {
       expect(member).toHaveProperty('docsCount')
+      expect(member).toHaveProperty('sharedDocsCount')
+      expect(member).toHaveProperty('hasSharedDocuments')
+      expect(member).toHaveProperty('canViewSharedDocuments')
+      expect(member).toHaveProperty('canDownloadSharedDocuments')
       expect(typeof member.docsCount).toBe('number')
     })
   })
 
-  it('Premium member should have docsCount of 5', () => {
+  it('Premium member should have docsCount of 2', () => {
     const premiumMember = mockFamilyMembers.find(m => m.tier?.id === 'premium')
-    expect(premiumMember?.docsCount).toBe(5)
+    expect(premiumMember?.docsCount).toBe(2)
   })
 
-  it('Basic member should have docsCount of 3', () => {
+  it('Basic member should have docsCount of 1', () => {
     const basicMember = mockFamilyMembers.find(m => m.tier?.id === 'basic')
-    expect(basicMember?.docsCount).toBe(3)
+    expect(basicMember?.docsCount).toBe(1)
   })
 
   it('Free member should have docsCount of 0', () => {
@@ -574,42 +578,38 @@ describe('Familie Tab Tier-Based UI', () => {
     const freeMember = mockFamilyMembers.find(m => m.tier?.id === 'free')
 
     expect(freeMember).toBeDefined()
-    expect(freeMember?.tier?.canDownload).toBe(false)
-    expect(freeMember?.tier?.viewOnly).toBe(false)
-    // The UI should show disabled button with "Abo erforderlich"
-    // This is validated by the tier config not allowing view or download
+    expect(freeMember?.hasSharedDocuments).toBe(false)
+    expect(freeMember?.canViewSharedDocuments).toBe(false)
+    expect(freeMember?.canDownloadSharedDocuments).toBe(false)
   })
 
   it('Basic tier members should show "Nur Ansicht" button', () => {
     const basicMember = mockFamilyMembers.find(m => m.tier?.id === 'basic')
 
     expect(basicMember).toBeDefined()
-    expect(basicMember?.tier?.canDownload).toBe(false)
-    expect(basicMember?.tier?.viewOnly).toBe(true)
-    // The UI should show "Nur Ansicht" button that opens DocumentViewer
+    expect(basicMember?.canDownloadSharedDocuments).toBe(false)
+    expect(basicMember?.canViewSharedDocuments).toBe(true)
   })
 
   it('Premium tier members should show "Dokumente laden" download button', () => {
     const premiumMember = mockFamilyMembers.find(m => m.tier?.id === 'premium')
 
     expect(premiumMember).toBeDefined()
-    expect(premiumMember?.tier?.canDownload).toBe(true)
-    expect(premiumMember?.tier?.viewOnly).toBe(false)
-    // The UI should show "Dokumente laden" button that triggers download
+    expect(premiumMember?.canDownloadSharedDocuments).toBe(true)
+    expect(premiumMember?.canViewSharedDocuments).toBe(true)
   })
 
   it('should correctly map tier to action behavior', () => {
     mockFamilyMembers.forEach(member => {
       if (member.direction === 'incoming') {
-        if (member.tier?.canDownload) {
+        if (member.canDownloadSharedDocuments) {
           // Premium: can download
           expect(member.tier.id).toBe('premium')
-        } else if (member.tier?.viewOnly) {
+        } else if (member.canViewSharedDocuments) {
           // Basic: view only
           expect(member.tier.id).toBe('basic')
         } else if (member.tier) {
-          // Free: no access
-          expect(member.tier.id).toBe('free')
+          expect(member.hasSharedDocuments).toBe(false)
         }
       }
     })
@@ -1269,7 +1269,7 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
       }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
 
-    it('Free member should show disabled "Abo erforderlich" button', async () => {
+    it('Free member should show linked-without-shares state', async () => {
       setBasicUser()
       setupFetchMocks()
 
@@ -1279,13 +1279,8 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
 
       await userEvent.click(screen.getByRole('tab', { name: /Familie/i }))
 
-      // Wait for "Abo erforderlich" button for Free tier member
-      // Note: Button has aria-label="Zugriff nicht verfügbar"
       await waitFor(() => {
-        const disabledButtons = screen.getAllByRole('button', { name: /Zugriff nicht verfügbar/i })
-        expect(disabledButtons.length).toBeGreaterThan(0)
-        // Verify the button is disabled
-        expect(disabledButtons[0]).toBeDisabled()
+        expect(screen.getByText(/Verbunden, aber noch keine Freigaben/i)).toBeInTheDocument()
       }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
 
@@ -1327,9 +1322,9 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
       await userEvent.click(screen.getByRole('tab', { name: /Familie/i }))
 
       await waitFor(() => {
-        expect(screen.getByText('5 Dokumente')).toBeInTheDocument() // Premium member
-        expect(screen.getByText('3 Dokumente')).toBeInTheDocument() // Basic member
-        expect(screen.getByText('0 Dokumente')).toBeInTheDocument() // Free member
+        expect(screen.getByText('2 freigegebene Dokumente')).toBeInTheDocument()
+        expect(screen.getByText('1 freigegebenes Dokument')).toBeInTheDocument()
+        expect(screen.getByText('0 freigegebene Dokumente')).toBeInTheDocument()
       }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
   })
@@ -1683,7 +1678,7 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
       await userEvent.click(screen.getByRole('tab', { name: /Familie/i }))
 
       await waitFor(() => {
-        expect(screen.getByText(/Kein Zugriff verfügbar/i)).toBeInTheDocument()
+        expect(screen.getByText(/Verknüpft, aber noch keine Freigaben/i)).toBeInTheDocument()
       }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
   })
@@ -1702,7 +1697,7 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
       await waitFor(() => {
         expect(screen.getByText('Ihre Vertrauenspersonen')).toBeInTheDocument()
         expect(screen.getByText('Lisa Weber')).toBeInTheDocument()
-        expect(screen.getByText(/Hat Zugriff auf Ihre Dokumente/i)).toBeInTheDocument()
+        expect(screen.getByText(/Verbunden, noch keine Freigaben/i)).toBeInTheDocument()
       }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
   })
