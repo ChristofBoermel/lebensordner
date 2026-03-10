@@ -267,33 +267,32 @@ export default function ZugriffPage() {
     setIsLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user) return
-
-    const { data, error } = await supabase
-      .from('trusted_persons')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    if (!error && data) {
-      setTrustedPersons(data)
-    }
-    setIsLoading(false)
-  }, [supabase])
-
-  const fetchShareTrustedPersons = useCallback(async () => {
-    try {
-      const recipients = await loadShareEligibleTrustedPersons(supabase)
-      setShareTrustedPersons(recipients)
-    } catch {
+    if (!user) {
+      setTrustedPersons([])
       setShareTrustedPersons([])
+      setIsLoading(false)
+      return
     }
+
+    const [trustedPersonsResult, shareRecipients] = await Promise.all([
+      supabase
+        .from('trusted_persons')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
+      loadShareEligibleTrustedPersons(supabase).catch(() => []),
+    ])
+
+    if (!trustedPersonsResult.error && trustedPersonsResult.data) {
+      setTrustedPersons(trustedPersonsResult.data)
+    }
+    setShareTrustedPersons(shareRecipients)
+    setIsLoading(false)
   }, [supabase])
 
   useEffect(() => {
     fetchTrustedPersons()
-    fetchShareTrustedPersons()
-  }, [fetchTrustedPersons, fetchShareTrustedPersons])
+  }, [fetchTrustedPersons])
 
   // Link pending invitations when page loads
   const linkPendingInvitations = useCallback(async () => {
@@ -333,7 +332,7 @@ export default function ZugriffPage() {
     if (!familyLoadTriggeredRef.current && familyMembers.length === 0 && !isFamilyLoading) {
       familyLoadTriggeredRef.current = true
       linkPendingInvitations().then(async () => {
-        await Promise.all([fetchFamilyMembers(), fetchShareTrustedPersons()])
+        await Promise.all([fetchFamilyMembers(), fetchTrustedPersons()])
       })
     }
   }, [
@@ -342,7 +341,7 @@ export default function ZugriffPage() {
     isFamilyLoading,
     linkPendingInvitations,
     fetchFamilyMembers,
-    fetchShareTrustedPersons,
+    fetchTrustedPersons,
   ])
 
   // Fetch current user ID and documents for bulk share dialog
