@@ -2279,3 +2279,27 @@ Rollback:
   - `src/lib/security/relationship-key.ts`
   - `tests/lib/security/relationship-key.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 20:09 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Unified owner-side share recipient loading behind a shared helper that first repairs accepted trusted-person links via `/api/trusted-person/link`, then returns only active, accepted, linked trusted-person rows with canonical `trusted_persons.id` values.
+- Switched the documents page and Zugriff bulk-share entry to that helper so connected trusted persons reappear consistently in share dialogs.
+- Added documents-page regression coverage for the link-repair call and linked-recipient filtering.
+
+Risk / Regression Watch:
+- Owner-side recipient loading now always issues a best-effort `POST /api/trusted-person/link` before querying recipients; if that endpoint is slow, share-recipient lists may load slightly later.
+
+Verification:
+- `git diff --check`
+- `npm run type-check`
+- `npm run lint`
+- `npx vitest run tests/pages/dokumente.test.tsx tests/components/sharing.test.tsx tests/components/bulk-share-dialog.test.tsx`
+
+Rollback:
+- Revert:
+  - `src/lib/trusted-persons/share-eligible.ts`
+  - `src/app/(dashboard)/dokumente/page.tsx`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `tests/pages/dokumente.test.tsx`
+  - `docs/ai-changelog.md`

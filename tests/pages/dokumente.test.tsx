@@ -255,6 +255,12 @@ vi.mock('@/components/ui/tooltip', () => ({
 const setMockFetch = () => {
   global.fetch = vi.fn((input: RequestInfo, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
+    if (url.includes('/api/trusted-person/link')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ success: true, linked: 1 }),
+      } as Response)
+    }
     if (url.includes('/api/documents/upload')) {
       const body = init?.body
       if (body instanceof FormData) {
@@ -738,6 +744,7 @@ describe('Dokumente Upload - Reminder Watcher Tier Gate', () => {
     await waitFor(() => {
       expect(trustedPersonsQueryCount).toBe(1)
     })
+    expect(global.fetch).toHaveBeenCalledWith('/api/trusted-person/link', { method: 'POST' })
   })
 
   it('Tier-Updates verursachen keine erneute Familienmitglieder-Abfrage', async () => {
@@ -1308,6 +1315,21 @@ describe('Dokumente Bulk-Action Bar — T-14', () => {
 
     const docs = bulkShareDialogProps!.documents as Array<{ id: string }>
     expect(docs.some((d) => d.id === 'doc-bulk-1')).toBe(true)
+  })
+
+  it('BulkShareDialog erhält nur verknüpfte Vertrauenspersonen', async () => {
+    mockTables.trusted_persons = [...mockTrustedPersons, ...mockPendingTrustedPersons]
+
+    await selectFirstDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Teilen/i }))
+
+    await waitFor(() => {
+      expect(bulkShareDialogProps).not.toBeNull()
+    })
+
+    const trustedPersons = bulkShareDialogProps!.trustedPersons as Array<{ id: string }>
+    expect(trustedPersons.map((trustedPerson) => trustedPerson.id)).toEqual(['tp-1', 'tp-2'])
+    expect(global.fetch).toHaveBeenCalledWith('/api/trusted-person/link', { method: 'POST' })
   })
 
   it('Verschieben und Auswahl-aufheben Buttons bleiben neben Teilen sichtbar', async () => {

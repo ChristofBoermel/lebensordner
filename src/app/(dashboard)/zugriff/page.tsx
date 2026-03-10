@@ -53,6 +53,10 @@ import { SUBSCRIPTION_TIERS, canPerformAction, allowsFamilyDownloads, type TierC
 import Link from 'next/link'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { TierStatusCard, InfoBadge } from '@/components/ui/info-badge'
+import {
+  loadShareEligibleTrustedPersons,
+  type ShareEligibleTrustedPerson,
+} from '@/lib/trusted-persons/share-eligible'
 
 // Lazy load DocumentViewer for performance
 const DocumentViewer = dynamic(
@@ -90,6 +94,7 @@ interface StripePriceIds {
 
 export default function ZugriffPage() {
   const [trustedPersons, setTrustedPersons] = useState<TrustedPerson[]>([])
+  const [shareTrustedPersons, setShareTrustedPersons] = useState<ShareEligibleTrustedPerson[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isDownloadLinkDialogOpen, setIsDownloadLinkDialogOpen] = useState(false)
@@ -276,9 +281,19 @@ export default function ZugriffPage() {
     setIsLoading(false)
   }, [supabase])
 
+  const fetchShareTrustedPersons = useCallback(async () => {
+    try {
+      const recipients = await loadShareEligibleTrustedPersons(supabase)
+      setShareTrustedPersons(recipients)
+    } catch {
+      setShareTrustedPersons([])
+    }
+  }, [supabase])
+
   useEffect(() => {
     fetchTrustedPersons()
-  }, [fetchTrustedPersons])
+    fetchShareTrustedPersons()
+  }, [fetchTrustedPersons, fetchShareTrustedPersons])
 
   // Link pending invitations when page loads
   const linkPendingInvitations = useCallback(async () => {
@@ -317,9 +332,18 @@ export default function ZugriffPage() {
 
     if (!familyLoadTriggeredRef.current && familyMembers.length === 0 && !isFamilyLoading) {
       familyLoadTriggeredRef.current = true
-      linkPendingInvitations().then(() => fetchFamilyMembers())
+      linkPendingInvitations().then(async () => {
+        await Promise.all([fetchFamilyMembers(), fetchShareTrustedPersons()])
+      })
     }
-  }, [activeMainTab, familyMembers.length, isFamilyLoading, linkPendingInvitations, fetchFamilyMembers])
+  }, [
+    activeMainTab,
+    familyMembers.length,
+    isFamilyLoading,
+    linkPendingInvitations,
+    fetchFamilyMembers,
+    fetchShareTrustedPersons,
+  ])
 
   // Fetch current user ID and documents for bulk share dialog
   useEffect(() => {
@@ -2055,7 +2079,7 @@ export default function ZugriffPage() {
       <BulkShareDialog
         key={isBulkShareOpen ? 'open' : 'closed'}
         documents={sharingDocuments}
-        trustedPersons={trustedPersons.filter(tp => tp.linked_user_id !== null)}
+        trustedPersons={shareTrustedPersons}
         userId={currentUserId}
         isOpen={isBulkShareOpen}
         onClose={() => setIsBulkShareOpen(false)}

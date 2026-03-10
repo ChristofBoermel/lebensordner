@@ -131,6 +131,10 @@ import { useThemeSafe } from "@/components/theme/theme-provider";
 import { ExpiryDashboardWidget } from "@/components/dokumente/ExpiryDashboardWidget";
 import { EncryptedNotesEditor } from "@/components/dokumente/EncryptedNotesEditor";
 import {
+  loadShareEligibleTrustedPersons,
+  type ShareEligibleTrustedPerson,
+} from "@/lib/trusted-persons/share-eligible";
+import {
   DisableCategoryLockDialog,
   type DisableCategoryLockMode,
 } from "./DisableCategoryLockDialog";
@@ -553,13 +557,7 @@ export default function DocumentsPage() {
   };
 
   // Family members for reminder watcher
-  interface FamilyMember {
-    id: string;
-    name: string;
-    email: string;
-    linked_user_id: string | null;
-  }
-  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const [familyMembers, setFamilyMembers] = useState<ShareEligibleTrustedPerson[]>([]);
   const [categoryIconSearch, setCategoryIconSearch] = useState("");
 
   const supabase = createClient();
@@ -1030,27 +1028,11 @@ export default function DocumentsPage() {
   }, [supabase]);
 
   const fetchFamilyMembers = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Get trusted persons that are linked (have user accounts and accepted invitations)
-    const { data: trustedPersons } = await supabase
-      .from("trusted_persons")
-      .select("id, name, email, linked_user_id")
-      .eq("user_id", user.id)
-      .not("linked_user_id", "is", null);
-
-    if (trustedPersons) {
-      setFamilyMembers(
-        trustedPersons.map((tp) => ({
-          id: tp.id,
-          name: tp.name,
-          email: tp.email,
-          linked_user_id: tp.linked_user_id,
-        })),
-      );
+    try {
+      const trustedPersons = await loadShareEligibleTrustedPersons(supabase);
+      setFamilyMembers(trustedPersons);
+    } catch {
+      setFamilyMembers([]);
     }
   }, [supabase]);
 
