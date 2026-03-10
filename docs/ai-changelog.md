@@ -2192,3 +2192,24 @@ Rollback:
 - Revert:
   - `next.config.js`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 02:10 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Switched Playwright CI web server startup to a dedicated standalone launcher that stages `.next/static` and `public/` into the standalone bundle before starting the server.
+- Added `npm run start:standalone` and `scripts/ops/start-standalone-for-e2e.mjs` so GitHub Actions smoke tests can hydrate client pages correctly under the Next.js standalone build.
+
+Risk / Regression Watch:
+- Local smoke runs still use `next dev`; CI now exercises the standalone server path, so future server-only env assumptions can fail there first.
+- Deployment still depends on the GitHub Actions E2E secrets matching the dedicated hosted Supabase project.
+
+Verification:
+- `npm run build`
+- `$env:CI='1'; npm run test:e2e:smoke`
+
+Rollback:
+- Revert:
+  - `package.json`
+  - `playwright.config.ts`
+  - `scripts/ops/start-standalone-for-e2e.mjs`
+  - `docs/ai-changelog.md`

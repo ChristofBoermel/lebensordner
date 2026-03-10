@@ -16,6 +16,7 @@
     "dev:all": "turbo run dev --parallel --continue",
     "build": "next build",
     "start": "next start",
+    "start:standalone": "node scripts/ops/start-standalone-for-e2e.mjs",
     "lint": "eslint src tests scripts --cache --cache-location .cache/eslint --max-warnings=0",
     "lint:fix": "eslint src tests scripts --cache --cache-location .cache/eslint --fix",
     "type-check": "tsc --noEmit",

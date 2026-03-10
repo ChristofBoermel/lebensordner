@@ -23,7 +23,16 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   webServer: {
-    command: process.env.CI ? 'npm run start' : 'npm run dev -- --port 3000',
+    command: process.env.CI
+      ? 'npm run start:standalone'
+      : 'npm run dev -- --port 3000',
+    env: process.env.CI
+      ? {
+          ...process.env,
+          HOSTNAME: '127.0.0.1',
+          PORT: '3000',
+        }
+      : process.env,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 60 * 1000,
