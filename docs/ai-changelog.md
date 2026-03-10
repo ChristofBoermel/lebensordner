@@ -2448,3 +2448,23 @@ Rollback:
   - `tests/pages/zugriff.test.tsx`
   - `tests/e2e/smoke/document-security.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 23:33 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Increased the trusted-person invite smoke test settle timeout to absorb slower backend status transitions and remove the retry-only flake.
+- Opted the deploy workflow into `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to clear the remaining GitHub Actions Node 20 deprecation warning.
+
+Risk / Regression Watch:
+- Local Playwright verification remains skipped in this workspace because the required E2E Supabase secrets are not available, so CI is still the authoritative verification path for the smoke spec.
+- Forcing JavaScript actions onto Node 24 changes the runtime for the docker actions in deploy; the next deploy run should be watched for any action-runtime incompatibility.
+
+Verification:
+- `npx vitest run tests/pages/zugriff.test.tsx`
+- `npx playwright test tests/e2e/smoke/trusted-person-invite.test.ts` (skipped locally: missing E2E env)
+
+Rollback:
+- Revert:
+  - `.github/workflows/deploy.yml`
+  - `tests/e2e/smoke/trusted-person-invite.test.ts`
+  - `docs/ai-changelog.md`

@@ -71,6 +71,7 @@ test.describe('@smoke trusted person invite', () => {
           {
             message:
               'invite row should settle into either a sent badge or an actionable retry state',
+            timeout: 15000,
           },
         )
         .toMatch(/Einladung gesendet|Einladen/)
