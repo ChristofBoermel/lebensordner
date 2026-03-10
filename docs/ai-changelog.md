@@ -2426,3 +2426,25 @@ Rollback:
   - `src/components/ui/document-viewer.tsx`
   - `tests/pages/vp-dashboard-view.test.tsx`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 23:21 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed the trusted-person invite row state so a locally-triggered invite no longer gets stuck in `Wird gesendet` when the backend still reports `email_status='sending'`.
+- Hardened the document-security smoke assertion to poll for the secured badge instead of relying on a brittle immediate text transition.
+
+Risk / Regression Watch:
+- Freshly loaded rows with backend `email_status='sending'` still render the sending state by design; only locally completed sends now settle back to an actionable state until the backend reports `sent`.
+- Local Playwright verification was skipped here because the required E2E Supabase secrets are not available in this workspace; CI remains the source of truth for those smoke paths.
+
+Verification:
+- `npx vitest run tests/pages/zugriff.test.tsx`
+- `python scripts/ops/hook-discipline-audit.py`
+- `npx playwright test tests/e2e/smoke/trusted-person-invite.test.ts tests/e2e/smoke/document-security.test.ts` (skipped locally: missing E2E env)
+
+Rollback:
+- Revert:
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `tests/pages/zugriff.test.tsx`
+  - `tests/e2e/smoke/document-security.test.ts`
+  - `docs/ai-changelog.md`

@@ -142,6 +142,7 @@ export default function ZugriffPage() {
   const [sharingDocuments, setSharingDocuments] = useState<Array<{id: string; title: string; wrapped_dek: string | null}>>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [invitePendingById, setInvitePendingById] = useState<Record<string, boolean>>({})
+  const [inviteSettledById, setInviteSettledById] = useState<Record<string, boolean>>({})
 
   const supabase = createClient()
 
@@ -850,6 +851,11 @@ export default function ZugriffPage() {
     if (invitePendingById[personId]) return
 
     setInvitePendingById((current) => ({ ...current, [personId]: true }))
+    setInviteSettledById((current) => {
+      const next = { ...current }
+      delete next[personId]
+      return next
+    })
     setError(null)
 
     try {
@@ -866,6 +872,7 @@ export default function ZugriffPage() {
       }
 
       await fetchTrustedPersons(false)
+      setInviteSettledById((current) => ({ ...current, [personId]: true }))
     } catch (err: any) {
       setError(err.message || 'Fehler beim Senden der Einladung.')
       console.error('Invite error:', err)
@@ -887,12 +894,16 @@ export default function ZugriffPage() {
       return 'awaiting_link' as const
     }
 
-    if (invitePendingById[person.id] || person.email_status === 'sending') {
+    if (invitePendingById[person.id]) {
       return 'sending' as const
     }
 
     if (person.email_status === 'sent' || person.invitation_status === 'sent') {
       return 'sent' as const
+    }
+
+    if (person.email_status === 'sending' && !inviteSettledById[person.id]) {
+      return 'sending' as const
     }
 
     return 'inviteable' as const

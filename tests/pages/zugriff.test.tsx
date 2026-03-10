@@ -2252,6 +2252,92 @@ describe('ZugriffPage trusted person invite row states', () => {
     })
   }, TEST_TIMEOUT)
 
+  it('returns locally-triggered invites to an actionable state when the backend still reports sending', async () => {
+    let releaseInvite: (() => void) | null = null
+    const pendingInvite = new Promise<Response>((resolve) => {
+      releaseInvite = () => resolve(new Response(JSON.stringify({ success: true, message: 'Einladung wird gesendet' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    })
+
+    const trustedPersonsState = createTrustedPersonsBuilder([
+      {
+        id: 'tp-1',
+        user_id: 'test-user-id',
+        name: 'Max Mustermann',
+        email: 'max@example.com',
+        relationship: 'Sohn',
+        notes: null,
+        phone: null,
+        invitation_status: 'pending',
+        email_status: 'pending',
+        linked_user_id: null,
+        is_active: true,
+      },
+    ], 'trusted_persons')
+
+    ;(mockSupabaseClient as Record<string, unknown>).from = (tableName: string) => {
+      if (tableName === 'trusted_persons') {
+        return trustedPersonsState.builder
+      }
+      return createZugriffBuilder(tableName)
+    }
+
+    let inviteCompleted = false
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/api/stripe/prices')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(stripePrices) })
+      }
+      if (url.includes('/api/trusted-person/invite')) {
+        return pendingInvite
+      }
+      if (url.includes('/api/trusted-person/link')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      }
+
+      if (inviteCompleted) {
+        trustedPersonsState.setRows([
+          {
+            id: 'tp-1',
+            user_id: 'test-user-id',
+            name: 'Max Mustermann',
+            email: 'max@example.com',
+            relationship: 'Sohn',
+            notes: null,
+            phone: null,
+            invitation_status: 'pending',
+            email_status: 'sending',
+            linked_user_id: null,
+            is_active: true,
+          },
+        ])
+      }
+
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+    global.fetch = mockFetch
+
+    render(<ZugriffPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Max Mustermann')).toBeInTheDocument()
+    }, { timeout: TEST_TIMEOUT })
+
+    await userEvent.click(screen.getByRole('button', { name: /^einladen$/i }))
+
+    releaseInvite?.()
+    inviteCompleted = true
+
+    await act(async () => {
+      await pendingInvite
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^einladen$/i })).toBeInTheDocument()
+    }, { timeout: TEST_TIMEOUT })
+  }, TEST_TIMEOUT)
+
   it('renders sending and sent invite statuses from backend email_status', async () => {
     const trustedPersonsState = createTrustedPersonsBuilder([
       {

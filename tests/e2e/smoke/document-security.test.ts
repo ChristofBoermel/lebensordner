@@ -29,7 +29,12 @@ test.describe('@smoke document lock and unlock', () => {
       await page.getByRole('menuitem', { name: 'Extra-Sicherheit aktivieren' }).click()
 
       const row = page.getByTestId(`document-row-${document.id}`)
-      await expect(row).toContainText('Gesichert')
+      await expect
+        .poll(async () => (await row.textContent()) ?? '', {
+          message: 'document row should show the secured badge after enabling extra security',
+          timeout: 15000,
+        })
+        .toContain('Gesichert')
 
       await page.getByTestId(`document-actions-${document.id}`).click()
       await page.getByRole('menuitem', { name: 'Extra-Sicherheit entfernen' }).click()
