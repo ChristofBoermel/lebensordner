@@ -2006,3 +2006,189 @@ Rollback:
   - `src/app/api/family/view/stream/route.ts`
   - `src/app/(dashboard)/zugriff/page.tsx`
   - `docs/ai-changelog.md`
+
+## 2026-03-09 18:01 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed stale trusted-person client flows that still exposed relationship-wide access after the explicit-share backend change.
+- Updated `src/app/(dashboard)/vp-dashboard/view/[ownerId]/page.tsx`
+  - stopped loading all owner documents directly from Supabase,
+  - now hydrates from `/api/family/view` so the dashboard only renders explicitly shared documents,
+  - hides bulk download when no shared documents exist and shows an empty-state message instead.
+- Updated `src/app/(dashboard)/zugriff/page.tsx`
+  - added per-row invite pending state,
+  - disables the invite action immediately while sending,
+  - renders `email_status='sending'` as a non-clickable loading state and keeps `sent`/connected/link-waiting states explicit without `alert()`-based feedback.
+- Expanded page coverage:
+  - `tests/pages/vp-dashboard-view.test.tsx`
+  - `tests/pages/zugriff.test.tsx`
+
+Risk / Regression Watch:
+- The legacy trusted-person dashboard now depends on `/api/family/view`; any future contract drift there will affect both trusted-person client surfaces.
+- Focused test run still emits a pre-existing React `act(...)` warning in an older download-loading test, but the suite passes.
+
+Verification:
+- `npm run type-check`
+- `npm test -- --run tests/pages/vp-dashboard-view.test.tsx tests/pages/zugriff.test.tsx`
+
+Rollback:
+- Revert:
+  - `src/app/(dashboard)/vp-dashboard/view/[ownerId]/page.tsx`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `tests/pages/vp-dashboard-view.test.tsx`
+  - `tests/pages/zugriff.test.tsx`
+  - `docs/ai-changelog.md`
+
+## 2026-03-09 18:35 UTC | Agent: Codex | Commit: 47e1fff
+
+Change:
+- Added a new Playwright smoke layer for critical browser coverage:
+  - `tests/e2e/smoke/trusted-person-invite.test.ts`
+  - `tests/e2e/smoke/trusted-person-access.test.ts`
+  - `tests/e2e/smoke/document-upload.test.ts`
+  - `tests/e2e/smoke/document-security.test.ts`
+- Added reusable E2E seeding/auth support in:
+  - `tests/e2e/support/env.ts`
+  - `tests/e2e/support/harness.ts`
+- Hardened UI selectors for browser automation in:
+  - `src/app/(dashboard)/dokumente/UploadDialog.tsx`
+  - `src/components/ui/file-upload.tsx`
+  - `src/app/(dashboard)/dokumente/page.tsx`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `src/app/(dashboard)/vp-dashboard/view/[ownerId]/page.tsx`
+- Added smoke-specific package/CI wiring and implementation docs:
+  - `package.json`
+  - `.github/workflows/ci.yml`
+  - `docs/e2e-smoke-tech-plan.md`
+  - `docs/e2e-ci-optimization-plan.md`
+
+Risk / Regression Watch:
+- The new smoke suite depends on dedicated Supabase E2E environment variables; without them the tests are intentionally skipped.
+- Cleanup is best-effort and assumes the dedicated E2E environment can tolerate occasional leaked seeded records if Supabase auth deletion fails.
+- CI now runs only the smoke browser lane; the legacy GDPR Playwright spec remains outside the PR gate until migrated.
+
+Verification:
+- `npm run type-check`
+- `npm run test:e2e:smoke -- --list`
+
+Rollback:
+- Revert:
+  - `tests/e2e/support/env.ts`
+  - `tests/e2e/support/harness.ts`
+  - `tests/e2e/smoke/trusted-person-invite.test.ts`
+  - `tests/e2e/smoke/trusted-person-access.test.ts`
+  - `tests/e2e/smoke/document-upload.test.ts`
+  - `tests/e2e/smoke/document-security.test.ts`
+  - `src/app/(dashboard)/dokumente/UploadDialog.tsx`
+  - `src/components/ui/file-upload.tsx`
+  - `src/app/(dashboard)/dokumente/page.tsx`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `src/app/(dashboard)/vp-dashboard/view/[ownerId]/page.tsx`
+  - `package.json`
+  - `.github/workflows/ci.yml`
+  - `docs/e2e-smoke-tech-plan.md`
+  - `docs/e2e-ci-optimization-plan.md`
+  - `docs/ai-changelog.md`
+
+## 2026-03-09 18:50 UTC | Agent: Codex | Commit: 47e1fff
+
+Change:
+- Added `docs/e2e-supabase-setup.md` with a step-by-step setup guide for a dedicated hosted Supabase E2E/staging project, a safe `.env.local` template, and explicit guidance on when an old hosted Supabase project is unsafe to reuse.
+
+Risk / Regression Watch:
+- Documentation only. No runtime behavior changed.
+
+Verification:
+- Manual review of `docs/e2e-supabase-setup.md`
+
+Rollback:
+- Revert:
+  - `docs/e2e-supabase-setup.md`
+  - `docs/ai-changelog.md`
+
+## 2026-03-09 19:10 UTC | Agent: Codex | Commit: 47e1fff
+
+Change:
+- Added `scripts/ops/build-supabase-legacy-bootstrap.ps1` to generate a single ordered legacy Supabase bootstrap SQL file for fresh hosted E2E projects.
+- Added `docs/supabase-e2e-bootstrap.md` documenting the baseline restore -> legacy bootstrap -> `supabase db push` flow required by the repo's split migration history.
+
+Risk / Regression Watch:
+- Helper script is operational documentation/tooling only. It does not run automatically and does not affect runtime behavior unless executed by an operator.
+
+Verification:
+- Manual review of the generated migration ordering in `scripts/ops/build-supabase-legacy-bootstrap.ps1`
+
+Rollback:
+- Revert:
+  - `scripts/ops/build-supabase-legacy-bootstrap.ps1`
+  - `docs/supabase-e2e-bootstrap.md`
+  - `docs/ai-changelog.md`
+
+## 2026-03-10 01:28 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Switched the Playwright smoke harness login bootstrap from Supabase admin magic links to the real `/anmelden` email/password path so hosted E2E projects no longer depend on Supabase redirect behavior.
+- Fixed trusted-person seed generation in `tests/e2e/support/harness.ts` so pending invites remain truly inviteable instead of being coerced into a sent state.
+- Updated the legacy Supabase bootstrap helper and runbook to include `migration_033_email_tracking.sql`, which is required for the `email_retry_queue` table used by invitation retries.
+
+Risk / Regression Watch:
+- Local smoke runs still require Redis to be available because login, invite, and upload routes fail closed on missing rate-limit infrastructure.
+- Existing hosted E2E projects created before this bootstrap fix still need `supabase/migration_033_email_tracking.sql` applied manually.
+
+Verification:
+- `npm run type-check`
+- `npm run test:e2e -- tests/e2e/smoke/trusted-person-invite.test.ts --workers=1`
+
+Rollback:
+- Revert:
+  - `tests/e2e/support/harness.ts`
+  - `scripts/ops/build-supabase-legacy-bootstrap.ps1`
+  - `supabase/legacy-bootstrap.sql`
+  - `docs/supabase-e2e-bootstrap.md`
+  - `docs/ai-changelog.md`
+
+## 2026-03-10 01:54 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Stabilized the Playwright smoke suite for local and CI-backed E2E runs by resetting Redis-backed login rate limits per seeded user, using unique per-run user namespaces, and capping local Playwright workers to `1`.
+- Tightened smoke assertions to align with actual user-visible outcomes for uploads, subcategory persistence, trusted-person invite sending, and share-scoped access.
+- Added a harness helper to inspect seeded documents so browser upload flows can verify persisted subcategory assignment deterministically.
+
+Risk / Regression Watch:
+- Local smoke runs still require Redis and the hosted E2E Supabase project to be available.
+- Next.js still emits the `allowedDevOrigins` warning during local Playwright runs; it does not currently fail the suite but should be cleaned up separately.
+
+Verification:
+- `npm run type-check`
+- `npm run test:e2e:smoke`
+
+Rollback:
+- Revert:
+  - `playwright.config.ts`
+  - `tests/e2e/support/harness.ts`
+  - `tests/e2e/smoke/document-upload.test.ts`
+  - `tests/e2e/smoke/trusted-person-access.test.ts`
+  - `tests/e2e/smoke/trusted-person-invite.test.ts`
+  - `docs/ai-changelog.md`
+
+## 2026-03-10 01:58 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Added `allowedDevOrigins` to `next.config.js` to remove the local Playwright dev-origin warning.
+- Removed temporary docs created during E2E/Supabase setup handoff.
+- Verified deployment readiness with lint, production build, type-check, and the full smoke suite.
+
+Risk / Regression Watch:
+- Deployment still depends on the hosted E2E/CI environment having the required Supabase and Redis-backed secrets configured.
+- Local smoke runs still require Docker/Redis to be available.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `npm run build`
+- `npm run test:e2e:smoke`
+
+Rollback:
+- Revert:
+  - `next.config.js`
+  - `docs/ai-changelog.md`

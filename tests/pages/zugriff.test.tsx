@@ -1995,3 +1995,179 @@ describe('Familie Tab Performance', () => {
     }, { timeout: TEST_TIMEOUT })
   }, TEST_TIMEOUT)
 })
+
+describe('ZugriffPage trusted person invite row states', () => {
+  const stripePrices = {
+    basic: { monthly: STRIPE_PRICE_BASIC_MONTHLY, yearly: 'price_basic_yearly' },
+    premium: { monthly: STRIPE_PRICE_PREMIUM_MONTHLY, yearly: STRIPE_PRICE_PREMIUM_YEARLY },
+  }
+
+  function createTrustedPersonsBuilder(rows: Array<Record<string, unknown>>, tableName: string) {
+    const builder: Record<string, unknown> = {}
+    let currentRows = rows
+
+    const chain = () => builder
+    builder.select = chain
+    builder.eq = chain
+    builder.neq = chain
+    builder.gte = chain
+    builder.lte = chain
+    builder.lt = chain
+    builder.gt = chain
+    builder.in = chain
+    builder.not = chain
+    builder.is = chain
+    builder.ilike = chain
+    builder.order = chain
+    builder.limit = chain
+    builder.insert = chain
+    builder.update = chain
+    builder.delete = chain
+    builder.single = async () => {
+      const { mockProfileData } = await import('../mocks/supabase-state')
+      return { data: tableName === 'profiles' ? mockProfileData : null, error: null }
+    }
+    builder.then = (
+      onFulfilled?: ((value: { data: unknown[]; error: null }) => unknown) | null,
+      onRejected?: ((reason: unknown) => unknown) | null
+    ) => {
+      const data = tableName === 'trusted_persons' ? currentRows : []
+      return Promise.resolve({ data, error: null }).then(onFulfilled, onRejected)
+    }
+
+    return {
+      builder,
+      setRows(nextRows: Array<Record<string, unknown>>) {
+        currentRows = nextRows
+      },
+    }
+  }
+
+  beforeEach(() => {
+    resetMockProfile()
+    setBasicUser()
+    vi.clearAllMocks()
+  })
+
+  it('disables the invite button immediately and prevents duplicate invite clicks while pending', async () => {
+    let releaseInvite: (() => void) | null = null
+    const pendingInvite = new Promise<Response>((resolve) => {
+      releaseInvite = () => resolve(new Response(JSON.stringify({ success: true, message: 'Einladung wird gesendet' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    })
+
+    const trustedPersonsState = createTrustedPersonsBuilder([
+      {
+        id: 'tp-1',
+        user_id: 'test-user-id',
+        name: 'Max Mustermann',
+        email: 'max@example.com',
+        relationship: 'Sohn',
+        notes: null,
+        phone: null,
+        invitation_status: 'pending',
+        email_status: 'pending',
+        linked_user_id: null,
+        is_active: true,
+      },
+    ], 'trusted_persons')
+
+    ;(mockSupabaseClient as Record<string, unknown>).from = (tableName: string) => {
+      if (tableName === 'trusted_persons') {
+        return trustedPersonsState.builder
+      }
+      return createZugriffBuilder(tableName)
+    }
+
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/api/stripe/prices')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(stripePrices) })
+      }
+      if (url.includes('/api/trusted-person/invite')) {
+        return pendingInvite
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+    global.fetch = mockFetch
+
+    render(<ZugriffPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Max Mustermann')).toBeInTheDocument()
+    }, { timeout: TEST_TIMEOUT })
+
+    const inviteButton = screen.getByRole('button', { name: /^einladen$/i })
+    await userEvent.click(inviteButton)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /wird gesendet/i })).toBeDisabled()
+    }, { timeout: TEST_TIMEOUT })
+
+    await userEvent.click(screen.getByRole('button', { name: /wird gesendet/i }))
+    expect(mockFetch.mock.calls.filter(([url]) => String(url).includes('/api/trusted-person/invite'))).toHaveLength(1)
+
+    releaseInvite?.()
+    await act(async () => {
+      await pendingInvite
+    })
+  }, TEST_TIMEOUT)
+
+  it('renders sending and sent invite statuses from backend email_status', async () => {
+    const trustedPersonsState = createTrustedPersonsBuilder([
+      {
+        id: 'tp-sending',
+        user_id: 'test-user-id',
+        name: 'Erika Beispiel',
+        email: 'erika@example.com',
+        relationship: 'Tochter',
+        notes: null,
+        phone: null,
+        invitation_status: 'pending',
+        email_status: 'sending',
+        linked_user_id: null,
+        is_active: true,
+      },
+      {
+        id: 'tp-sent',
+        user_id: 'test-user-id',
+        name: 'Paul Beispiel',
+        email: 'paul@example.com',
+        relationship: 'Sohn',
+        notes: null,
+        phone: null,
+        invitation_status: 'pending',
+        email_status: 'sent',
+        linked_user_id: null,
+        is_active: true,
+      },
+    ], 'trusted_persons')
+
+    ;(mockSupabaseClient as Record<string, unknown>).from = (tableName: string) => {
+      if (tableName === 'trusted_persons') {
+        return trustedPersonsState.builder
+      }
+      return createZugriffBuilder(tableName)
+    }
+
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/api/stripe/prices')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(stripePrices) })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+    global.fetch = mockFetch
+
+    render(<ZugriffPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Erika Beispiel')).toBeInTheDocument()
+      expect(screen.getByText('Paul Beispiel')).toBeInTheDocument()
+    }, { timeout: TEST_TIMEOUT })
+
+    expect(screen.getByRole('button', { name: /wird gesendet/i })).toBeDisabled()
+    expect(screen.getByText(/einladung gesendet/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^einladen$/i })).not.toBeInTheDocument()
+  }, TEST_TIMEOUT)
+})

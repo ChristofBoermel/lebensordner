@@ -161,7 +161,7 @@ export function FileUpload({
           !isDragActive && 'border-warmgray-300 hover:border-sage-400 hover:bg-warmgray-50'
         )}
       >
-        <input {...getInputProps()} />
+        <input {...getInputProps()} data-testid="file-upload-input" />
         
         <div className="flex flex-col items-center gap-3">
           <div className={cn(

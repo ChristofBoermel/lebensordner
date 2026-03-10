@@ -4,6 +4,16 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+interface SharedDocument {
+  id: string;
+  title: string;
+  file_name: string;
+  file_type: string;
+  category: string;
+  is_encrypted?: boolean;
+  file_iv?: string | null;
+}
+
 export default function VpDashboardViewPage() {
   const params = useParams();
   const ownerId = params.ownerId as string;
@@ -11,15 +21,17 @@ export default function VpDashboardViewPage() {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
 
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<SharedDocument[]>([]);
   const [shareTokens, setShareTokens] = useState<Record<string, string>>({});
   const [rk, setRk] = useState<string | null>(null);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [accessLevel, setAccessLevel] = useState<string | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
+  const [ownerName, setOwnerName] = useState<string>("Lebensordner");
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(true);
 
-  const canDownloadAll = accessLevel === 'immediate';
+  const canDownloadAll = accessLevel === 'immediate' && documents.length > 0;
   const canOpenDocuments = accessLevel === 'immediate' || accessLevel === 'emergency';
 
   useEffect(() => {
@@ -30,22 +42,6 @@ export default function VpDashboardViewPage() {
 
   useEffect(() => {
     if (!ownerId) return;
-    supabase
-      .from("documents")
-      .select("*")
-      .eq("user_id", ownerId)
-      .then(({ data }) => setDocuments(data || []));
-
-    fetch(`/api/documents/share-token?ownerId=${ownerId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        const map: Record<string, string> = {};
-        for (const t of data.tokens || []) {
-          map[t.document_id] = t.wrapped_dek_for_tp;
-        }
-        setShareTokens(map);
-      });
-
     // allowed: I/O - fetch trusted person access level from DB
     async function fetchAccessLevel() {
       const { data: authData } = await supabase.auth.getUser();
@@ -59,10 +55,49 @@ export default function VpDashboardViewPage() {
         .single();
       setAccessLevel(data?.access_level ?? null);
     }
+
+    // allowed: I/O - hydrate trusted-person dashboard from share-scoped APIs
+    async function hydrateSharedDocuments() {
+      setIsLoadingDocuments(true);
+      setViewError(null);
+
+      try {
+        const [documentsRes, shareTokensRes] = await Promise.all([
+          fetch(`/api/family/view?ownerId=${ownerId}`),
+          fetch(`/api/documents/share-token?ownerId=${ownerId}`),
+        ]);
+
+        const documentsData = await documentsRes.json();
+        if (!documentsRes.ok) {
+          setDocuments([]);
+          setOwnerName("Lebensordner");
+          setViewError(documentsData?.error || "Fehler beim Laden der Dokumente.");
+          return;
+        }
+
+        setDocuments(documentsData.documents || []);
+        setOwnerName(documentsData.ownerName || "Lebensordner");
+
+        const shareTokensData = shareTokensRes.ok ? await shareTokensRes.json() : { tokens: [] };
+        const map: Record<string, string> = {};
+        for (const token of shareTokensData.tokens || []) {
+          map[token.document_id] = token.wrapped_dek_for_tp;
+        }
+        setShareTokens(map);
+      } catch {
+        setDocuments([]);
+        setOwnerName("Lebensordner");
+        setViewError("Fehler beim Laden der Dokumente.");
+      } finally {
+        setIsLoadingDocuments(false);
+      }
+    }
+
     fetchAccessLevel();
+    hydrateSharedDocuments();
   }, [ownerId, supabase]);
 
-  const handleViewDoc = async (doc: any) => {
+  const handleViewDoc = async (doc: SharedDocument) => {
     setViewError(null);
     if (!doc.is_encrypted) {
       const bytesRes = await fetch(
@@ -97,6 +132,10 @@ export default function VpDashboardViewPage() {
     const wrappedDek = shareTokens[doc.id];
     if (!wrappedDek) {
       setViewError("Kein Zugriffstoken für dieses Dokument.");
+      return;
+    }
+    if (!doc.file_iv) {
+      setViewError("Freigabeinformationen für dieses Dokument fehlen.");
       return;
     }
     const dek = await unwrapKey(wrappedDek, rkKey, "AES-GCM");
@@ -157,7 +196,7 @@ export default function VpDashboardViewPage() {
         }
 
         const buffer = await bytesRes.arrayBuffer();
-        if (doc.is_encrypted && rk && doc.wrapped_dek_for_tp) {
+        if (doc.is_encrypted && rk && doc.wrapped_dek_for_tp && doc.file_iv) {
           const rkKey = await importRawHexKey(rk, ["wrapKey", "unwrapKey"]);
           const dek = await unwrapKey(doc.wrapped_dek_for_tp, rkKey, "AES-GCM");
           const plain = await decryptFile(buffer, dek, doc.file_iv);
@@ -168,7 +207,7 @@ export default function VpDashboardViewPage() {
       }
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
-      const safeOwnerName = (data.ownerName || "Lebensordner")
+      const safeOwnerName = (data.ownerName || ownerName || "Lebensordner")
         .replace(/[^a-zA-Z0-9äöüÄÖÜß\s-]/g, "")
         .replace(/\s+/g, "_");
       const dateStr = new Date().toISOString().split("T")[0];
@@ -196,7 +235,8 @@ export default function VpDashboardViewPage() {
           Zugriffslink erneut zu senden.
         </div>
       )}
-      <h1 className="text-2xl font-bold mb-6">Dokumente</h1>
+      <h1 className="text-2xl font-bold mb-2">Dokumente</h1>
+      <p className="text-sm text-gray-500 mb-6">Freigegeben von {ownerName}</p>
       {viewError && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           {viewError}
@@ -207,24 +247,38 @@ export default function VpDashboardViewPage() {
           <button
             onClick={handleDownloadAll}
             disabled={isDownloading}
+            data-testid="download-all-documents"
             className="px-4 py-2 bg-sage-600 text-white rounded-lg hover:bg-sage-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isDownloading ? "Wird erstellt..." : "Alle herunterladen"}
           </button>
-        ) : accessLevel === 'emergency' ? (
+        ) : documents.length > 0 && accessLevel === 'emergency' ? (
           <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm">
             Ihr Zugriff ist auf Notfall-Ansicht beschränkt. Downloads sind nicht erlaubt.
           </div>
-        ) : accessLevel === 'after_confirmation' ? (
+        ) : documents.length > 0 && accessLevel === 'after_confirmation' ? (
           <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
             Downloads erfordern eine Bestätigung durch den Besitzer.
           </div>
         ) : null}
       </div>
+      {isLoadingDocuments ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-6 text-slate-600">
+          Freigegebene Dokumente werden geladen...
+        </div>
+      ) : documents.length === 0 ? (
+        <div
+          className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-slate-700"
+          data-testid="trusted-person-empty-state"
+        >
+          Es wurden noch keine Dokumente für Sie freigegeben.
+        </div>
+      ) : (
       <div className="space-y-3">
         {documents.map((doc) => (
           <div
             key={doc.id}
+            data-testid={`shared-document-${doc.id}`}
             className="flex items-center justify-between p-4 border rounded-lg"
           >
             <div>
@@ -248,6 +302,7 @@ export default function VpDashboardViewPage() {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }

@@ -2585,6 +2585,7 @@ export default function DocumentsPage() {
       <div
         key={doc.id}
         id={`document-${doc.id}`}
+        data-testid={`document-row-${doc.id}`}
         onClick={() => navigateToDocument(doc)}
         className={`document-item flex items-center gap-3 p-3 rounded-xl border border-warmgray-200 dark:border-warmgray-800 group transition-all duration-300 cursor-pointer ${
           isHighlighted
@@ -2600,6 +2601,8 @@ export default function DocumentsPage() {
             e.stopPropagation();
             toggleDocumentSelection(doc.id);
           }}
+          aria-label={`Dokument ${getDisplayTitle(doc)} auswählen`}
+          data-testid={`document-select-${doc.id}`}
           className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
             isSelected
               ? "bg-sage-500 border-sage-500 text-white"
@@ -2660,6 +2663,8 @@ export default function DocumentsPage() {
                 variant="ghost"
                 size="icon"
                 className="h-9 w-9 text-warmgray-400 !p-0 flex-shrink-0"
+                aria-label={`Aktionen für ${getDisplayTitle(doc)}`}
+                data-testid={`document-actions-${doc.id}`}
               >
                 <MoreVertical className="w-5 h-5" />
               </Button>

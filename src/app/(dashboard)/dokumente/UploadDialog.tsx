@@ -304,7 +304,10 @@ function UploadDialogRoot({
   };
 
   return (
-    <DialogContent className="w-full max-h-[95dvh] sm:max-h-[90vh] sm:max-w-lg p-0 overflow-hidden flex flex-col">
+    <DialogContent
+      className="w-full max-h-[95dvh] sm:max-h-[90vh] sm:max-w-lg p-0 overflow-hidden flex flex-col"
+      data-testid="upload-dialog"
+    >
       <DialogHeader className="p-6 pb-2 pr-14 flex-shrink-0">
         <DialogTitle>Neues Dokument</DialogTitle>
         <DialogDescription>
@@ -359,9 +362,11 @@ function UploadDialogRoot({
 
         {uploadCategory && !uploadCustomCategory && (
           <div className="space-y-2">
-            <Label>Unterordner (optional)</Label>
+            <Label htmlFor="upload-subcategory-select">Unterordner (optional)</Label>
             <div className="space-y-2">
               <select
+                id="upload-subcategory-select"
+                data-testid="upload-subcategory-select"
                 value={uploadSubcategory || "_none"}
                 onChange={(e) => {
                   const value = e.target.value;
@@ -390,6 +395,7 @@ function UploadDialogRoot({
               {isCreatingSubcategory && (
                 <div className="flex gap-2 mt-2">
                   <Input
+                    data-testid="upload-new-subcategory-name"
                     placeholder="Name des Unterordners"
                     value={newSubcategoryName}
                     onChange={(e) => setNewSubcategoryName(e.target.value)}
@@ -402,6 +408,7 @@ function UploadDialogRoot({
                     autoFocus
                   />
                   <Button
+                    data-testid="upload-create-subcategory"
                     size="sm"
                     onClick={handleCreateSubcategory}
                     disabled={!newSubcategoryName.trim()}
@@ -654,6 +661,7 @@ function UploadDialogRoot({
           <input
             type="checkbox"
             id="lock-after-upload"
+            data-testid="lock-after-upload"
             checked={lockAfterUpload}
             onChange={(e) => onLockAfterUploadChange(e.target.checked)}
             className="h-4 w-4 rounded border-warmgray-300 accent-amber-500"

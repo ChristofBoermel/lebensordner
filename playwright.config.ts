@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
+import { loadEnvConfig } from '@next/env'
+
+loadEnvConfig(process.cwd())
 
 const baseURL =
   process.env.PLAYWRIGHT_BASE_URL ??
@@ -10,7 +13,7 @@ export default defineConfig({
   testMatch: /.*\.test\.ts/,
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  workers: process.env.CI ? 2 : 1,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL,

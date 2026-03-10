@@ -132,6 +132,7 @@ export default function ZugriffPage() {
   const [sharesVersion, setSharesVersion] = useState(0)
   const [sharingDocuments, setSharingDocuments] = useState<Array<{id: string; title: string; wrapped_dek: string | null}>>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [invitePendingById, setInvitePendingById] = useState<Record<string, boolean>>({})
 
   const supabase = createClient()
 
@@ -813,6 +814,11 @@ export default function ZugriffPage() {
   }
 
   const handleSendInvite = async (personId: string) => {
+    if (invitePendingById[personId]) return
+
+    setInvitePendingById((current) => ({ ...current, [personId]: true }))
+    setError(null)
+
     try {
       const response = await fetch('/api/trusted-person/invite', {
         method: 'POST',
@@ -826,12 +832,37 @@ export default function ZugriffPage() {
         throw new Error(data.error || 'Fehler beim Senden')
       }
 
-      alert('Einladung wurde erfolgreich gesendet!')
-      fetchTrustedPersons()
+      await fetchTrustedPersons()
     } catch (err: any) {
-      alert('Fehler: ' + err.message)
+      setError(err.message || 'Fehler beim Senden der Einladung.')
       console.error('Invite error:', err)
+    } finally {
+      setInvitePendingById((current) => {
+        const next = { ...current }
+        delete next[personId]
+        return next
+      })
     }
+  }
+
+  function getInviteRowState(person: TrustedPerson) {
+    if (person.invitation_status === 'accepted' && person.linked_user_id !== null) {
+      return 'connected' as const
+    }
+
+    if (person.invitation_status === 'accepted' && person.linked_user_id === null) {
+      return 'awaiting_link' as const
+    }
+
+    if (invitePendingById[person.id] || person.email_status === 'sending') {
+      return 'sending' as const
+    }
+
+    if (person.email_status === 'sent' || person.invitation_status === 'sent') {
+      return 'sent' as const
+    }
+
+    return 'inviteable' as const
   }
 
   const handleToggleActive = async (person: TrustedPerson) => {
@@ -1132,10 +1163,14 @@ export default function ZugriffPage() {
               {activePersons.length > 0 ? (
                 <div className="space-y-4">
                   {activePersons.map((person) => (
-                    <Card key={person.id} className={`border-l-4 ${
+                    <Card
+                      key={person.id}
+                      data-testid={`trusted-person-card-${person.id}`}
+                      className={`border-l-4 ${
                       userTier.id === 'premium' ? 'border-l-green-500' :
                       userTier.id === 'basic' ? 'border-l-blue-500' : 'border-l-warmgray-300'
-                    }`}>
+                    }`}
+                    >
                       <CardContent className="pt-6">
                         <div className="flex items-start justify-between">
                           <div className="flex gap-4">
@@ -1171,35 +1206,58 @@ export default function ZugriffPage() {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {(!person.invitation_status || person.invitation_status === 'pending') && (
+                            {getInviteRowState(person) === 'inviteable' && (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleSendInvite(person.id)}
                                 title="Einladung senden"
                                 className="text-sage-600 hover:text-sage-700"
+                                data-testid={`trusted-person-invite-${person.id}`}
                               >
                                 <Send className="w-4 h-4 mr-1" />
                                 Einladen
                               </Button>
                             )}
-                            {person.invitation_status === 'sent' && (
-                              <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                            {getInviteRowState(person) === 'sending' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled
+                                title="Einladung wird gesendet"
+                                className="text-sage-600"
+                                data-testid={`trusted-person-invite-${person.id}`}
+                              >
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                Wird gesendet
+                              </Button>
+                            )}
+                            {getInviteRowState(person) === 'sent' && (
+                              <span
+                                className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded"
+                                data-testid={`trusted-person-status-${person.id}`}
+                              >
                                 Einladung gesendet
                               </span>
                             )}
-                            {person.invitation_status === 'accepted' && person.linked_user_id !== null && (
-                              <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded flex items-center gap-1">
+                            {getInviteRowState(person) === 'connected' && (
+                              <span
+                                className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded flex items-center gap-1"
+                                data-testid={`trusted-person-status-${person.id}`}
+                              >
                                 <CheckCircle2 className="w-3 h-3" />
                                 Verbunden
                               </span>
                             )}
-                            {person.invitation_status === 'accepted' && person.linked_user_id === null && (
-                              <span className="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded">
+                            {getInviteRowState(person) === 'awaiting_link' && (
+                              <span
+                                className="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded"
+                                data-testid={`trusted-person-status-${person.id}`}
+                              >
                                 Wartet auf Kontoverknüpfung
                               </span>
                             )}
-                            {person.invitation_status === 'accepted' && person.linked_user_id !== null && (
+                            {getInviteRowState(person) === 'connected' && (
                               <Button
                                 variant="outline"
                                 size="sm"

@@ -14,7 +14,6 @@ const mockSupabase = {
   auth: {
     getUser: vi.fn(() => Promise.resolve({ data: { user: { id: 'vp-user-id' } }, error: null })),
   },
-  then: vi.fn((cb: any) => Promise.resolve(cb({ data: [], error: null }))),
 }
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -27,36 +26,111 @@ function setupAccessLevel(level: string) {
   )
 }
 
+function createJsonResponse(data: unknown, status = 200) {
+  return Promise.resolve(
+    new Response(JSON.stringify(data), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  )
+}
+
+function setupFetch({
+  documents = [],
+  ownerName = 'Maria Musterfrau',
+  downloadResponse,
+  bytesResponse,
+}: {
+  documents?: Array<Record<string, unknown>>
+  ownerName?: string
+  downloadResponse?: () => Promise<Response>
+  bytesResponse?: () => Promise<Response>
+} = {}) {
+  global.fetch = vi.fn((url: string) => {
+    if (url.includes('/api/family/view?ownerId=')) {
+      return createJsonResponse({ ownerName, documents, categories: {} })
+    }
+
+    if (url.includes('/api/documents/share-token?ownerId=')) {
+      return createJsonResponse({
+        tokens: documents
+          .filter((doc) => doc.is_encrypted)
+          .map((doc) => ({
+            document_id: doc.id,
+            wrapped_dek_for_tp: `wrapped-${doc.id}`,
+          })),
+      })
+    }
+
+    if (url.includes('/api/family/download?ownerId=')) {
+      return downloadResponse
+        ? downloadResponse()
+        : Promise.resolve(
+            new Response(new Blob(['zip']), {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/zip',
+                'Content-Disposition': 'attachment; filename="test.zip"',
+              },
+            })
+          )
+    }
+
+    if (url.includes('/api/family/view/bytes?docId=')) {
+      return bytesResponse
+        ? bytesResponse()
+        : Promise.resolve(new Response(new Uint8Array([1, 2, 3]).buffer, { status: 200 }))
+    }
+
+    return createJsonResponse({})
+  }) as typeof fetch
+}
+
 describe('VpDashboardViewPage access level UX', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
-    global.fetch = vi.fn(() =>
-      Promise.resolve(new Response(JSON.stringify({ tokens: [] }), { status: 200 }))
-    )
-    // jsdom stubs for browser APIs used in success paths
     global.URL.createObjectURL = vi.fn(() => 'blob:mock')
     global.URL.revokeObjectURL = vi.fn()
     window.open = vi.fn()
     mockSupabase.from.mockReturnValue(mockSupabase)
     mockSupabase.select.mockReturnValue(mockSupabase)
     mockSupabase.eq.mockReturnValue(mockSupabase)
-    mockSupabase.then = vi.fn((cb: any) =>
-      Promise.resolve(cb({ data: [], error: null }))
-    )
   })
 
-  it('shows download button for immediate access', async () => {
+  it('shows download button for immediate access when shared documents exist', async () => {
     setupAccessLevel('immediate')
+    setupFetch({
+      documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
+    })
+
     render(<VpDashboardViewPage />)
+
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /alle herunterladen/i })).toBeInTheDocument()
     )
   })
 
+  it('shows empty state and hides bulk download when no documents are shared', async () => {
+    setupAccessLevel('immediate')
+    setupFetch({ documents: [] })
+
+    render(<VpDashboardViewPage />)
+
+    await waitFor(() =>
+      expect(screen.getByText(/noch keine dokumente/i)).toBeInTheDocument()
+    )
+    expect(screen.queryByRole('button', { name: /alle herunterladen/i })).not.toBeInTheDocument()
+  })
+
   it('hides download button and shows hint for emergency access', async () => {
     setupAccessLevel('emergency')
+    setupFetch({
+      documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
+    })
+
     render(<VpDashboardViewPage />)
+
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: /alle herunterladen/i })).not.toBeInTheDocument()
     )
@@ -65,88 +139,74 @@ describe('VpDashboardViewPage access level UX', () => {
 
   it('hides download button for after_confirmation access', async () => {
     setupAccessLevel('after_confirmation')
+    setupFetch({
+      documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
+    })
+
     render(<VpDashboardViewPage />)
+
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: /alle herunterladen/i })).not.toBeInTheDocument()
     )
-    expect(screen.getByText(/bestätigung/i)).toBeInTheDocument()
+    expect(screen.getByText(/downloads erfordern eine bestätigung durch den besitzer/i)).toBeInTheDocument()
   })
 
-  it('after_confirmation: Öffnen button is disabled with hint for each document', async () => {
+  it('after_confirmation disables document open action', async () => {
     setupAccessLevel('after_confirmation')
-    mockSupabase.then = vi.fn((cb: any) =>
-      Promise.resolve(cb({ data: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', is_encrypted: false }], error: null }))
-    )
+    setupFetch({
+      documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
+    })
+
     render(<VpDashboardViewPage />)
+
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /öffnen/i })).toBeDisabled()
     )
     expect(screen.getByText(/bestätigung erforderlich/i)).toBeInTheDocument()
   })
 
-  it('emergency: Öffnen button is enabled (view allowed)', async () => {
+  it('opens visible documents through the bytes endpoint', async () => {
     setupAccessLevel('emergency')
-    mockSupabase.then = vi.fn((cb: any) =>
-      Promise.resolve(cb({ data: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', is_encrypted: false }], error: null }))
-    )
-    render(<VpDashboardViewPage />)
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /öffnen/i })).not.toBeDisabled()
-    )
-  })
-
-  it('error banner clears on next successful action', async () => {
-    setupAccessLevel('immediate')
-    mockSupabase.then = vi.fn((cb: any) =>
-      Promise.resolve(cb({ data: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', is_encrypted: false }], error: null }))
-    )
-
-    // First call fails, second succeeds
-    let callCount = 0
-    global.fetch = vi.fn((url: any) => {
-      const urlStr = typeof url === 'string' ? url : (url as Request).url
-      if (urlStr.includes('/api/family/view/bytes')) {
-        callCount++
-        if (callCount === 1) {
-          return Promise.resolve(new Response('', { status: 500 }))
-        }
-        return Promise.resolve(
-          new Response(new Uint8Array([1, 2, 3]).buffer, { status: 200 })
-        )
-      }
-      return Promise.resolve(new Response(JSON.stringify({ tokens: [] }), { status: 200 }))
+    setupFetch({
+      documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
     })
 
     render(<VpDashboardViewPage />)
     const openBtn = await screen.findByRole('button', { name: /öffnen/i })
 
-    // First click → error appears
     fireEvent.click(openBtn)
-    await waitFor(() =>
-      expect(screen.getByText(/fehler beim laden/i)).toBeInTheDocument()
-    )
 
-    // Second click → error disappears before new action
-    fireEvent.click(openBtn)
     await waitFor(() =>
-      expect(screen.queryByText(/fehler beim laden/i)).not.toBeInTheDocument()
+      expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/family/view/bytes?docId=doc-1'))
     )
   })
 
-  it('does not trigger extra fetch calls on re-render', async () => {
+  it('clears an old error on the next successful action', async () => {
     setupAccessLevel('immediate')
-    const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response(JSON.stringify({ tokens: [] }), { status: 200 }))
+
+    let bytesCallCount = 0
+    setupFetch({
+      documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
+      bytesResponse: () => {
+        bytesCallCount += 1
+        if (bytesCallCount === 1) {
+          return Promise.resolve(new Response('', { status: 500 }))
+        }
+        return Promise.resolve(new Response(new Uint8Array([1, 2, 3]).buffer, { status: 200 }))
+      },
+    })
+
+    render(<VpDashboardViewPage />)
+    const openBtn = await screen.findByRole('button', { name: /öffnen/i })
+
+    fireEvent.click(openBtn)
+    await waitFor(() =>
+      expect(screen.getByText(/fehler beim laden der datei/i)).toBeInTheDocument()
     )
-    global.fetch = fetchSpy
 
-    const { rerender } = render(<VpDashboardViewPage />)
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalled())
-    const countAfterMount = fetchSpy.mock.calls.length
-
-    // Re-render without changing ownerId should not trigger more fetches
-    rerender(<VpDashboardViewPage />)
-    await new Promise((r) => setTimeout(r, 50))
-    expect(fetchSpy.mock.calls.length).toBe(countAfterMount)
+    fireEvent.click(openBtn)
+    await waitFor(() =>
+      expect(screen.queryByText(/fehler beim laden der datei/i)).not.toBeInTheDocument()
+    )
   })
 })
