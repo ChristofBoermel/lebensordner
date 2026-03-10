@@ -2303,3 +2303,23 @@ Rollback:
   - `src/app/(dashboard)/zugriff/page.tsx`
   - `tests/pages/dokumente.test.tsx`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 21:58 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Stopped trusted-person list refreshes on `/zugriff` from re-entering the full-page loading state after invite/save/toggle actions, keeping invite rows mounted while their status refreshes.
+- Followed up on the CI-only invite smoke failure where the row could briefly disappear during the post-invite refresh window.
+
+Risk / Regression Watch:
+- Initial page load still uses the blocking loader; subsequent trusted-person refreshes now update in place, so stale row content may remain visible briefly while the refresh request completes.
+
+Verification:
+- `python scripts/ops/hook-discipline-audit.py`
+- `npm run type-check`
+- `npm run lint`
+- `npx vitest run tests/pages/zugriff.test.tsx tests/pages/dokumente.test.tsx tests/components/sharing.test.tsx tests/components/bulk-share-dialog.test.tsx`
+
+Rollback:
+- Revert:
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `docs/ai-changelog.md`

@@ -263,14 +263,18 @@ export default function ZugriffPage() {
     fetchTier()
   }, [supabase, getCurrentTier, priceIds])
 
-  const fetchTrustedPersons = useCallback(async () => {
-    setIsLoading(true)
+  const fetchTrustedPersons = useCallback(async (showLoader = true) => {
+    if (showLoader) {
+      setIsLoading(true)
+    }
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       setTrustedPersons([])
       setShareTrustedPersons([])
-      setIsLoading(false)
+      if (showLoader) {
+        setIsLoading(false)
+      }
       return
     }
 
@@ -287,7 +291,9 @@ export default function ZugriffPage() {
       setTrustedPersons(trustedPersonsResult.data)
     }
     setShareTrustedPersons(shareRecipients)
-    setIsLoading(false)
+    if (showLoader) {
+      setIsLoading(false)
+    }
   }, [supabase])
 
   useEffect(() => {
@@ -815,7 +821,7 @@ export default function ZugriffPage() {
       }
 
       setIsDialogOpen(false)
-      fetchTrustedPersons()
+      fetchTrustedPersons(false)
     } catch (err) {
       setError('Fehler beim Speichern. Bitte versuchen Sie es erneut.')
       console.error('Save error:', err)
@@ -834,7 +840,7 @@ export default function ZugriffPage() {
         .eq('id', id)
 
       if (error) throw error
-      fetchTrustedPersons()
+      fetchTrustedPersons(false)
     } catch (err) {
       console.error('Delete error:', err)
     }
@@ -859,7 +865,7 @@ export default function ZugriffPage() {
         throw new Error(data.error || 'Fehler beim Senden')
       }
 
-      await fetchTrustedPersons()
+      await fetchTrustedPersons(false)
     } catch (err: any) {
       setError(err.message || 'Fehler beim Senden der Einladung.')
       console.error('Invite error:', err)
@@ -900,7 +906,7 @@ export default function ZugriffPage() {
         .eq('id', person.id)
 
       if (error) throw error
-      fetchTrustedPersons()
+      fetchTrustedPersons(false)
     } catch (err) {
       console.error('Toggle error:', err)
     }
