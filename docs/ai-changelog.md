@@ -2213,3 +2213,20 @@ Rollback:
   - `playwright.config.ts`
   - `scripts/ops/start-standalone-for-e2e.mjs`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 02:44 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Pointed the GitHub Actions `e2e-tests` job at the dedicated `E2E` environment so browser smoke tests use the hosted E2E Supabase secrets instead of production deployment secrets.
+
+Risk / Regression Watch:
+- CI now depends on the `E2E` environment containing a complete and internally consistent secret set.
+- Production deploy remains blocked until CI passes, which is intentional.
+
+Verification:
+- `gh run watch <new CI run> --exit-status`
+
+Rollback:
+- Revert:
+  - `.github/workflows/ci.yml`
+  - `docs/ai-changelog.md`

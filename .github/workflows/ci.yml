@@ -95,7 +95,7 @@ jobs:
     needs: [agent-rule-guard, logging-guard, hook-discipline-guard]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    environment: Production
+    environment: E2E
     services:
       redis:
         image: redis:7-alpine
