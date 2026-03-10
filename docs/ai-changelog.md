@@ -2341,3 +2341,28 @@ Rollback:
   - `.github/workflows/ci.yml`
   - `.github/workflows/deploy.yml`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 22:28 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Made `/api/family/view` return the trusted-person `accessLevel` plus per-document encryption metadata so the trusted-person viewer can use server-authoritative access state.
+- Refactored `/vp-dashboard/view/[ownerId]` to render shared documents from the family-view response even if share-token loading fails, and hardened bulk download by appending a temporary anchor before clicking it.
+
+Risk / Regression Watch:
+- Trusted-person document gating now depends on the `/api/family/view` payload shape, so any future response changes there must keep `accessLevel`, `is_encrypted`, and `file_iv` aligned with the client.
+- Share-token failures no longer blank the document list; encrypted open/download actions will still fail gracefully if token retrieval remains unavailable.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `python scripts/ops/hook-discipline-audit.py`
+- `npm run type-check`
+- `npm run lint`
+- `npx vitest run tests/pages/vp-dashboard-view.test.tsx tests/e2e/smoke/trusted-person-access.test.ts`
+- `npm run test:e2e:smoke -- tests/e2e/smoke/trusted-person-access.test.ts` (skipped in this environment)
+
+Rollback:
+- Revert:
+  - `src/app/api/family/view/route.ts`
+  - `src/app/(dashboard)/vp-dashboard/view/[ownerId]/page.tsx`
+  - `tests/pages/vp-dashboard-view.test.tsx`
+  - `docs/ai-changelog.md`

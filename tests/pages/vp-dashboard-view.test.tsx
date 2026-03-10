@@ -6,25 +6,11 @@ vi.mock('next/navigation', () => ({
   useParams: () => ({ ownerId: 'owner-123' }),
 }))
 
-const mockSupabase = {
-  from: vi.fn(() => mockSupabase),
-  select: vi.fn(() => mockSupabase),
-  eq: vi.fn(() => mockSupabase),
-  single: vi.fn(),
-  auth: {
-    getUser: vi.fn(() => Promise.resolve({ data: { user: { id: 'vp-user-id' } }, error: null })),
-  },
-}
+const createClientMock = vi.fn()
 
 vi.mock('@/lib/supabase/client', () => ({
-  createClient: () => mockSupabase,
+  createClient: createClientMock,
 }))
-
-function setupAccessLevel(level: string) {
-  mockSupabase.single = vi.fn(() =>
-    Promise.resolve({ data: { access_level: level }, error: null })
-  )
-}
 
 function createJsonResponse(data: unknown, status = 200) {
   return Promise.resolve(
@@ -38,20 +24,28 @@ function createJsonResponse(data: unknown, status = 200) {
 function setupFetch({
   documents = [],
   ownerName = 'Maria Musterfrau',
+  accessLevel = 'immediate',
+  shareTokensShouldFail = false,
   downloadResponse,
   bytesResponse,
 }: {
   documents?: Array<Record<string, unknown>>
   ownerName?: string
+  accessLevel?: string | null
+  shareTokensShouldFail?: boolean
   downloadResponse?: () => Promise<Response>
   bytesResponse?: () => Promise<Response>
 } = {}) {
   global.fetch = vi.fn((url: string) => {
     if (url.includes('/api/family/view?ownerId=')) {
-      return createJsonResponse({ ownerName, documents, categories: {} })
+      return createJsonResponse({ ownerName, accessLevel, documents, categories: {} })
     }
 
     if (url.includes('/api/documents/share-token?ownerId=')) {
+      if (shareTokensShouldFail) {
+        return Promise.reject(new Error('share-token failed'))
+      }
+
       return createJsonResponse({
         tokens: documents
           .filter((doc) => doc.is_encrypted)
@@ -93,14 +87,12 @@ describe('VpDashboardViewPage access level UX', () => {
     global.URL.createObjectURL = vi.fn(() => 'blob:mock')
     global.URL.revokeObjectURL = vi.fn()
     window.open = vi.fn()
-    mockSupabase.from.mockReturnValue(mockSupabase)
-    mockSupabase.select.mockReturnValue(mockSupabase)
-    mockSupabase.eq.mockReturnValue(mockSupabase)
+    document.body.innerHTML = ''
   })
 
   it('shows download button for immediate access when shared documents exist', async () => {
-    setupAccessLevel('immediate')
     setupFetch({
+      accessLevel: 'immediate',
       documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
     })
 
@@ -112,8 +104,7 @@ describe('VpDashboardViewPage access level UX', () => {
   })
 
   it('shows empty state and hides bulk download when no documents are shared', async () => {
-    setupAccessLevel('immediate')
-    setupFetch({ documents: [] })
+    setupFetch({ accessLevel: 'immediate', documents: [] })
 
     render(<VpDashboardViewPage />)
 
@@ -124,8 +115,8 @@ describe('VpDashboardViewPage access level UX', () => {
   })
 
   it('hides download button and shows hint for emergency access', async () => {
-    setupAccessLevel('emergency')
     setupFetch({
+      accessLevel: 'emergency',
       documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
     })
 
@@ -138,8 +129,8 @@ describe('VpDashboardViewPage access level UX', () => {
   })
 
   it('hides download button for after_confirmation access', async () => {
-    setupAccessLevel('after_confirmation')
     setupFetch({
+      accessLevel: 'after_confirmation',
       documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
     })
 
@@ -152,8 +143,8 @@ describe('VpDashboardViewPage access level UX', () => {
   })
 
   it('after_confirmation disables document open action', async () => {
-    setupAccessLevel('after_confirmation')
     setupFetch({
+      accessLevel: 'after_confirmation',
       documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
     })
 
@@ -166,8 +157,8 @@ describe('VpDashboardViewPage access level UX', () => {
   })
 
   it('opens visible documents through the bytes endpoint', async () => {
-    setupAccessLevel('emergency')
     setupFetch({
+      accessLevel: 'emergency',
       documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
     })
 
@@ -182,10 +173,9 @@ describe('VpDashboardViewPage access level UX', () => {
   })
 
   it('clears an old error on the next successful action', async () => {
-    setupAccessLevel('immediate')
-
     let bytesCallCount = 0
     setupFetch({
+      accessLevel: 'immediate',
       documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
       bytesResponse: () => {
         bytesCallCount += 1
@@ -208,5 +198,65 @@ describe('VpDashboardViewPage access level UX', () => {
     await waitFor(() =>
       expect(screen.queryByText(/fehler beim laden der datei/i)).not.toBeInTheDocument()
     )
+  })
+
+  it('renders shared documents even when share-token loading fails', async () => {
+    setupFetch({
+      accessLevel: 'immediate',
+      shareTokensShouldFail: true,
+      documents: [
+        {
+          id: 'doc-enc-1',
+          title: 'Encrypted Doc',
+          category: 'finanzen',
+          file_name: 'secret.pdf',
+          file_type: 'application/pdf',
+          is_encrypted: true,
+          file_iv: 'iv-123',
+        },
+      ],
+    })
+
+    render(<VpDashboardViewPage />)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('shared-document-doc-enc-1')).toBeInTheDocument()
+    )
+    expect(screen.getByRole('button', { name: /alle herunterladen/i })).toBeInTheDocument()
+  })
+
+  it('does not recreate the browser supabase client for access gating', async () => {
+    setupFetch({
+      accessLevel: 'immediate',
+      documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
+    })
+
+    render(<VpDashboardViewPage />)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('shared-document-doc-1')).toBeInTheDocument()
+    )
+    expect(createClientMock).not.toHaveBeenCalled()
+  })
+
+  it('appends a temporary anchor before triggering bulk download', async () => {
+    setupFetch({
+      accessLevel: 'immediate',
+      documents: [{ id: 'doc-1', title: 'Test Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf' }],
+    })
+
+    const appendSpy = vi.spyOn(document.body, 'appendChild')
+    const removeSpy = vi.spyOn(document.body, 'removeChild')
+
+    render(<VpDashboardViewPage />)
+
+    const button = await screen.findByRole('button', { name: /alle herunterladen/i })
+    fireEvent.click(button)
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/family/download?ownerId=owner-123'))
+    )
+    expect(appendSpy).toHaveBeenCalled()
+    expect(removeSpy).toHaveBeenCalled()
   })
 })

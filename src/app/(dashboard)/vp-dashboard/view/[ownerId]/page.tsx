@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 
 interface SharedDocument {
   id: string;
@@ -10,16 +9,31 @@ interface SharedDocument {
   file_name: string;
   file_type: string;
   category: string;
+  streamToken?: string | null;
   is_encrypted?: boolean;
   file_iv?: string | null;
+}
+
+interface FamilyViewResponse {
+  ownerName?: string;
+  accessLevel?: string | null;
+  documents?: SharedDocument[];
+}
+
+function triggerBrowserDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 export default function VpDashboardViewPage() {
   const params = useParams();
   const ownerId = params.ownerId as string;
-  // allowed: imperative-sync - stable client identity prevents effect re-fetch loops
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
 
   const [documents, setDocuments] = useState<SharedDocument[]>([]);
   const [shareTokens, setShareTokens] = useState<Record<string, string>>({});
@@ -42,60 +56,61 @@ export default function VpDashboardViewPage() {
 
   useEffect(() => {
     if (!ownerId) return;
-    // allowed: I/O - fetch trusted person access level from DB
-    async function fetchAccessLevel() {
-      const { data: authData } = await supabase.auth.getUser();
-      const userId = authData?.user?.id;
-      if (!userId) return;
-      const { data } = await supabase
-        .from("trusted_persons")
-        .select("access_level")
-        .eq("user_id", ownerId)
-        .eq("linked_user_id", userId)
-        .single();
-      setAccessLevel(data?.access_level ?? null);
-    }
-
     // allowed: I/O - hydrate trusted-person dashboard from share-scoped APIs
     async function hydrateSharedDocuments() {
       setIsLoadingDocuments(true);
       setViewError(null);
 
       try {
-        const [documentsRes, shareTokensRes] = await Promise.all([
-          fetch(`/api/family/view?ownerId=${ownerId}`),
-          fetch(`/api/documents/share-token?ownerId=${ownerId}`),
-        ]);
-
-        const documentsData = await documentsRes.json();
+        const documentsRes = await fetch(`/api/family/view?ownerId=${encodeURIComponent(ownerId)}`);
+        const documentsData: FamilyViewResponse & { error?: string } = await documentsRes.json();
         if (!documentsRes.ok) {
           setDocuments([]);
           setOwnerName("Lebensordner");
+          setAccessLevel(null);
+          setShareTokens({});
           setViewError(documentsData?.error || "Fehler beim Laden der Dokumente.");
           return;
         }
 
-        setDocuments(documentsData.documents || []);
+        const nextDocuments = documentsData.documents || [];
+        setDocuments(nextDocuments);
         setOwnerName(documentsData.ownerName || "Lebensordner");
+        setAccessLevel(documentsData.accessLevel ?? null);
 
-        const shareTokensData = shareTokensRes.ok ? await shareTokensRes.json() : { tokens: [] };
-        const map: Record<string, string> = {};
-        for (const token of shareTokensData.tokens || []) {
-          map[token.document_id] = token.wrapped_dek_for_tp;
+        if (!nextDocuments.some((doc) => doc.is_encrypted)) {
+          setShareTokens({});
+          return;
         }
-        setShareTokens(map);
+
+        try {
+          const shareTokensRes = await fetch(
+            `/api/documents/share-token?ownerId=${encodeURIComponent(ownerId)}`,
+          );
+          const shareTokensData = shareTokensRes.ok
+            ? await shareTokensRes.json()
+            : { tokens: [] };
+          const map: Record<string, string> = {};
+          for (const token of shareTokensData.tokens || []) {
+            map[token.document_id] = token.wrapped_dek_for_tp;
+          }
+          setShareTokens(map);
+        } catch {
+          setShareTokens({});
+        }
       } catch {
         setDocuments([]);
         setOwnerName("Lebensordner");
+        setAccessLevel(null);
+        setShareTokens({});
         setViewError("Fehler beim Laden der Dokumente.");
       } finally {
         setIsLoadingDocuments(false);
       }
     }
 
-    fetchAccessLevel();
     hydrateSharedDocuments();
-  }, [ownerId, supabase]);
+  }, [ownerId]);
 
   const handleViewDoc = async (doc: SharedDocument) => {
     setViewError(null);
@@ -168,12 +183,7 @@ export default function VpDashboardViewPage() {
         const contentDisposition = res.headers.get("Content-Disposition") || "";
         const match = contentDisposition.match(/filename="([^"]+)"/);
         const filename = match?.[1] || "Lebensordner.zip";
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
+        triggerBrowserDownload(blob, filename);
         return;
       }
 
@@ -212,12 +222,7 @@ export default function VpDashboardViewPage() {
         .replace(/\s+/g, "_");
       const dateStr = new Date().toISOString().split("T")[0];
       const filename = `Lebensordner_${safeOwnerName}_${dateStr}.zip`;
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      triggerBrowserDownload(zipBlob, filename);
     } catch {
       setViewError("Fehler beim Erstellen des Downloads.");
     } finally {

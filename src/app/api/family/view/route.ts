@@ -26,6 +26,8 @@ interface DocumentMetadata {
   expiry_date: string | null
   notes: string | null
   created_at: string
+  is_encrypted: boolean
+  file_iv: string | null
   streamToken: string | null
 }
 
@@ -130,6 +132,7 @@ export async function GET(request: Request) {
       return NextResponse.json({
         ownerName,
         ownerTier: ownerTier.id,
+        accessLevel: trustedPerson.access_level,
         documents: [],
         categories: categoryNames,
       })
@@ -177,6 +180,7 @@ export async function GET(request: Request) {
       return NextResponse.json({
         ownerName,
         ownerTier: ownerTier.id,
+        accessLevel: trustedPerson.access_level,
         documents: [],
         categories: categoryNames,
       })
@@ -199,6 +203,8 @@ export async function GET(request: Request) {
         expiry_date: doc.expiry_date,
         notes: doc.notes,
         created_at: doc.created_at,
+        is_encrypted: Boolean(doc.is_encrypted),
+        file_iv: doc.file_iv ?? null,
         streamToken,
       }
     })
@@ -220,6 +226,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ownerName,
       ownerTier: ownerTier.id,
+      accessLevel: trustedPerson.access_level,
       documents: documentsWithTokens,
       categories: categoryNames,
     })
