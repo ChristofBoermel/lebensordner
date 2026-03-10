@@ -16,6 +16,7 @@ import { Progress } from '@/components/ui/progress'
 import { Loader2, Lock } from 'lucide-react'
 import { useVault } from '@/lib/vault/VaultContext'
 import { unwrapKey, wrapKey } from '@/lib/security/document-e2ee'
+import { loadOrCreateRelationshipKey } from '@/lib/security/relationship-key'
 import { createClient } from '@/lib/supabase/client'
 
 interface BulkShareDialogProps {
@@ -342,71 +343,62 @@ export const BulkShareDialog: BulkShareDialogComponent = function BulkShareDialo
     let count = 0
     const errors: string[] = []
 
-    const { data: rkData, error: rkError } = await supabase
-      .from('document_relationship_keys')
-      .select('wrapped_rk')
-      .eq('owner_id', userId)
-      .eq('trusted_person_id', selectedPersonId)
-      .single()
-
-    if (rkError || !rkData?.wrapped_rk) {
-      setError('Beziehungsschlüssel nicht gefunden')
-      setIsSharing(false)
-      return
-    }
-
-    let rk: CryptoKey
     try {
-      rk = await unwrapKey(rkData.wrapped_rk, masterKey, 'AES-KW')
+      const rk = await loadOrCreateRelationshipKey({
+        supabase,
+        ownerId: userId,
+        trustedPersonId: selectedPersonId,
+        masterKey,
+      })
+
+      const expires_at =
+        duration !== 'none'
+          ? new Date(Date.now() + parseInt(duration) * 86400000).toISOString()
+          : null
+
+      for (const docId of selectedDocIds) {
+        try {
+          const { data: docData, error: docError } = await supabase
+            .from('documents')
+            .select('wrapped_dek')
+            .eq('id', docId)
+            .single()
+
+          if (docError || !docData?.wrapped_dek) {
+            errors.push(docId)
+            continue
+          }
+
+          const dek = await unwrapKey(docData.wrapped_dek, masterKey, 'AES-GCM')
+          const wrapped_dek_for_tp = await wrapKey(dek, rk)
+
+          const res = await fetch('/api/documents/share-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              documentId: docId,
+              trustedPersonId: selectedPersonId,
+              wrapped_dek_for_tp,
+              expires_at,
+              permission,
+            }),
+          })
+
+          if (!res.ok) {
+            errors.push(docId)
+            continue
+          }
+
+          count++
+          setProgress(count)
+        } catch {
+          errors.push(docId)
+        }
+      }
     } catch {
-      setError('Fehler beim Entschlüsseln des Beziehungsschlüssels')
+      setError('Beziehungsschlüssel konnte nicht vorbereitet werden')
       setIsSharing(false)
       return
-    }
-
-    const expires_at =
-      duration !== 'none'
-        ? new Date(Date.now() + parseInt(duration) * 86400000).toISOString()
-        : null
-
-    for (const docId of selectedDocIds) {
-      try {
-        const { data: docData, error: docError } = await supabase
-          .from('documents')
-          .select('wrapped_dek')
-          .eq('id', docId)
-          .single()
-
-        if (docError || !docData?.wrapped_dek) {
-          errors.push(docId)
-          continue
-        }
-
-        const dek = await unwrapKey(docData.wrapped_dek, masterKey, 'AES-GCM')
-        const wrapped_dek_for_tp = await wrapKey(dek, rk)
-
-        const res = await fetch('/api/documents/share-token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            documentId: docId,
-            trustedPersonId: selectedPersonId,
-            wrapped_dek_for_tp,
-            expires_at,
-            permission,
-          }),
-        })
-
-        if (!res.ok) {
-          errors.push(docId)
-          continue
-        }
-
-        count++
-        setProgress(count)
-      } catch {
-        errors.push(docId)
-      }
     }
 
     setIsSharing(false)

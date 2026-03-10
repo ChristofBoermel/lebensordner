@@ -2257,3 +2257,25 @@ Rollback:
   - `tests/fixtures/family-members.ts`
   - `tests/pages/zugriff.test.tsx`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 14:06 UTC | Agent: Codex | Commit: def6061
+
+Change:
+- Fixed trusted-person single/bulk share flows so missing `document_relationship_keys` rows are created on demand instead of failing with a `406` during owner-side sharing.
+- Added a shared relationship-key loader/repair helper and focused tests covering both existing-key and missing-key paths.
+
+Risk / Regression Watch:
+- First-time sharing to older connected trusted persons now creates a fresh relationship key row automatically; if the trusted person has never received an access key before, owner-side sharing succeeds but trusted-person decryption still depends on the existing access-link/key delivery flow.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `npx vitest run tests/lib/security/relationship-key.test.ts tests/components/sharing.test.ts`
+
+Rollback:
+- Revert:
+  - `src/components/sharing/ShareDocumentDialog.tsx`
+  - `src/components/sharing/BulkShareDialog.tsx`
+  - `src/lib/security/relationship-key.ts`
+  - `tests/lib/security/relationship-key.test.ts`
+  - `docs/ai-changelog.md`

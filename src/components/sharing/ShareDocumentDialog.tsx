@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Loader2, Share2, Lock } from 'lucide-react'
 import { useVault } from '@/lib/vault/VaultContext'
 import { unwrapKey, wrapKey } from '@/lib/security/document-e2ee'
+import { loadOrCreateRelationshipKey } from '@/lib/security/relationship-key'
 import { createClient } from '@/lib/supabase/client'
 
 interface ShareDocumentDialogProps {
@@ -68,18 +69,12 @@ export function ShareDocumentDialog({
 
       const dek = await unwrapKey(docData.wrapped_dek, masterKey, 'AES-GCM')
 
-      const { data: rkData, error: rkError } = await supabase
-        .from('document_relationship_keys')
-        .select('wrapped_rk')
-        .eq('owner_id', userId)
-        .eq('trusted_person_id', selectedPersonId)
-        .single()
-
-      if (rkError || !rkData?.wrapped_rk) {
-        throw new Error('Beziehungsschlüssel nicht gefunden')
-      }
-
-      const rk = await unwrapKey(rkData.wrapped_rk, masterKey, 'AES-KW')
+      const rk = await loadOrCreateRelationshipKey({
+        supabase,
+        ownerId: userId,
+        trustedPersonId: selectedPersonId,
+        masterKey,
+      })
       const wrapped_dek_for_tp = await wrapKey(dek, rk)
 
       const expires_at =
