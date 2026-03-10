@@ -2366,3 +2366,63 @@ Rollback:
   - `src/app/(dashboard)/vp-dashboard/view/[ownerId]/page.tsx`
   - `tests/pages/vp-dashboard-view.test.tsx`
   - `docs/ai-changelog.md`
+
+## 2026-03-10 23:04 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Reset the backend share contract so owner outgoing shares and recipient incoming shares are both filtered to active tokens only, and made owner-side listing explicitly owner-scoped.
+- Allowed Basic-tier trusted-person downloads and download links on the backend, updated invitation/download-link email copy, and added temporary backend/frontend handoff markdown files for the share reset follow-up.
+
+Risk / Regression Watch:
+- Frontend share surfaces still need to switch over to the new outgoing-share API shape and remove stale Basic-tier "view only" UX; until that lands, some UI labels may still reflect the old policy even though the backend now allows downloads.
+- The new owner share-token GET now rejects mismatched `ownerId` values with 403, so any stale callers passing another user id will fail fast instead of returning ambiguous data.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `python scripts/ops/hook-discipline-audit.py`
+- `npm run type-check`
+- `npm run lint`
+- `npx vitest run tests/api/share-token.test.ts tests/subscription-tier.test.ts`
+
+Rollback:
+- Revert:
+  - `src/lib/security/share-token-status.ts`
+  - `src/lib/subscription-tiers.ts`
+  - `src/app/api/documents/share-token/route.ts`
+  - `src/app/api/documents/share-token/received/route.ts`
+  - `src/app/api/family/download/route.ts`
+  - `src/app/api/family/members/route.ts`
+  - `src/app/api/download-link/create/route.ts`
+  - `src/app/api/download-link/[token]/route.ts`
+  - `src/app/api/trusted-person/invite/route.ts`
+  - `src/app/api/cron/process-email-queue/route.ts`
+  - `tests/api/share-token.test.ts`
+  - `tests/subscription-tier.test.ts`
+  - `docs/temp-backend-share-reset.md`
+  - `docs/temp-frontend-share-reset.md`
+  - `docs/ai-changelog.md`
+
+## 2026-03-10 23:10 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Restored trusted-person encrypted document decryption on the VP dashboard by switching it to the recipient-scoped share-token feed and filtering by `owner_id`.
+- Aligned Basic-tier access UI copy with the new download entitlement in the Zugriff page and DocumentViewer.
+
+Risk / Regression Watch:
+- Download-link success messaging still retains a guarded `view` branch for legacy link types; current Basic/Premium flows now issue download links, but legacy view links should still be smoke-tested manually if they remain in circulation.
+- The broader workspace still contains unrelated uncommitted changes outside this review scope, so deployment should use the full verified set rather than these fixes in isolation.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `python scripts/ops/hook-discipline-audit.py`
+- `npm run type-check`
+- `npm run lint`
+- `npx vitest run tests/pages/vp-dashboard-view.test.tsx tests/pages/zugriff.test.tsx tests/api/share-token.test.ts tests/subscription-tier.test.ts tests/components/sharing.test.tsx tests/components/tier-status-card.test.tsx`
+
+Rollback:
+- Revert:
+  - `src/app/(dashboard)/vp-dashboard/view/[ownerId]/page.tsx`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `src/components/ui/document-viewer.tsx`
+  - `tests/pages/vp-dashboard-view.test.tsx`
+  - `docs/ai-changelog.md`

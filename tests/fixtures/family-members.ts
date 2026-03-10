@@ -32,14 +32,14 @@ export const mockFamilyMembers = [
     sharedDocsCount: 1,
     hasSharedDocuments: true,
     canViewSharedDocuments: true,
-    canDownloadSharedDocuments: false,
+    canDownloadSharedDocuments: true,
     tier: {
       id: 'basic',
       name: 'Basis',
       color: 'text-blue-600',
       badge: 'bg-blue-100',
-      canDownload: false,
-      viewOnly: true,
+      canDownload: true,
+      viewOnly: false,
     },
   },
   {
@@ -85,7 +85,7 @@ export const mockPremiumFamilyMembers = mockFamilyMembers.filter(
 )
 
 export const mockBasicFamilyMembers = mockFamilyMembers.filter(
-  m => m.direction === 'incoming' && m.tier?.viewOnly && !m.tier?.canDownload
+  m => m.direction === 'incoming' && m.tier?.id === 'basic'
 )
 
 export const mockFreeFamilyMembers = mockFamilyMembers.filter(

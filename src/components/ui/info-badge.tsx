@@ -1,4 +1,4 @@
-import { Crown, Eye, Lock, Download } from 'lucide-react'
+import { Crown, Lock, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface InfoBadgeProps {
@@ -17,8 +17,8 @@ export function InfoBadge({ type, variant = 'default', className }: InfoBadgePro
       borderColor: 'border-green-200',
     },
     basic: {
-      icon: Eye,
-      text: 'Nur Ansicht',
+      icon: Download,
+      text: 'Ansehen & Download',
       bgColor: 'bg-blue-100',
       textColor: 'text-blue-700',
       borderColor: 'border-blue-200',
@@ -85,9 +85,9 @@ export function TierStatusCard({ tier, className }: TierStatusCardProps) {
       borderColor: 'border-green-200',
     },
     basic: {
-      icon: Eye,
+      icon: Download,
       title: 'Basis',
-      description: 'Ihre Vertrauenspersonen können Dokumente nur ansehen (ohne Download)',
+      description: 'Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen.',
       bgColor: 'bg-blue-50',
       iconBgColor: 'bg-blue-100',
       iconColor: 'text-blue-600',

@@ -204,21 +204,20 @@ describe('Share Token API', () => {
   })
 
   describe('GET /api/documents/share-token (owner)', () => {
-    it('returns expires_at, permission, revoked_at in tokens', async () => {
-      // trusted_persons query
-      thenFn.mockImplementationOnce((onFulfilled: any) =>
-        Promise.resolve({ data: [{ id: 'tp-1' }], error: null }).then(onFulfilled)
-      )
-      // document_share_tokens query
+    it('returns active owner shares with nested document and trusted person metadata', async () => {
       thenFn.mockImplementationOnce((onFulfilled: any) =>
         Promise.resolve({
           data: [{
             id: 'share-1',
             document_id: 'doc-1',
+            trusted_person_id: 'tp-1',
             wrapped_dek_for_tp: 'wrapped-key',
             expires_at: '2027-01-01T00:00:00Z',
             permission: 'view',
             revoked_at: null,
+            created_at: '2026-03-10T12:00:00Z',
+            documents: { id: 'doc-1', title: 'My Doc', category: 'finanzen', file_name: 'doc.pdf' },
+            trusted_persons: { id: 'tp-1', name: 'Max Mustermann', email: 'max@example.com' },
           }],
           error: null,
         }).then(onFulfilled)
@@ -234,10 +233,82 @@ describe('Share Token API', () => {
 
       expect(response.status).toBe(200)
       expect(data.tokens[0]).toMatchObject({
+        trusted_person_id: 'tp-1',
         expires_at: '2027-01-01T00:00:00Z',
         permission: 'view',
         revoked_at: null,
+        documents: expect.objectContaining({ title: 'My Doc' }),
+        trusted_persons: expect.objectContaining({ name: 'Max Mustermann' }),
       })
+    })
+
+    it('filters revoked and expired owner shares from the response', async () => {
+      thenFn.mockImplementationOnce((onFulfilled: any) =>
+        Promise.resolve({
+          data: [
+            {
+              id: 'share-active',
+              document_id: 'doc-1',
+              trusted_person_id: 'tp-1',
+              wrapped_dek_for_tp: 'wrapped-key',
+              expires_at: '2099-01-01T00:00:00Z',
+              permission: 'download',
+              revoked_at: null,
+              created_at: '2026-03-10T12:00:00Z',
+              documents: { id: 'doc-1', title: 'Active Doc', category: 'finanzen', file_name: 'active.pdf' },
+              trusted_persons: { id: 'tp-1', name: 'Active Person', email: 'active@example.com' },
+            },
+            {
+              id: 'share-revoked',
+              document_id: 'doc-2',
+              trusted_person_id: 'tp-2',
+              wrapped_dek_for_tp: 'wrapped-key',
+              expires_at: '2099-01-01T00:00:00Z',
+              permission: 'view',
+              revoked_at: '2026-03-10T12:30:00Z',
+              created_at: '2026-03-10T12:00:00Z',
+              documents: { id: 'doc-2', title: 'Revoked Doc', category: 'finanzen', file_name: 'revoked.pdf' },
+              trusted_persons: { id: 'tp-2', name: 'Revoked Person', email: 'revoked@example.com' },
+            },
+            {
+              id: 'share-expired',
+              document_id: 'doc-3',
+              trusted_person_id: 'tp-3',
+              wrapped_dek_for_tp: 'wrapped-key',
+              expires_at: '2020-01-01T00:00:00Z',
+              permission: 'view',
+              revoked_at: null,
+              created_at: '2026-03-10T12:00:00Z',
+              documents: { id: 'doc-3', title: 'Expired Doc', category: 'finanzen', file_name: 'expired.pdf' },
+              trusted_persons: { id: 'tp-3', name: 'Expired Person', email: 'expired@example.com' },
+            },
+          ],
+          error: null,
+        }).then(onFulfilled)
+      )
+
+      vi.resetModules()
+      const { GET } = await import('@/app/api/documents/share-token/route')
+
+      const response = await GET(
+        new Request('http://localhost/api/documents/share-token?ownerId=owner-id')
+      )
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.tokens).toHaveLength(1)
+      expect(data.tokens[0].id).toBe('share-active')
+    })
+
+    it('rejects requests for another owner id', async () => {
+      vi.resetModules()
+      const { GET } = await import('@/app/api/documents/share-token/route')
+
+      const response = await GET(
+        new Request('http://localhost/api/documents/share-token?ownerId=other-owner')
+      )
+
+      expect(response.status).toBe(403)
     })
   })
 
@@ -277,6 +348,62 @@ describe('Share Token API', () => {
         documents: expect.objectContaining({ title: 'My Doc' }),
         profiles: expect.objectContaining({ full_name: 'Owner User' }),
       })
+    })
+
+    it('filters revoked and expired received shares', async () => {
+      thenFn.mockImplementationOnce((onFulfilled: any) =>
+        Promise.resolve({ data: [{ id: 'tp-1' }], error: null }).then(onFulfilled)
+      )
+      thenFn.mockImplementationOnce((onFulfilled: any) =>
+        Promise.resolve({
+          data: [
+            {
+              id: 'share-active',
+              document_id: 'doc-1',
+              owner_id: 'owner-id',
+              wrapped_dek_for_tp: 'wrapped-key',
+              expires_at: '2099-01-01T00:00:00Z',
+              permission: 'download',
+              revoked_at: null,
+              documents: { id: 'doc-1', title: 'Active Doc', category: 'personal', file_name: 'active.pdf' },
+              profiles: { full_name: 'Owner User', first_name: 'Owner', last_name: 'User' },
+            },
+            {
+              id: 'share-revoked',
+              document_id: 'doc-2',
+              owner_id: 'owner-id',
+              wrapped_dek_for_tp: 'wrapped-key',
+              expires_at: '2099-01-01T00:00:00Z',
+              permission: 'view',
+              revoked_at: '2026-01-01T00:00:00Z',
+              documents: { id: 'doc-2', title: 'Revoked Doc', category: 'personal', file_name: 'revoked.pdf' },
+              profiles: { full_name: 'Owner User', first_name: 'Owner', last_name: 'User' },
+            },
+            {
+              id: 'share-expired',
+              document_id: 'doc-3',
+              owner_id: 'owner-id',
+              wrapped_dek_for_tp: 'wrapped-key',
+              expires_at: '2020-01-01T00:00:00Z',
+              permission: 'view',
+              revoked_at: null,
+              documents: { id: 'doc-3', title: 'Expired Doc', category: 'personal', file_name: 'expired.pdf' },
+              profiles: { full_name: 'Owner User', first_name: 'Owner', last_name: 'User' },
+            },
+          ],
+          error: null,
+        }).then(onFulfilled)
+      )
+
+      vi.resetModules()
+      const { GET } = await import('@/app/api/documents/share-token/received/route')
+
+      const response = await GET()
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.shares).toHaveLength(1)
+      expect(data.shares[0].id).toBe('share-active')
     })
 
     it('returns empty array when user has no trusted_person records', async () => {

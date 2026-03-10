@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { createClient } from '@/lib/supabase/client'
 
 interface ShareRow {
   id: string
@@ -12,6 +11,8 @@ interface ShareRow {
   permission: string
   expires_at: string | null
   revoked_at: string | null
+  documents: { id: string; title: string; category: string; file_name: string } | null
+  trusted_persons: { id: string; name: string; email: string } | null
 }
 
 interface ActiveSharesListProps {
@@ -20,60 +21,29 @@ interface ActiveSharesListProps {
 
 export function ActiveSharesList({ ownerId }: ActiveSharesListProps) {
   const [shares, setShares] = useState<ShareRow[]>([])
-  const [documentTitles, setDocumentTitles] = useState<Record<string, string>>({})
-  const [recipientNames, setRecipientNames] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null)
-
-  const supabase = createClient()
 
   const fetchShares = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const { data, error: sharesError } = await supabase
-        .from('document_share_tokens')
-        .select('id, document_id, trusted_person_id, permission, expires_at, revoked_at')
-        .eq('owner_id', ownerId)
-
-      if (sharesError) throw sharesError
-
-      const activeShares = (data ?? []).filter(s => s.revoked_at === null)
-      setShares(activeShares)
-
-      if (activeShares.length === 0) {
-        setIsLoading(false)
-        return
+      const res = await fetch(`/api/documents/share-token?ownerId=${ownerId}`)
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Fehler beim Laden')
       }
-
-      const documentIds = [...new Set(activeShares.map(s => s.document_id))]
-      const trustedPersonIds = [...new Set(activeShares.map(s => s.trusted_person_id))]
-
-      const [{ data: docs }, { data: persons }] = await Promise.all([
-        supabase.from('documents').select('id, title').in('id', documentIds),
-        supabase.from('trusted_persons').select('id, name').in('id', trustedPersonIds),
-      ])
-
-      const titlesMap: Record<string, string> = {}
-      for (const doc of docs ?? []) {
-        titlesMap[doc.id] = doc.title
-      }
-      setDocumentTitles(titlesMap)
-
-      const namesMap: Record<string, string> = {}
-      for (const person of persons ?? []) {
-        namesMap[person.id] = person.name
-      }
-      setRecipientNames(namesMap)
+      const data = await res.json()
+      setShares(data.tokens ?? [])
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fehler beim Laden')
     } finally {
       setIsLoading(false)
     }
-  }, [supabase, ownerId])
+  }, [ownerId])
 
   useEffect(() => {
     fetchShares()
@@ -123,10 +93,10 @@ export function ActiveSharesList({ ownerId }: ActiveSharesListProps) {
         >
           <div className="flex-1 min-w-0">
             <p className="font-medium text-sm truncate">
-              {documentTitles[share.document_id] ?? share.document_id.slice(0, 8) + '...'}
+              {share.documents?.title ?? share.document_id.slice(0, 8) + '...'}
             </p>
             <p className="text-xs text-warmgray-500">
-              {recipientNames[share.trusted_person_id] ?? '—'}
+              {share.trusted_persons?.name ?? '—'}
             </p>
             <div className="flex items-center gap-2 mt-1">
               <span

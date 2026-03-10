@@ -110,6 +110,8 @@ const makeActiveShares = () => [
     permission: 'view',
     expires_at: null,
     revoked_at: null,
+    documents: { id: 'doc-1', title: 'Test Dokument', category: 'identitaet', file_name: 'test.pdf' },
+    trusted_persons: { id: 'tp-1', name: 'Max Mustermann', email: 'max@test.de' },
   },
   {
     id: 'share-2',
@@ -118,23 +120,24 @@ const makeActiveShares = () => [
     permission: 'download',
     expires_at: null,
     revoked_at: '2026-01-01T00:00:00Z',
+    documents: { id: 'doc-2', title: 'Revoked Dokument', category: 'identitaet', file_name: 'rev.pdf' },
+    trusted_persons: { id: 'tp-2', name: 'Revoked Person', email: 'rev@test.de' },
   },
 ]
 
 describe('ActiveSharesList', () => {
   beforeEach(() => {
-    const { client } = createSupabaseMock({
-      then: { data: makeActiveShares(), error: null },
-    })
-    mockCreateClient.mockReturnValue(client)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ tokens: makeActiveShares() }),
+    }))
   })
 
   it('renders active shares and hides revoked ones', async () => {
     render(<ActiveSharesList ownerId="user-owner" />)
 
     await waitFor(() => {
-      // share-1 is active (revoked_at: null), should appear
-      // share-2 is revoked, should not appear
+      expect(screen.getByText('Test Dokument')).toBeInTheDocument()
       expect(screen.queryByText('share-2')).not.toBeInTheDocument()
     })
   })
@@ -142,33 +145,28 @@ describe('ActiveSharesList', () => {
   it('calls DELETE fetch with correct id when Widerrufen is confirmed', async () => {
     const user = userEvent.setup()
 
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true }),
-    })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({  // initial GET
+        ok: true,
+        json: async () => ({ tokens: makeActiveShares() }),
+      })
+      .mockResolvedValueOnce({  // DELETE call
+        ok: true,
+        json: async () => ({ success: true }),
+      })
+      .mockResolvedValueOnce({  // refetch GET after revoke
+        ok: true,
+        json: async () => ({ tokens: makeActiveShares() }),
+      })
     vi.stubGlobal('fetch', fetchMock)
-
-    const { client, thenFn } = createSupabaseMock({
-      then: { data: makeActiveShares(), error: null },
-    })
-    // Second call for refetch after revoke returns empty
-    let callCount = 0
-    thenFn.mockImplementation((onFulfilled) => {
-      callCount++
-      const data = callCount <= 3
-        ? makeActiveShares()
-        : []
-      return Promise.resolve({ data, error: null }).then(onFulfilled)
-    })
-    mockCreateClient.mockReturnValue(client)
 
     render(<ActiveSharesList ownerId="user-owner" />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Widerrufen' })).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: 'Widerrufen' })[0]).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: 'Widerrufen' }))
+    await user.click(screen.getAllByRole('button', { name: 'Widerrufen' })[0])
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Ja' })).toBeInTheDocument()
@@ -182,6 +180,11 @@ describe('ActiveSharesList', () => {
         expect.objectContaining({ method: 'DELETE' })
       )
     })
+
+    // Verify initial GET was called with correct ownerId
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('?ownerId=user-owner')
+    )
 
     vi.unstubAllGlobals()
   })

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { isActiveShareToken } from '@/lib/security/share-token-status'
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient()
@@ -77,32 +78,33 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'ownerId parameter required' }, { status: 400 })
   }
 
-  const { data: trustedPersons, error: trustedPersonsError } = await supabase
-    .from('trusted_persons')
-    .select('id')
-    .eq('linked_user_id', user.id)
-
-  if (trustedPersonsError) {
-    return NextResponse.json({ error: 'Database error' }, { status: 500 })
-  }
-
-  const trustedPersonIds = (trustedPersons ?? []).map((trustedPerson) => trustedPerson.id)
-
-  if (trustedPersonIds.length === 0) {
-    return NextResponse.json({ tokens: [] })
+  if (ownerId !== user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const { data, error } = await supabase
     .from('document_share_tokens')
-    .select('id, document_id, wrapped_dek_for_tp, expires_at, permission, revoked_at')
+    .select(`
+      id,
+      document_id,
+      trusted_person_id,
+      wrapped_dek_for_tp,
+      expires_at,
+      permission,
+      revoked_at,
+      created_at,
+      documents!inner(id, title, category, file_name),
+      trusted_persons!inner(id, name, email)
+    `)
     .eq('owner_id', ownerId)
-    .in('trusted_person_id', trustedPersonIds)
 
   if (error) {
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
-  return NextResponse.json({ tokens: data ?? [] })
+  const tokens = (data ?? []).filter((token) => isActiveShareToken(token))
+
+  return NextResponse.json({ tokens })
 }
 
 export async function DELETE(request: Request) {

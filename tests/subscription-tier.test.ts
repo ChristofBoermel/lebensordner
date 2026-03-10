@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   SUBSCRIPTION_TIERS,
+  allowsFamilyDownloads,
   canPerformAction,
+  getDownloadLinkType,
   getStripePriceIds,
   getTierDisplayInfo,
   getTierFromSubscription,
@@ -91,5 +93,22 @@ describe('stripe price IDs and display', () => {
   it('uses Vorsorge display naming for premium tier', () => {
     const display = getTierDisplayInfo(SUBSCRIPTION_TIERS.premium)
     expect(display.name).toBe('Vorsorge')
+  })
+
+  it('allows family downloads for basic and premium tiers', () => {
+    expect(allowsFamilyDownloads(SUBSCRIPTION_TIERS.free)).toBe(false)
+    expect(allowsFamilyDownloads(SUBSCRIPTION_TIERS.basic)).toBe(true)
+    expect(allowsFamilyDownloads(SUBSCRIPTION_TIERS.premium)).toBe(true)
+  })
+
+  it('creates download links for basic and premium tiers', () => {
+    expect(getDownloadLinkType(SUBSCRIPTION_TIERS.free)).toBeNull()
+    expect(getDownloadLinkType(SUBSCRIPTION_TIERS.basic)).toBe('download')
+    expect(getDownloadLinkType(SUBSCRIPTION_TIERS.premium)).toBe('download')
+  })
+
+  it('basic tier is no longer view-only', () => {
+    expect(getTierDisplayInfo(SUBSCRIPTION_TIERS.basic).viewOnly).toBe(false)
+    expect(getTierDisplayInfo(SUBSCRIPTION_TIERS.premium).viewOnly).toBe(false)
   })
 })

@@ -980,8 +980,8 @@ export default function ZugriffPage() {
                     <TooltipContent side="top" className="max-w-xs">
                       {userTier.id === 'premium' ? (
                         <p>Mit Ihrem Vorsorge-Abo können Empfänger alle Dokumente herunterladen</p>
-                      ) : userTier.id === 'basic' ? (
-                        <p>Mit Ihrem Basis-Abo können Empfänger Dokumente nur ansehen, nicht herunterladen</p>
+                        ) : userTier.id === 'basic' ? (
+                          <p>Mit Ihrem Basis-Abo können Empfänger alle freigegebenen Dokumente herunterladen</p>
                       ) : (
                         <p>Upgraden Sie auf Basis oder Vorsorge, um diese Funktion zu nutzen</p>
                       )}
@@ -999,15 +999,15 @@ export default function ZugriffPage() {
                 <span>Link ist 12 Stunden gültig</span>
               </li>
               <li className="flex items-start gap-2">
-                {userTier.id === 'premium' ? (
+                {userTier.id === 'free' ? (
                   <>
-                    <Download className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
-                    <span>Alle Dokumente als ZIP-Datei</span>
+                    <Eye className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
+                    <span>Funktion mit kostenpflichtigem Abo verfügbar</span>
                   </>
                 ) : (
                   <>
-                    <Eye className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
-                    <span>Alle Dokumente ansehen (nur Ansicht)</span>
+                    <Download className="w-4 h-4 text-sage-500 mt-0.5 flex-shrink-0" />
+                    <span>Alle Dokumente als ZIP-Datei</span>
                   </>
                 )}
               </li>
@@ -1016,7 +1016,7 @@ export default function ZugriffPage() {
                 <span>Keine Registrierung nötig</span>
               </li>
             </ul>
-            {userTier.id === 'premium' ? (
+            {userTier.id !== 'free' ? (
               <Button
                 onClick={handleOpenDownloadLinkDialog}
                 className="w-full"
@@ -1024,20 +1024,6 @@ export default function ZugriffPage() {
                 <Link2 className="w-4 h-4 mr-2" />
                 Download-Link erstellen
               </Button>
-            ) : userTier.id === 'basic' ? (
-              <div className="space-y-2">
-                <Button
-                  onClick={handleOpenDownloadLinkDialog}
-                  className="w-full"
-                  variant="outline"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  Ansichts-Link erstellen
-                </Button>
-                <p className="text-xs text-center text-warmgray-500">
-                  <Link href="/abo" className="text-sage-600 hover:underline">Upgrade auf Vorsorge</Link> für Download-Links
-                </p>
-              </div>
             ) : (
               <div className="space-y-2">
                 <Button
@@ -1073,8 +1059,8 @@ export default function ZugriffPage() {
                     <TooltipContent side="top" className="max-w-xs">
                       {userTier.id === 'premium' ? (
                         <p>Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen</p>
-                      ) : userTier.id === 'basic' ? (
-                        <p>Ihre Vertrauenspersonen können Dokumente nur ansehen (Upgrade auf Vorsorge für Downloads)</p>
+                        ) : userTier.id === 'basic' ? (
+                          <p>Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen</p>
                       ) : (
                         <p>Upgraden Sie auf ein kostenpflichtiges Abo, um diese Funktion zu nutzen</p>
                       )}
@@ -1127,39 +1113,6 @@ export default function ZugriffPage() {
                 <Link href="/abo">
                   <Button size="sm" variant="outline" className="border-amber-300 hover:bg-amber-100">
                     Jetzt upgraden
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Upgrade prompt for Basic tier */}
-      {userTier.id === 'basic' && (
-        <Card className="border-orange-200 bg-orange-50">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-4">
-              <Download className="w-6 h-6 text-orange-600 flex-shrink-0" />
-              <div className="flex-1">
-                <p className="font-medium text-orange-900 mb-1">Upgrade auf Vorsorge für Download-Zugriff</p>
-                <p className="text-sm text-orange-800 mb-3">
-                  Mit Ihrem Basis-Abo können Ihre Vertrauenspersonen Dokumente nur ansehen. Upgraden Sie auf Vorsorge, damit sie Dokumente auch herunterladen können.
-                </p>
-                <div className="flex items-center gap-4 mb-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Eye className="w-4 h-4 text-blue-600" />
-                    <span className="text-orange-800">Aktuell: <strong>Nur Ansicht</strong></span>
-                  </div>
-                  <span className="text-orange-400">→</span>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Download className="w-4 h-4 text-green-600" />
-                    <span className="text-orange-800">Mit Vorsorge: <strong>Ansicht + Download</strong></span>
-                  </div>
-                </div>
-                <Link href="/abo">
-                  <Button size="sm" variant="outline" className="border-orange-300 hover:bg-orange-100">
-                    Auf Vorsorge upgraden
                   </Button>
                 </Link>
               </div>
@@ -1565,10 +1518,10 @@ export default function ZugriffPage() {
                                             </span>
                                           </TooltipTrigger>
                                           <TooltipContent side="top" className="max-w-xs" id={`tier-desc-${member.id}`}>
-                                            {member.tier.canDownload ? (
+                                            {member.tier.id === 'premium' ? (
                                               <p>Vorsorge-Mitglied - Sie können alle Dokumente herunterladen</p>
-                                            ) : member.tier.viewOnly ? (
-                                              <p>Basis-Mitglied - Sie können Dokumente nur ansehen</p>
+                                            ) : member.tier.id === 'basic' ? (
+                                              <p>Basis-Mitglied - Sie können Dokumente ansehen und herunterladen</p>
                                             ) : (
                                               <p>Kostenloses Konto - Kein Zugriff verfügbar</p>
                                             )}
@@ -1794,7 +1747,7 @@ export default function ZugriffPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {userTier.id === 'premium' ? (
+              {userTier.id !== 'free' ? (
                 <>
                   <Link2 className="w-5 h-5 text-sage-600" />
                   Einmal-Download-Link erstellen
@@ -1802,17 +1755,16 @@ export default function ZugriffPage() {
               ) : (
                 <>
                   <Eye className="w-5 h-5 text-sage-600" />
-                  Ansichts-Link erstellen
+                  Link erstellen
                 </>
               )}
             </DialogTitle>
             <DialogDescription>
-              {userTier.id === 'premium' ? (
+              {userTier.id !== 'free' ? (
                 <>Erstellen Sie einen Link, mit dem die Person alle Ihre Dokumente als ZIP-Datei herunterladen kann.
                 Der Link ist 12 Stunden gültig und kann nur einmal verwendet werden.</>
               ) : (
-                <>Erstellen Sie einen Link, mit dem die Person alle Ihre Dokumente im Browser ansehen kann.
-                Der Link ist 12 Stunden gültig. Upgrade auf Vorsorge für Download-Links.</>
+                <>Links sind mit einem kostenpflichtigen Abo verfügbar. Upgraden Sie auf Basis oder Vorsorge, um diese Funktion zu nutzen.</>
               )}
             </DialogDescription>
           </DialogHeader>

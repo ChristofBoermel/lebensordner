@@ -285,7 +285,7 @@ export function getActiveTiers(): TierConfig[] {
 
 // Check if owner's tier allows document downloads for family members
 export function allowsFamilyDownloads(tier: TierConfig): boolean {
-  return tier.id === 'premium'
+  return tier.id === 'basic' || tier.id === 'premium'
 }
 
 // Get tier display information
@@ -299,7 +299,7 @@ export function getTierDisplayInfo(tier: TierConfig): {
     case 'premium':
       return { name: 'Vorsorge', color: 'text-purple-600', badge: 'bg-purple-100', viewOnly: false }
     case 'basic':
-      return { name: 'Basis', color: 'text-blue-600', badge: 'bg-blue-100', viewOnly: true }
+      return { name: 'Basis', color: 'text-blue-600', badge: 'bg-blue-100', viewOnly: false }
     default:
       return { name: 'Kostenlos', color: 'text-gray-600', badge: 'bg-gray-100', viewOnly: false }
   }
@@ -309,9 +309,8 @@ export function getTierDisplayInfo(tier: TierConfig): {
 export function getDownloadLinkType(tier: TierConfig): 'view' | 'download' | null {
   switch (tier.id) {
     case 'premium':
-      return 'download'
     case 'basic':
-      return 'view'
+      return 'download'
     default:
       return null
   }

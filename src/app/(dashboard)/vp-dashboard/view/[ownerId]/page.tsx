@@ -84,14 +84,15 @@ export default function VpDashboardViewPage() {
         }
 
         try {
-          const shareTokensRes = await fetch(
-            `/api/documents/share-token?ownerId=${encodeURIComponent(ownerId)}`,
-          );
+          const shareTokensRes = await fetch('/api/documents/share-token/received');
           const shareTokensData = shareTokensRes.ok
             ? await shareTokensRes.json()
-            : { tokens: [] };
+            : { shares: [] };
           const map: Record<string, string> = {};
-          for (const token of shareTokensData.tokens || []) {
+          for (const token of shareTokensData.shares || []) {
+            if (token.owner_id !== ownerId) {
+              continue;
+            }
             map[token.document_id] = token.wrapped_dek_for_tp;
           }
           setShareTokens(map);

@@ -127,6 +127,7 @@ import {
 import { useDocumentAuditLog } from "@/lib/security/useDocumentAuditLog";
 import { ShareDocumentDialog } from "@/components/sharing/ShareDocumentDialog";
 import { BulkShareDialog } from "@/components/sharing/BulkShareDialog";
+import { ActiveSharesList } from "@/components/sharing/ActiveSharesList";
 import { useThemeSafe } from "@/components/theme/theme-provider";
 import { ExpiryDashboardWidget } from "@/components/dokumente/ExpiryDashboardWidget";
 import { EncryptedNotesEditor } from "@/components/dokumente/EncryptedNotesEditor";
@@ -489,6 +490,7 @@ export default function DocumentsPage() {
     useState(false);
   const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
   const [isBulkShareDialogOpen, setIsBulkShareDialogOpen] = useState(false);
+  const [sharesVersion, setSharesVersion] = useState(0);
   const [bulkShareDocuments, setBulkShareDocuments] = useState<
     Array<{ id: string; title: string; wrapped_dek: string | null }>
   >([]);
@@ -3396,6 +3398,16 @@ export default function DocumentsPage() {
               </div>
             </div>
           )}
+
+          {userTier.limits.familyDashboard && userId && (
+            <section className="mt-8">
+              <h2 className="text-lg font-semibold text-warmgray-900 mb-4 flex items-center gap-2">
+                <Share2 className="w-5 h-5 text-sage-600" />
+                Aktive Freigaben
+              </h2>
+              <ActiveSharesList key={sharesVersion} ownerId={userId} />
+            </section>
+          )}
         </TabsContent>
 
         {/* All documents view */}
@@ -3666,7 +3678,7 @@ export default function DocumentsPage() {
           userId={userId}
           isOpen={isShareDialogOpen}
           onClose={() => { setIsShareDialogOpen(false); setShareDocument(null); }}
-          onSuccess={() => { setIsShareDialogOpen(false); setShareDocument(null); }}
+          onSuccess={() => { setIsShareDialogOpen(false); setShareDocument(null); setSharesVersion(v => v + 1); }}
         />
       )}
 
@@ -3939,7 +3951,7 @@ export default function DocumentsPage() {
         userId={userId}
         isOpen={isBulkShareDialogOpen}
         onClose={() => setIsBulkShareDialogOpen(false)}
-        onSuccess={() => setIsBulkShareDialogOpen(false)}
+        onSuccess={() => { setIsBulkShareDialogOpen(false); setSharesVersion(v => v + 1); }}
       />
       {/* Category Dialog */}
       <Dialog

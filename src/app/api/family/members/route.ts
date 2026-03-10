@@ -137,6 +137,7 @@ export async function GET(request: Request) {
           const tierDisplay = getTierDisplayInfo(ownerTier);
           const ownerAllowsView = ownerTier.id !== "free";
           const ownerAllowsDownload = allowsFamilyDownloads(ownerTier);
+          const ownerIsViewOnly = ownerTier.id === "free";
           const sharedDocsCount = shareCountMap.get(link.id) ?? 0;
           const hasSharedDocuments = sharedDocsCount > 0;
           const canViewSharedDocuments =
@@ -166,7 +167,7 @@ export async function GET(request: Request) {
               color: tierDisplay.color,
               badge: tierDisplay.badge,
               canDownload: ownerAllowsDownload,
-              viewOnly: tierDisplay.viewOnly,
+              viewOnly: ownerIsViewOnly,
             },
           };
         })

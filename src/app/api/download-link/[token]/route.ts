@@ -64,7 +64,7 @@ export async function GET(
     // Check if this is a view-only link
     if (downloadToken.link_type === 'view') {
       return NextResponse.json(
-        { error: 'Dieser Link ist nur zum Ansehen. Download ist nur mit Premium-Abo verfügbar.' },
+        { error: 'Dieser Link ist nur zum Ansehen.' },
         { status: 403 }
       )
     }

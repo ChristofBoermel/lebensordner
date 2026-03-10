@@ -399,9 +399,7 @@ function generateInvitationEmail(data: InvitationEmailData): string {
           <li style="margin-bottom: 8px;">Sie können im Notfall auf wichtige Dokumente zugreifen</li>
           <li style="margin-bottom: 8px;">${data.canDownload
             ? 'Sie können Dokumente ansehen und herunterladen'
-            : data.ownerTier === 'basic'
-              ? 'Sie können Dokumente ansehen (Download mit Premium)'
-              : `Zugriff wird verfügbar, sobald ${data.ownerName} ein Abo abschließt`}</li>
+            : `Zugriff wird verfügbar, sobald ${data.ownerName} ein Abo abschließt`}</li>
           <li>Sie können jederzeit den Zugriff beenden</li>
         </ul>
       </div>
@@ -413,16 +411,6 @@ function generateInvitationEmail(data: InvitationEmailData): string {
           <div>
             <h4 style="color: #166534; font-size: 14px; font-weight: 600; margin: 0 0 4px 0;">Voller Zugriff</h4>
             <p style="color: #166534; font-size: 13px; margin: 0;">Sie können alle Dokumente von ${data.ownerName} ansehen und herunterladen.</p>
-          </div>
-        </div>
-      </div>
-      ` : data.ownerTier === 'basic' ? `
-      <div style="background-color: #dbeafe; border: 1px solid #93c5fd; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-        <div style="display: flex; align-items: flex-start; gap: 12px;">
-          <span style="font-size: 20px;">👁️</span>
-          <div>
-            <h4 style="color: #1e40af; font-size: 14px; font-weight: 600; margin: 0 0 4px 0;">Ansichts-Zugriff</h4>
-            <p style="color: #1e40af; font-size: 13px; margin: 0;">Sie können alle Dokumente von ${data.ownerName} ansehen. Downloads sind mit einem Premium-Abo verfügbar.</p>
           </div>
         </div>
       </div>

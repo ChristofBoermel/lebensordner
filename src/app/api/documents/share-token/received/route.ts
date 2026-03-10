@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { isActiveShareToken } from '@/lib/security/share-token-status'
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -26,12 +27,14 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('document_share_tokens')
-    .select('id, document_id, owner_id, wrapped_dek_for_tp, expires_at, permission, documents(id, title, category, file_name, file_iv, file_type), profiles!owner_id(full_name, first_name, last_name)')
+    .select('id, document_id, owner_id, wrapped_dek_for_tp, expires_at, permission, revoked_at, documents(id, title, category, file_name, file_iv, file_type), profiles!owner_id(full_name, first_name, last_name)')
     .in('trusted_person_id', trustedPersonIds)
 
   if (error) {
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
-  return NextResponse.json({ shares: data ?? [] })
+  const shares = (data ?? []).filter((share) => isActiveShareToken(share))
+
+  return NextResponse.json({ shares })
 }

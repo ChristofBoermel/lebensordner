@@ -364,7 +364,7 @@ export function DocumentViewer({
                 </p>
               ) : ownerTier === 'basic' ? (
                 <p className="text-sm text-blue-800">
-                  Sie haben Nur-Ansicht-Zugriff auf diese Dokumente. Downloads sind nur verfügbar, wenn der Besitzer ein Vorsorge-Abo hat.
+                  Sie haben Zugriff auf diese Dokumente. Downloads sind verfügbar, wenn diese Freigaben dafür vorgesehen sind.
                 </p>
               ) : (
                 <p className="text-sm text-warmgray-600">

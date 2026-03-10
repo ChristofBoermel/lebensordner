@@ -44,7 +44,7 @@ describe('TierStatusCard', () => {
       render(<TierStatusCard tier="basic" />)
 
       expect(
-        screen.getByText('Ihre Vertrauenspersonen können Dokumente nur ansehen (ohne Download)')
+        screen.getByText('Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen.')
       ).toBeInTheDocument()
     })
 
@@ -109,10 +109,10 @@ describe('InfoBadge', () => {
   })
 
   describe('Basic Badge', () => {
-    it('should display "Nur Ansicht" text', () => {
+    it('should display "Ansehen & Download" text', () => {
       render(<InfoBadge type="basic" />)
 
-      expect(screen.getByText('Nur Ansicht')).toBeInTheDocument()
+      expect(screen.getByText('Ansehen & Download')).toBeInTheDocument()
     })
 
     it('should have blue color scheme', () => {

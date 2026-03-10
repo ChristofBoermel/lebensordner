@@ -76,7 +76,7 @@ export async function GET(request: Request) {
 
     if (!allowsFamilyDownloads(ownerTier)) {
       return NextResponse.json(
-        { error: 'Der Besitzer dieses Lebensordners hat ein Basis-Abo. Downloads sind nur mit Premium verfügbar. Bitte kontaktieren Sie den Besitzer für ein Upgrade.' },
+        { error: 'Der Besitzer dieses Lebensordners benötigt ein kostenpflichtiges Abo, damit Downloads verfügbar sind.' },
         { status: 403 }
       )
     }

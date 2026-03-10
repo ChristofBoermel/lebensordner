@@ -206,7 +206,7 @@ describe('Zugriff Page Tier Display Integration', () => {
         expect(screen.getByText('Basis')).toBeInTheDocument()
       })
       expect(
-        screen.getByText('Ihre Vertrauenspersonen können Dokumente nur ansehen (ohne Download)')
+        screen.getByText('Ihre Vertrauenspersonen können Dokumente ansehen und herunterladen.')
       ).toBeInTheDocument()
     })
   })
@@ -463,12 +463,12 @@ describe('Familie Tab Tier-Based Actions', () => {
     expect(premiumMember?.tier?.viewOnly).toBe(false)
   })
 
-  it('Basic members should have viewOnly=true in tier config', () => {
+  it('Basic members should have canDownload=true in tier config', () => {
     const basicMember = mockFamilyMembers.find(m => m.tier?.id === 'basic')
 
     expect(basicMember).toBeDefined()
-    expect(basicMember?.tier?.canDownload).toBe(false)
-    expect(basicMember?.tier?.viewOnly).toBe(true)
+    expect(basicMember?.tier?.canDownload).toBe(true)
+    expect(basicMember?.tier?.viewOnly).toBe(false)
   })
 
   it('Free members should have no access in tier config', () => {
@@ -583,11 +583,11 @@ describe('Familie Tab Tier-Based UI', () => {
     expect(freeMember?.canDownloadSharedDocuments).toBe(false)
   })
 
-  it('Basic tier members should show "Nur Ansicht" button', () => {
+  it('Basic tier members should show download button', () => {
     const basicMember = mockFamilyMembers.find(m => m.tier?.id === 'basic')
 
     expect(basicMember).toBeDefined()
-    expect(basicMember?.canDownloadSharedDocuments).toBe(false)
+    expect(basicMember?.canDownloadSharedDocuments).toBe(true)
     expect(basicMember?.canViewSharedDocuments).toBe(true)
   })
 
@@ -603,11 +603,8 @@ describe('Familie Tab Tier-Based UI', () => {
     mockFamilyMembers.forEach(member => {
       if (member.direction === 'incoming') {
         if (member.canDownloadSharedDocuments) {
-          // Premium: can download
-          expect(member.tier.id).toBe('premium')
-        } else if (member.canViewSharedDocuments) {
-          // Basic: view only
-          expect(member.tier.id).toBe('basic')
+          // Premium and Basic: can download
+          expect(['premium', 'basic']).toContain(member.tier.id)
         } else if (member.tier) {
           expect(member.hasSharedDocuments).toBe(false)
         }
@@ -806,7 +803,41 @@ describe('DocumentViewer Banner Display', () => {
 
   it('should show Premium banner when owner has Premium tier', async () => {
     setBasicUser()
-    setupBannerFetchMocks('premium')
+
+    // Use a view-only member to access the DocumentViewer via Nur-Ansicht button
+    const viewOnlyMember = {
+      ...mockFamilyMembers[1], // Anna Schmidt base data
+      id: 'member-viewonly-1',
+      canDownloadSharedDocuments: false,
+      canViewSharedDocuments: true,
+      tier: { ...mockFamilyMembers[1].tier!, canDownload: false, viewOnly: true },
+    }
+
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const urlStr = url.toString()
+      if (urlStr.includes('/api/trusted-person/link')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      }
+      if (urlStr.includes('/api/family/members')) {
+        if (init?.method === 'HEAD') return Promise.resolve({ ok: true })
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ members: [viewOnlyMember] }),
+        })
+      }
+      if (urlStr.includes('/api/family/view') && !urlStr.includes('/stream')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            documents: mockViewerDocuments,
+            categories: mockViewerCategories,
+            ownerTier: 'premium',
+          }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
 
     render(<ZugriffPage />)
 
@@ -820,7 +851,7 @@ describe('DocumentViewer Banner Display', () => {
       expect(screen.getByText('Anna Schmidt')).toBeInTheDocument()
     }, { timeout: TEST_TIMEOUT })
 
-    // Click "Nur Ansicht" button for Basic tier member
+    // Click "Nur Ansicht" button for the view-only member
     const viewButtons = screen.getAllByRole('button', { name: /Dokumente von.*ansehen/i })
     await userEvent.click(viewButtons[0])
 
@@ -840,7 +871,41 @@ describe('DocumentViewer Banner Display', () => {
 
   it('should show Basic banner when owner has Basic tier', async () => {
     setBasicUser()
-    setupBannerFetchMocks('basic')
+
+    // Use a view-only member to access the DocumentViewer via Nur-Ansicht button
+    const viewOnlyMember = {
+      ...mockFamilyMembers[1], // Anna Schmidt base data
+      id: 'member-viewonly-1',
+      canDownloadSharedDocuments: false,
+      canViewSharedDocuments: true,
+      tier: { ...mockFamilyMembers[1].tier!, canDownload: false, viewOnly: true },
+    }
+
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const urlStr = url.toString()
+      if (urlStr.includes('/api/trusted-person/link')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      }
+      if (urlStr.includes('/api/family/members')) {
+        if (init?.method === 'HEAD') return Promise.resolve({ ok: true })
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ members: [viewOnlyMember] }),
+        })
+      }
+      if (urlStr.includes('/api/family/view') && !urlStr.includes('/stream')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            documents: mockViewerDocuments,
+            categories: mockViewerCategories,
+            ownerTier: 'basic',
+          }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
 
     render(<ZugriffPage />)
 
@@ -854,7 +919,7 @@ describe('DocumentViewer Banner Display', () => {
       expect(screen.getByText('Anna Schmidt')).toBeInTheDocument()
     }, { timeout: TEST_TIMEOUT })
 
-    // Click "Nur Ansicht" button for Basic tier member
+    // Click "Nur Ansicht" button for the view-only member
     const viewButtons = screen.getAllByRole('button', { name: /Dokumente von.*ansehen/i })
     await userEvent.click(viewButtons[0])
 
@@ -874,7 +939,41 @@ describe('DocumentViewer Banner Display', () => {
 
   it('should pass correct owner tier to DocumentViewer for free tier', async () => {
     setBasicUser()
-    setupBannerFetchMocks('free')
+
+    // Use a view-only member to access the DocumentViewer via Nur-Ansicht button
+    const viewOnlyMember = {
+      ...mockFamilyMembers[1], // Anna Schmidt base data
+      id: 'member-viewonly-1',
+      canDownloadSharedDocuments: false,
+      canViewSharedDocuments: true,
+      tier: { ...mockFamilyMembers[1].tier!, canDownload: false, viewOnly: true },
+    }
+
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      const urlStr = url.toString()
+      if (urlStr.includes('/api/trusted-person/link')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      }
+      if (urlStr.includes('/api/family/members')) {
+        if (init?.method === 'HEAD') return Promise.resolve({ ok: true })
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ members: [viewOnlyMember] }),
+        })
+      }
+      if (urlStr.includes('/api/family/view') && !urlStr.includes('/stream')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            documents: mockViewerDocuments,
+            categories: mockViewerCategories,
+            ownerTier: 'free',
+          }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
 
     render(<ZugriffPage />)
 
@@ -1251,7 +1350,7 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
       }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
 
-    it('Basic member should show "Nur Ansicht" view button', async () => {
+    it('Basic member should show "Dokumente laden" download button', async () => {
       setBasicUser()
       setupFetchMocks()
 
@@ -1261,11 +1360,11 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
 
       await userEvent.click(screen.getByRole('tab', { name: /Familie/i }))
 
-      // Wait for "Nur Ansicht" button for Basic tier member
-      // Note: Button has aria-label="Dokumente von {name} ansehen"
+      // Basic tier now supports download — expect download button for Anna Schmidt
+      // Note: Button has aria-label="Dokumente von {name} herunterladen"
       await waitFor(() => {
-        const viewButtons = screen.getAllByRole('button', { name: /Dokumente von.*ansehen/i })
-        expect(viewButtons.length).toBeGreaterThan(0)
+        const downloadButtons = screen.getAllByRole('button', { name: /Dokumente von.*herunterladen/i })
+        expect(downloadButtons.length).toBeGreaterThan(0)
       }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
 
@@ -1330,9 +1429,18 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
   })
 
   describe('Familie Tab View Documents Interaction', () => {
-    it('should open DocumentViewer modal when clicking "Nur Ansicht" for Basic member', async () => {
+    it('should open DocumentViewer modal when clicking "Nur Ansicht" for view-only member', async () => {
       setBasicUser()
+      // Use a view-only member (canView=true, canDownload=false) to trigger the Nur-Ansicht path
+      const viewOnlyMember = {
+        ...mockFamilyMembers[1], // Anna Schmidt base data
+        id: 'member-viewonly-1',
+        canDownloadSharedDocuments: false,
+        canViewSharedDocuments: true,
+        tier: { ...mockFamilyMembers[1].tier!, canDownload: false, viewOnly: true },
+      }
       setupFetchMocks({
+        familyMembers: [viewOnlyMember],
         viewResponse: {
           ok: true,
           data: {
@@ -1354,7 +1462,7 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
         expect(screen.getByText('Anna Schmidt')).toBeInTheDocument()
       }, { timeout: TEST_TIMEOUT })
 
-      // Click "Nur Ansicht" button for Anna Schmidt (Basic tier member)
+      // Click "Nur Ansicht" button for the view-only member
       // Note: Button has aria-label="Dokumente von {name} ansehen"
       const viewButtons = screen.getAllByRole('button', { name: /Dokumente von.*ansehen/i })
       await userEvent.click(viewButtons[0])
@@ -1372,7 +1480,16 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
 
     it('should pass correct props to DocumentViewer', async () => {
       setBasicUser()
+      // Use a view-only member to trigger the Nur-Ansicht path and DocumentViewer
+      const viewOnlyMember = {
+        ...mockFamilyMembers[1], // Anna Schmidt base data
+        id: 'member-viewonly-1',
+        canDownloadSharedDocuments: false,
+        canViewSharedDocuments: true,
+        tier: { ...mockFamilyMembers[1].tier!, canDownload: false, viewOnly: true },
+      }
       setupFetchMocks({
+        familyMembers: [viewOnlyMember],
         viewResponse: {
           ok: true,
           data: {
@@ -1495,7 +1612,16 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
   describe('Familie Tab Error Handling', () => {
     it('should handle 403 error from /api/family/view for Free tier owner', async () => {
       setBasicUser()
+      // Use a view-only member to access the Nur-Ansicht path which calls /api/family/view
+      const viewOnlyMember = {
+        ...mockFamilyMembers[1], // Anna Schmidt base data
+        id: 'member-viewonly-1',
+        canDownloadSharedDocuments: false,
+        canViewSharedDocuments: true,
+        tier: { ...mockFamilyMembers[1].tier!, canDownload: false, viewOnly: true },
+      }
       setupFetchMocks({
+        familyMembers: [viewOnlyMember],
         viewResponse: {
           ok: false,
           status: 403,
@@ -1648,10 +1774,10 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
       }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
 
-    it('should show view-only banner when only Basic members exist', async () => {
+    it('should show download access banner when only Basic members exist', async () => {
       setBasicUser()
       setupFetchMocks({
-        familyMembers: [mockFamilyMembers.find(m => m.tier?.viewOnly && !m.tier?.canDownload)!],
+        familyMembers: [mockFamilyMembers.find(m => m.tier?.id === 'basic')!],
       })
 
       render(<ZugriffPage />)
@@ -1661,7 +1787,7 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
       await userEvent.click(screen.getByRole('tab', { name: /Familie/i }))
 
       await waitFor(() => {
-        expect(screen.getByText(/Nur-Ansicht-Zugriff verfügbar/i)).toBeInTheDocument()
+        expect(screen.getByText(/Vollständiger Download-Zugriff verfügbar/i)).toBeInTheDocument()
       }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
 
@@ -1797,6 +1923,14 @@ describe('DocumentViewer Modal Mobile Fullscreen', () => {
   })
 
   const setupModalMocks = () => {
+    // Use a view-only member to trigger the Nur-Ansicht path and DocumentViewer modal
+    const viewOnlyMember = {
+      ...mockFamilyMembers[1], // Anna Schmidt base data
+      id: 'member-viewonly-1',
+      canDownloadSharedDocuments: false,
+      canViewSharedDocuments: true,
+      tier: { ...mockFamilyMembers[1].tier!, canDownload: false, viewOnly: true },
+    }
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       const urlStr = url.toString()
       if (urlStr.includes('/api/trusted-person/link')) {
@@ -1806,7 +1940,7 @@ describe('DocumentViewer Modal Mobile Fullscreen', () => {
         if (init?.method === 'HEAD') return Promise.resolve({ ok: true })
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ members: mockFamilyMembers }),
+          json: () => Promise.resolve({ members: [viewOnlyMember] }),
         })
       }
       if (urlStr.includes('/api/family/view') && !urlStr.includes('/stream')) {
@@ -1893,6 +2027,15 @@ describe('Familie Tab Performance', () => {
   it('should lazy load DocumentViewer component on demand', async () => {
     setBasicUser()
 
+    // Use a view-only member to trigger the Nur-Ansicht path and DocumentViewer modal
+    const viewOnlyMember = {
+      ...mockFamilyMembers[1], // Anna Schmidt base data
+      id: 'member-viewonly-1',
+      canDownloadSharedDocuments: false,
+      canViewSharedDocuments: true,
+      tier: { ...mockFamilyMembers[1].tier!, canDownload: false, viewOnly: true },
+    }
+
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       const urlStr = url.toString()
       if (urlStr.includes('/api/trusted-person/link')) {
@@ -1902,7 +2045,7 @@ describe('Familie Tab Performance', () => {
         if (init?.method === 'HEAD') return Promise.resolve({ ok: true })
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ members: mockFamilyMembers }),
+          json: () => Promise.resolve({ members: [viewOnlyMember] }),
         })
       }
       if (urlStr.includes('/api/family/view') && !urlStr.includes('/stream')) {

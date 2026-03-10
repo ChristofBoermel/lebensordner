@@ -41,15 +41,16 @@ function setupFetch({
       return createJsonResponse({ ownerName, accessLevel, documents, categories: {} })
     }
 
-    if (url.includes('/api/documents/share-token?ownerId=')) {
+    if (url.includes('/api/documents/share-token/received')) {
       if (shareTokensShouldFail) {
         return Promise.reject(new Error('share-token failed'))
       }
 
       return createJsonResponse({
-        tokens: documents
+        shares: documents
           .filter((doc) => doc.is_encrypted)
           .map((doc) => ({
+            owner_id: 'owner-123',
             document_id: doc.id,
             wrapped_dek_for_tp: `wrapped-${doc.id}`,
           })),

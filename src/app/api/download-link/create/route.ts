@@ -264,17 +264,17 @@ export async function POST(request: Request) {
     const tierInfo = isViewOnly
       ? `<div style="background-color: #dbeafe; border: 1px solid #3b82f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
           <p style="margin: 0; color: #1e40af;">
-            <strong>Hinweis:</strong> Sie können die Dokumente ansehen, aber nicht herunterladen. Der Besitzer hat ein Basis-Abo.
+            <strong>Hinweis:</strong> Dieser Link erlaubt das Ansehen im Browser.
           </p>
         </div>`
-      : `<div style="background-color: #f3e8ff; border: 1px solid #a855f7; padding: 16px; border-radius: 8px; margin: 16px 0;">
-          <p style="margin: 0; color: #7c3aed;">
-            Mit dem Premium-Abo des Besitzers können Sie alle Dokumente als ZIP-Datei herunterladen.
+      : `<div style="background-color: #dcfce7; border: 1px solid #16a34a; padding: 16px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 0; color: #166534;">
+            Dieser Link erlaubt das Herunterladen der freigegebenen Dokumente als ZIP-Datei.
           </p>
         </div>`
     const usageNote = isViewOnly
       ? 'Dieser Link ist <strong>12 Stunden</strong> gültig und kann mehrfach zum Ansehen verwendet werden.'
-      : 'Dieser Link ist <strong>12 Stunden</strong> gültig und kann nur einmal verwendet werden.'
+      : 'Dieser Link ist <strong>12 Stunden</strong> gültig und kann nur einmal zum Download verwendet werden.'
 
     try {
       await getResend().emails.send({
