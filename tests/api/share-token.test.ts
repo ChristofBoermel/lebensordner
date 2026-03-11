@@ -150,6 +150,50 @@ describe('Share Token API', () => {
 
       expect(response.status).toBe(403)
     })
+
+    it('falls back to legacy schema when optional share-token columns are missing', async () => {
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'doc-1' }, error: null })
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: 'tp-user' }, error: null })
+      thenFn
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({
+            data: null,
+            error: { code: '42703', message: 'column "expires_at" does not exist' },
+          }).then(onFulfilled)
+        )
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({ data: null, error: null }).then(onFulfilled)
+        )
+
+      vi.resetModules()
+      const { POST } = await import('@/app/api/documents/share-token/route')
+
+      const response = await POST(
+        new Request('http://localhost/api/documents/share-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            documentId: 'doc-1',
+            trustedPersonId: 'tp-1',
+            wrapped_dek_for_tp: 'wrapped-key',
+            expires_at: '2027-01-01T00:00:00Z',
+            permission: 'download',
+          }),
+        })
+      )
+
+      expect(response.status).toBe(200)
+      expect(builder.upsert).toHaveBeenNthCalledWith(
+        2,
+        {
+          document_id: 'doc-1',
+          owner_id: 'owner-id',
+          trusted_person_id: 'tp-1',
+          wrapped_dek_for_tp: 'wrapped-key',
+        },
+        expect.any(Object)
+      )
+    })
   })
 
   describe('DELETE /api/documents/share-token', () => {
@@ -200,6 +244,32 @@ describe('Share Token API', () => {
       )
 
       expect(response.status).toBe(400)
+    })
+
+    it('falls back to hard delete when revoked_at is missing', async () => {
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'share-1', owner_id: 'owner-id' }, error: null })
+      thenFn
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({
+            data: null,
+            error: { code: '42703', message: 'column "revoked_at" does not exist' },
+          }).then(onFulfilled)
+        )
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({ data: null, error: null }).then(onFulfilled)
+        )
+
+      vi.resetModules()
+      const { DELETE } = await import('@/app/api/documents/share-token/route')
+
+      const response = await DELETE(
+        new Request('http://localhost/api/documents/share-token?id=share-1', {
+          method: 'DELETE',
+        })
+      )
+
+      expect(response.status).toBe(200)
+      expect(builder.delete).toHaveBeenCalled()
     })
   })
 
@@ -309,6 +379,45 @@ describe('Share Token API', () => {
       )
 
       expect(response.status).toBe(403)
+    })
+
+    it('falls back to legacy schema when owner list optional columns are missing', async () => {
+      thenFn
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({
+            data: null,
+            error: { code: '42703', message: 'column "permission" does not exist' },
+          }).then(onFulfilled)
+        )
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({
+            data: [{
+              id: 'share-1',
+              document_id: 'doc-1',
+              trusted_person_id: 'tp-1',
+              wrapped_dek_for_tp: 'wrapped-key',
+              created_at: '2026-03-10T12:00:00Z',
+              documents: { id: 'doc-1', title: 'My Doc', category: 'finanzen', file_name: 'doc.pdf' },
+              trusted_persons: { id: 'tp-1', name: 'Max Mustermann', email: 'max@example.com' },
+            }],
+            error: null,
+          }).then(onFulfilled)
+        )
+
+      vi.resetModules()
+      const { GET } = await import('@/app/api/documents/share-token/route')
+
+      const response = await GET(
+        new Request('http://localhost/api/documents/share-token?ownerId=owner-id')
+      )
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.tokens[0]).toMatchObject({
+        permission: 'view',
+        revoked_at: null,
+        expires_at: null,
+      })
     })
   })
 
@@ -420,6 +529,45 @@ describe('Share Token API', () => {
       expect(response.status).toBe(200)
       expect(data.shares).toEqual([])
     })
+
+    it('falls back to legacy schema when recipient list optional columns are missing', async () => {
+      thenFn
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({ data: [{ id: 'tp-1' }], error: null }).then(onFulfilled)
+        )
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({
+            data: null,
+            error: { code: '42703', message: 'column "revoked_at" does not exist' },
+          }).then(onFulfilled)
+        )
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({
+            data: [{
+              id: 'share-1',
+              document_id: 'doc-1',
+              owner_id: 'owner-id',
+              wrapped_dek_for_tp: 'wrapped-key',
+              documents: { id: 'doc-1', title: 'My Doc', category: 'personal', file_name: 'doc.pdf' },
+              profiles: { full_name: 'Owner User', first_name: 'Owner', last_name: 'User' },
+            }],
+            error: null,
+          }).then(onFulfilled)
+        )
+
+      vi.resetModules()
+      const { GET } = await import('@/app/api/documents/share-token/received/route')
+
+      const response = await GET()
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.shares[0]).toMatchObject({
+        permission: 'view',
+        revoked_at: null,
+        expires_at: null,
+      })
+    })
   })
 
   describe('GET /api/documents/share-token/[id]/file', () => {
@@ -529,6 +677,36 @@ describe('Share Token API', () => {
       )
 
       expect(response.headers.get('Cache-Control')).toBe('no-store')
+    })
+
+    it('falls back to legacy schema when file access optional columns are missing', async () => {
+      adminThenFn.mockImplementationOnce((onFulfilled: any) =>
+        Promise.resolve({ data: [{ id: 'tp-1' }], error: null }).then(onFulfilled)
+      )
+      adminMaybySingle
+        .mockResolvedValueOnce({
+          data: null,
+          error: { code: '42703', message: 'column "expires_at" does not exist' },
+        })
+        .mockResolvedValueOnce({
+          data: { id: 'share-1', document_id: 'doc-1' },
+          error: null,
+        })
+      adminSingle.mockResolvedValueOnce({ data: { file_path: 'user/doc.enc' }, error: null })
+      const fakeBytes = new Uint8Array([1, 2, 3])
+      mockStorageDownload.mockResolvedValueOnce({
+        data: { arrayBuffer: vi.fn().mockResolvedValue(fakeBytes.buffer) },
+        error: null,
+      })
+      vi.resetModules()
+      const { GET } = await import('@/app/api/documents/share-token/[id]/file/route')
+
+      const response = await GET(
+        new Request('http://localhost/api/documents/share-token/share-1/file'),
+        { params: Promise.resolve({ id: 'share-1' }) }
+      )
+
+      expect(response.status).toBe(200)
     })
   })
 })

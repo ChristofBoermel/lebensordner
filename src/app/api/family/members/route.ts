@@ -7,8 +7,12 @@ import {
   getTierDisplayInfo,
 } from "@/lib/subscription-tiers";
 import { canTrustedPersonPerformAction } from "@/lib/security/trusted-person-access";
-import { emitStructuredError } from "@/lib/errors/structured-logger";
+import { emitStructuredError, emitStructuredWarn } from "@/lib/errors/structured-logger";
 import { resolveAuthenticatedUser } from "@/lib/auth/resolve-authenticated-user";
+import {
+  isLegacyShareTokenSchemaError,
+  withLegacyShareTokenDefaults,
+} from "@/lib/security/share-token-compat";
 
 const getSupabaseAdmin = () =>
   createClient(
@@ -36,6 +40,90 @@ interface FamilyMember {
     canDownload: boolean;
     viewOnly: boolean;
   };
+}
+
+type ShareCountRow = {
+  owner_id?: string;
+  trusted_person_id: string;
+  document_id: string;
+  expires_at?: string | null;
+  revoked_at?: string | null;
+};
+
+async function fetchIncomingShareRows(
+  adminClient: ReturnType<typeof getSupabaseAdmin>,
+  ownerIds: string[],
+  trustedPersonIds: string[],
+): Promise<ShareCountRow[]> {
+  let { data, error } = await adminClient
+    .from("document_share_tokens")
+    .select("owner_id, trusted_person_id, document_id, expires_at")
+    .in("owner_id", ownerIds)
+    .in("trusted_person_id", trustedPersonIds)
+    .is("revoked_at", null);
+
+  if (isLegacyShareTokenSchemaError(error)) {
+    emitStructuredWarn({
+      event_type: "api",
+      event_message: "[Family Members API] Falling back to legacy share-token schema for incoming share counts",
+      endpoint: "/api/family/members",
+      metadata: {
+        operation: "incoming_share_counts",
+        code: error?.code ?? null,
+        message: error?.message ?? null,
+      },
+    });
+
+    ({ data, error } = await adminClient
+      .from("document_share_tokens")
+      .select("owner_id, trusted_person_id, document_id")
+      .in("owner_id", ownerIds)
+      .in("trusted_person_id", trustedPersonIds));
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as ShareCountRow[]).map((row) => withLegacyShareTokenDefaults(row));
+}
+
+async function fetchOutgoingShareRows(
+  adminClient: ReturnType<typeof getSupabaseAdmin>,
+  ownerId: string,
+  trustedPersonIds: string[],
+): Promise<ShareCountRow[]> {
+  let { data, error } = await adminClient
+    .from("document_share_tokens")
+    .select("trusted_person_id, document_id, expires_at")
+    .eq("owner_id", ownerId)
+    .in("trusted_person_id", trustedPersonIds)
+    .is("revoked_at", null);
+
+  if (isLegacyShareTokenSchemaError(error)) {
+    emitStructuredWarn({
+      event_type: "api",
+      event_message: "[Family Members API] Falling back to legacy share-token schema for outgoing share counts",
+      endpoint: "/api/family/members",
+      metadata: {
+        operation: "outgoing_share_counts",
+        code: error?.code ?? null,
+        message: error?.message ?? null,
+      },
+    });
+
+    ({ data, error } = await adminClient
+      .from("document_share_tokens")
+      .select("trusted_person_id, document_id")
+      .eq("owner_id", ownerId)
+      .in("trusted_person_id", trustedPersonIds));
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as ShareCountRow[]).map((row) => withLegacyShareTokenDefaults(row));
 }
 
 export async function GET(request: Request) {
@@ -83,17 +171,16 @@ export async function GET(request: Request) {
     if (incomingLinks && incomingLinks.length > 0) {
       const userIds = incomingLinks.map((link) => link.user_id);
 
-      const [{ data: profiles }, { data: shareRows }] = await Promise.all([
+      const [{ data: profiles }, shareRows] = await Promise.all([
         adminClient
           .from("profiles")
           .select("id, full_name, email, subscription_status, stripe_price_id")
           .in("id", userIds),
-        adminClient
-          .from("document_share_tokens")
-          .select("owner_id, trusted_person_id, document_id, expires_at")
-          .in("owner_id", userIds)
-          .in("trusted_person_id", incomingLinks.map((link) => link.id))
-          .is("revoked_at", null),
+        fetchIncomingShareRows(
+          adminClient,
+          userIds,
+          incomingLinks.map((link) => link.id),
+        ),
       ]);
 
       const profileMap = new Map<
@@ -201,22 +288,15 @@ export async function GET(request: Request) {
       });
     }
 
-    let outgoingShareCountMap = new Map<string, number>();
+      let outgoingShareCountMap = new Map<string, number>();
     if (outgoingLinks && outgoingLinks.length > 0) {
-      const { data: shareRows, error: shareError } = await adminClient
-        .from("document_share_tokens")
-        .select("trusted_person_id, document_id, expires_at")
-        .eq("owner_id", user.id)
-        .in("trusted_person_id", outgoingLinks.map((link) => link.id))
-        .is("revoked_at", null);
+      try {
+        const shareRows = await fetchOutgoingShareRows(
+          adminClient,
+          user.id,
+          outgoingLinks.map((link) => link.id),
+        );
 
-      if (shareError) {
-        emitStructuredError({
-          error_type: "api",
-          error_message: `Error fetching outgoing share rows: ${shareError.message}`,
-          endpoint: "/api/family/members",
-        });
-      } else {
         const nowMs = Date.now();
         const activeShareKeys = new Set<string>();
         for (const row of shareRows || []) {
@@ -236,6 +316,12 @@ export async function GET(request: Request) {
           }
           outgoingShareCountMap.set(link.id, count);
         }
+      } catch (error: any) {
+        emitStructuredError({
+          error_type: "api",
+          error_message: `Error fetching outgoing share rows: ${error?.message ?? String(error)}`,
+          endpoint: "/api/family/members",
+        });
       }
     }
 

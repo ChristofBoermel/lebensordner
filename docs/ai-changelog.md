@@ -2468,3 +2468,45 @@ Rollback:
   - `.github/workflows/deploy.yml`
   - `tests/e2e/smoke/trusted-person-invite.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-11 00:00 UTC | Agent: Codex | Commit: 524eeaf
+
+Change:
+- Added legacy-schema fallback handling for document share-token owner/recipient/file APIs so sharing and active-share loading keep working when `expires_at`, `permission`, or `revoked_at` are missing in production.
+- Added compatibility handling in trusted-person share token resolution and expanded share-token API tests to cover the fallback paths.
+
+Risk / Regression Watch:
+- This is a compatibility shim; production should still be checked for the missing `document_share_tokens` migration and brought back in sync to restore full selective-sharing semantics.
+- Legacy-schema fallback downgrades to view-only/no-expiry/no-soft-revoke behavior because those columns do not exist on the old table shape.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npx vitest run tests/api/share-token.test.ts`
+
+Rollback:
+- Revert:
+  - `src/lib/security/share-token-compat.ts`
+  - `src/app/api/documents/share-token/route.ts`
+  - `src/app/api/documents/share-token/received/route.ts`
+  - `src/app/api/documents/share-token/[id]/file/route.ts`
+  - `src/lib/security/trusted-person-shares.ts`
+  - `tests/api/share-token.test.ts`
+  - `docs/ai-changelog.md`
+
+## 2026-03-11 00:08 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Extended the legacy `document_share_tokens` schema fallback into `/api/family/members` so incoming/outgoing family share counts no longer fail when `expires_at` or `revoked_at` are missing in production.
+
+Risk / Regression Watch:
+- Legacy fallback still treats old-schema rows as non-revoked and non-expiring because those columns do not exist; production should still be brought onto the current migration set.
+- `tests/pages/zugriff.test.tsx` passes but still emits a pre-existing React `act(...)` warning in one download-loading test.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npx vitest run tests/pages/zugriff.test.tsx`
+
+Rollback:
+- Revert:
+  - `src/app/api/family/members/route.ts`
+  - `docs/ai-changelog.md`

@@ -16,7 +16,6 @@ permissions:
 
 env:
   TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-nextjs:
@@ -32,36 +31,45 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
         with:
           ref: ${{ env.TARGET_SHA }}
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: |
-            ghcr.io/christofboermel/lebensordner/nextjs:latest
-            ghcr.io/christofboermel/lebensordner/nextjs:${{ env.TARGET_SHA }}
-          cache-from: |
-            type=gha,scope=nextjs
-            type=registry,ref=ghcr.io/christofboermel/lebensordner/nextjs:buildcache
-          cache-to: type=gha,mode=max,scope=nextjs
-          build-args: |
-            SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-            SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
-            NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
-            NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
-            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
-          secrets: |
-            encryption_key=${{ secrets.ENCRYPTION_KEY }}
-            cron_secret=${{ secrets.CRON_SECRET }}
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+      - name: Set up Docker Buildx
+        run: |
+          docker buildx create --name ci-builder --driver docker-container --use || docker buildx use ci-builder
+          docker buildx inspect --bootstrap
+      - name: Build and push Next.js image
+        env:
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+          NEXT_PUBLIC_POSTHOG_HOST: ${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+        run: |
+          docker buildx build \
+            --file Dockerfile \
+            --push \
+            --tag ghcr.io/christofboermel/lebensordner/nextjs:latest \
+            --tag ghcr.io/christofboermel/lebensordner/nextjs:${TARGET_SHA} \
+            --cache-from type=registry,ref=ghcr.io/christofboermel/lebensordner/nextjs:buildcache \
+            --cache-to type=registry,ref=ghcr.io/christofboermel/lebensordner/nextjs:buildcache,mode=max \
+            --build-arg SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
+            --build-arg SUPABASE_ANON_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY}" \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
+            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY}" \
+            --build-arg NEXT_PUBLIC_TURNSTILE_SITE_KEY="${NEXT_PUBLIC_TURNSTILE_SITE_KEY}" \
+            --build-arg NEXT_PUBLIC_POSTHOG_KEY="${NEXT_PUBLIC_POSTHOG_KEY}" \
+            --build-arg NEXT_PUBLIC_POSTHOG_HOST="${NEXT_PUBLIC_POSTHOG_HOST}" \
+            --build-arg NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}" \
+            --secret id=encryption_key,env=ENCRYPTION_KEY \
+            --secret id=cron_secret,env=CRON_SECRET \
+            .
 
   build-worker:
     if: >
@@ -76,24 +84,26 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
         with:
           ref: ${{ env.TARGET_SHA }}
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
-        with:
-          context: .
-          file: deploy/Dockerfile.worker
-          push: true
-          tags: |
-            ghcr.io/christofboermel/lebensordner/worker:latest
-            ghcr.io/christofboermel/lebensordner/worker:${{ env.TARGET_SHA }}
-          cache-from: |
-            type=gha,scope=worker
-            type=registry,ref=ghcr.io/christofboermel/lebensordner/worker:buildcache
-          cache-to: type=gha,mode=max,scope=worker
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+      - name: Set up Docker Buildx
+        run: |
+          docker buildx create --name ci-builder --driver docker-container --use || docker buildx use ci-builder
+          docker buildx inspect --bootstrap
+      - name: Build and push worker image
+        run: |
+          docker buildx build \
+            --file deploy/Dockerfile.worker \
+            --push \
+            --tag ghcr.io/christofboermel/lebensordner/worker:latest \
+            --tag ghcr.io/christofboermel/lebensordner/worker:${TARGET_SHA} \
+            --cache-from type=registry,ref=ghcr.io/christofboermel/lebensordner/worker:buildcache \
+            --cache-to type=registry,ref=ghcr.io/christofboermel/lebensordner/worker:buildcache,mode=max \
+            .
 
   deploy:
     needs: [build-nextjs, build-worker]

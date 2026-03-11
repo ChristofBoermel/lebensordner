@@ -1,7 +1,14 @@
+import {
+  isLegacyShareTokenSchemaError,
+  withLegacyShareTokenDefaults,
+} from '@/lib/security/share-token-compat'
+
 export interface ActiveShareTokenRow {
   document_id: string
   wrapped_dek_for_tp: string
   expires_at: string | null
+  permission?: string
+  revoked_at?: string | null
 }
 
 function isTokenActive(expiresAt: string | null, nowMs: number): boolean {
@@ -20,21 +27,29 @@ export async function getActiveTrustedPersonShareTokens(
   tokenMap: Record<string, string>
   documentIds: string[]
 }> {
-  const { data: shareTokens, error } = await adminClient
+  let { data: shareTokens, error } = await adminClient
     .from('document_share_tokens')
     .select('document_id, wrapped_dek_for_tp, expires_at')
     .eq('owner_id', ownerId)
     .eq('trusted_person_id', trustedPersonId)
     .is('revoked_at', null)
 
+  if (isLegacyShareTokenSchemaError(error)) {
+    ;({ data: shareTokens, error } = await adminClient
+      .from('document_share_tokens')
+      .select('document_id, wrapped_dek_for_tp')
+      .eq('owner_id', ownerId)
+      .eq('trusted_person_id', trustedPersonId))
+  }
+
   if (error) {
     throw new Error(`Error fetching share tokens: ${error.message}`)
   }
 
   const nowMs = Date.now()
-  const activeTokens: ActiveShareTokenRow[] = ((shareTokens || []) as ActiveShareTokenRow[]).filter((token) =>
-    isTokenActive(token.expires_at, nowMs)
-  )
+  const activeTokens: ActiveShareTokenRow[] = ((shareTokens || []) as ActiveShareTokenRow[])
+    .map((token) => withLegacyShareTokenDefaults(token))
+    .filter((token) => isTokenActive(token.expires_at, nowMs))
 
   const tokenMap: Record<string, string> = {}
   for (const token of activeTokens) {
