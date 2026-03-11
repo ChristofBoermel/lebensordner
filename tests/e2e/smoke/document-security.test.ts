@@ -1,6 +1,19 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { hasRequiredE2EEnv } from '../support/env'
 import { createScenario } from '../support/harness'
+
+async function unlockVaultIfPrompted(page: Page, passphrase: string) {
+  const unlockDialog = page.getByRole('dialog').filter({ hasText: /Tresor entsperren/i })
+  const dialogVisible = await unlockDialog.isVisible({ timeout: 1500 }).catch(() => false)
+  if (!dialogVisible) {
+    return false
+  }
+
+  await page.getByLabel('Passwort').fill(passphrase)
+  await page.getByRole('button', { name: 'Entsperren' }).click()
+  await expect(unlockDialog).toBeHidden({ timeout: 15000 })
+  return true
+}
 
 test.describe('@smoke document lock and unlock', () => {
   test.skip(!hasRequiredE2EEnv(), 'Supabase E2E environment variables are required')
@@ -27,6 +40,10 @@ test.describe('@smoke document lock and unlock', () => {
 
       await page.getByTestId(`document-actions-${document.id}`).click()
       await page.getByRole('menuitem', { name: 'Extra-Sicherheit aktivieren' }).click()
+      if (await unlockVaultIfPrompted(page, owner.vaultPassphrase!)) {
+        await page.getByTestId(`document-actions-${document.id}`).click()
+        await page.getByRole('menuitem', { name: 'Extra-Sicherheit aktivieren' }).click()
+      }
 
       const row = page.getByTestId(`document-row-${document.id}`)
       await expect
@@ -38,6 +55,10 @@ test.describe('@smoke document lock and unlock', () => {
 
       await page.getByTestId(`document-actions-${document.id}`).click()
       await page.getByRole('menuitem', { name: 'Extra-Sicherheit entfernen' }).click()
+      if (await unlockVaultIfPrompted(page, owner.vaultPassphrase!)) {
+        await page.getByTestId(`document-actions-${document.id}`).click()
+        await page.getByRole('menuitem', { name: 'Extra-Sicherheit entfernen' }).click()
+      }
       await expect(row.getByText('Gesichert')).toHaveCount(0)
     } finally {
       await scenario.cleanup()

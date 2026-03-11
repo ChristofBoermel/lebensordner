@@ -2553,3 +2553,21 @@ Rollback:
   - `tests/pages/vp-dashboard-view.test.tsx`
   - `tests/pages/zugriff.test.tsx`
   - `docs/ai-changelog.md`
+
+## 2026-03-11 23:14 UTC | Agent: Codex | Commit: 6af76fa
+
+Change:
+- Hardened the `document-security` smoke test to handle the real unlock-modal path before retrying the extra-security toggle, so CI no longer depends on vault auto-unlock finishing before the first menu click.
+
+Risk / Regression Watch:
+- This only changes the Playwright smoke harness; production extra-security behavior is unchanged.
+- Local E2E re-verification remains unavailable here because the required Supabase smoke environment is not present in this workspace, so CI is the authoritative verification path for this spec.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+
+Rollback:
+- Revert:
+  - `tests/e2e/smoke/document-security.test.ts`
+  - `docs/ai-changelog.md`
