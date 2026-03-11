@@ -7,6 +7,19 @@ import {
 } from '@/lib/security/share-token-compat'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
+type OwnerShareTokenRow = {
+  id: string
+  document_id: string
+  trusted_person_id: string
+  wrapped_dek_for_tp: string
+  expires_at?: string | null
+  permission?: string
+  revoked_at?: string | null
+  created_at: string
+  documents: { id: string; title: string; category: string; file_name: string } | { id: string; title: string; category: string; file_name: string }[] | null
+  trusted_persons: { id: string; name: string; email: string } | { id: string; name: string; email: string }[] | null
+}
+
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -120,21 +133,29 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  let { data, error } = await supabase
-    .from('document_share_tokens')
-    .select(`
-      id,
-      document_id,
-      trusted_person_id,
-      wrapped_dek_for_tp,
-      expires_at,
-      permission,
-      revoked_at,
-      created_at,
-      documents!inner(id, title, category, file_name),
-      trusted_persons!inner(id, name, email)
-    `)
-    .eq('owner_id', ownerId)
+  let data: OwnerShareTokenRow[] | null = null
+  let error: { message: string; code?: string | null; details?: string | null; hint?: string | null } | null = null
+
+  {
+    const result = await supabase
+      .from('document_share_tokens')
+      .select(`
+        id,
+        document_id,
+        trusted_person_id,
+        wrapped_dek_for_tp,
+        expires_at,
+        permission,
+        revoked_at,
+        created_at,
+        documents!inner(id, title, category, file_name),
+        trusted_persons!inner(id, name, email)
+      `)
+      .eq('owner_id', ownerId)
+
+    data = (result.data ?? null) as OwnerShareTokenRow[] | null
+    error = result.error
+  }
 
   if (isLegacyShareTokenSchemaError(error)) {
     emitStructuredWarn({
@@ -148,7 +169,7 @@ export async function GET(request: Request) {
       },
     })
 
-    ;({ data, error } = await supabase
+    const legacyResult = await supabase
       .from('document_share_tokens')
       .select(`
         id,
@@ -159,7 +180,10 @@ export async function GET(request: Request) {
         documents!inner(id, title, category, file_name),
         trusted_persons!inner(id, name, email)
       `)
-      .eq('owner_id', ownerId))
+      .eq('owner_id', ownerId)
+
+    data = (legacyResult.data ?? null) as OwnerShareTokenRow[] | null
+    error = legacyResult.error
   }
 
   if (error) {

@@ -20,7 +20,9 @@ export function isLegacyShareTokenSchemaError(error: ShareTokenSchemaErrorLike |
   return LEGACY_SHARE_TOKEN_COLUMNS.some((column) => message.includes(column))
 }
 
-export function withLegacyShareTokenDefaults<T extends Record<string, unknown>>(
+export function withLegacyShareTokenDefaults<
+  T extends Partial<{ expires_at: string | null; permission: string; revoked_at: string | null }>
+>(
   row: T
 ): T & { expires_at: string | null; permission: string; revoked_at: string | null } {
   return {

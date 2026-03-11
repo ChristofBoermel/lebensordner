@@ -55,12 +55,20 @@ async function fetchIncomingShareRows(
   ownerIds: string[],
   trustedPersonIds: string[],
 ): Promise<ShareCountRow[]> {
-  let { data, error } = await adminClient
-    .from("document_share_tokens")
-    .select("owner_id, trusted_person_id, document_id, expires_at")
-    .in("owner_id", ownerIds)
-    .in("trusted_person_id", trustedPersonIds)
-    .is("revoked_at", null);
+  let data: ShareCountRow[] | null = null;
+  let error: { message: string; code?: string | null; details?: string | null; hint?: string | null } | null = null;
+
+  {
+    const result = await adminClient
+      .from("document_share_tokens")
+      .select("owner_id, trusted_person_id, document_id, expires_at")
+      .in("owner_id", ownerIds)
+      .in("trusted_person_id", trustedPersonIds)
+      .is("revoked_at", null);
+
+    data = (result.data ?? null) as ShareCountRow[] | null;
+    error = result.error;
+  }
 
   if (isLegacyShareTokenSchemaError(error)) {
     emitStructuredWarn({
@@ -74,11 +82,14 @@ async function fetchIncomingShareRows(
       },
     });
 
-    ({ data, error } = await adminClient
+    const legacyResult = await adminClient
       .from("document_share_tokens")
       .select("owner_id, trusted_person_id, document_id")
       .in("owner_id", ownerIds)
-      .in("trusted_person_id", trustedPersonIds));
+      .in("trusted_person_id", trustedPersonIds);
+
+    data = (legacyResult.data ?? null) as ShareCountRow[] | null;
+    error = legacyResult.error;
   }
 
   if (error) {
@@ -93,12 +104,20 @@ async function fetchOutgoingShareRows(
   ownerId: string,
   trustedPersonIds: string[],
 ): Promise<ShareCountRow[]> {
-  let { data, error } = await adminClient
-    .from("document_share_tokens")
-    .select("trusted_person_id, document_id, expires_at")
-    .eq("owner_id", ownerId)
-    .in("trusted_person_id", trustedPersonIds)
-    .is("revoked_at", null);
+  let data: ShareCountRow[] | null = null;
+  let error: { message: string; code?: string | null; details?: string | null; hint?: string | null } | null = null;
+
+  {
+    const result = await adminClient
+      .from("document_share_tokens")
+      .select("trusted_person_id, document_id, expires_at")
+      .eq("owner_id", ownerId)
+      .in("trusted_person_id", trustedPersonIds)
+      .is("revoked_at", null);
+
+    data = (result.data ?? null) as ShareCountRow[] | null;
+    error = result.error;
+  }
 
   if (isLegacyShareTokenSchemaError(error)) {
     emitStructuredWarn({
@@ -112,11 +131,14 @@ async function fetchOutgoingShareRows(
       },
     });
 
-    ({ data, error } = await adminClient
+    const legacyResult = await adminClient
       .from("document_share_tokens")
       .select("trusted_person_id, document_id")
       .eq("owner_id", ownerId)
-      .in("trusted_person_id", trustedPersonIds));
+      .in("trusted_person_id", trustedPersonIds);
+
+    data = (legacyResult.data ?? null) as ShareCountRow[] | null;
+    error = legacyResult.error;
   }
 
   if (error) {
