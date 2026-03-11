@@ -1523,6 +1523,10 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
   })
 
   describe('Familie Tab Download Documents Interaction', () => {
+    beforeEach(() => {
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    })
+
     it('should trigger download when clicking "Dokumente laden" for Premium member', async () => {
       setBasicUser()
       setupFetchMocks({
@@ -1600,12 +1604,21 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
         expect(screen.getByText(/Wird geladen/i)).toBeInTheDocument()
       }, { timeout: TEST_TIMEOUT })
 
-      // Resolve the download
-      resolveDownload!({
-        ok: true,
-        headers: { get: () => 'attachment; filename="test.zip"' },
-        blob: () => Promise.resolve(new Blob(['test'])),
+      // Resolve the download and wait for the pending state update to settle.
+      await act(async () => {
+        resolveDownload!(new Response(new Blob(['test']), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/zip',
+            'Content-Disposition': 'attachment; filename="test.zip"',
+          },
+        }))
+        await downloadPromise
       })
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Wird geladen/i)).not.toBeInTheDocument()
+      }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
   })
 

@@ -2510,3 +2510,46 @@ Rollback:
 - Revert:
   - `src/app/api/family/members/route.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-11 19:41 UTC | Agent: Codex | Commit: ce70010
+
+Change:
+- Reworked the owner and recipient share-token GET routes to stop depending on fragile PostgREST relation embeds and instead hydrate documents, trusted persons, and owner profiles with separate follow-up queries.
+- Hardened both responses so active shares still return when secondary metadata lookups fail, preventing the trusted-person dashboard and owner-side active shares list from collapsing into 500 `Database error` responses.
+- Updated share-token API tests to cover the recomposed response shape, legacy fallback flow, and metadata-hydration degradation paths.
+
+Risk / Regression Watch:
+- If production data contains stale `document_id` or `trusted_person_id` references, the routes now return placeholder or null metadata instead of failing; UI should be monitored for those degraded rows.
+- The focused tests still emit pre-existing jsdom/react warnings (`navigation to another Document`, `act(...)`) unrelated to this change.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/share-token.test.ts tests/pages/vp-dashboard-view.test.tsx tests/pages/zugriff.test.tsx`
+
+Rollback:
+- Revert:
+  - `src/app/api/documents/share-token/route.ts`
+  - `src/app/api/documents/share-token/received/route.ts`
+  - `tests/api/share-token.test.ts`
+  - `docs/ai-changelog.md`
+
+## 2026-03-11 19:44 UTC | Agent: Codex | Commit: ce70010
+
+Change:
+- Removed residual focused-test noise by stubbing anchor `click()` in the trusted-person and family download specs so jsdom no longer emits fake navigation warnings during blob-download flows.
+- Updated the delayed family-download test to resolve its pending fetch inside `act(...)` and wait for the loading state to clear, eliminating the remaining React state-update warning.
+
+Risk / Regression Watch:
+- This only changes test harness behavior; production download flows are unchanged.
+- If future tests need to assert actual anchor click side effects, they should attach explicit spies rather than relying on jsdom navigation.
+
+Verification:
+- `npm test -- --run tests/pages/vp-dashboard-view.test.tsx tests/pages/zugriff.test.tsx`
+
+Rollback:
+- Revert:
+  - `tests/pages/vp-dashboard-view.test.tsx`
+  - `tests/pages/zugriff.test.tsx`
+  - `docs/ai-changelog.md`

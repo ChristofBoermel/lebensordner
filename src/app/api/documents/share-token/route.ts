@@ -7,7 +7,14 @@ import {
 } from '@/lib/security/share-token-compat'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
-type OwnerShareTokenRow = {
+type ShareTokenError = {
+  message: string
+  code?: string | null
+  details?: string | null
+  hint?: string | null
+}
+
+type OwnerShareTokenBaseRow = {
   id: string
   document_id: string
   trusted_person_id: string
@@ -16,8 +23,62 @@ type OwnerShareTokenRow = {
   permission?: string
   revoked_at?: string | null
   created_at: string
-  documents: { id: string; title: string; category: string; file_name: string } | { id: string; title: string; category: string; file_name: string }[] | null
-  trusted_persons: { id: string; name: string; email: string } | { id: string; name: string; email: string }[] | null
+}
+
+type OwnerShareDocumentRow = {
+  id: string
+  title: string
+  category: string
+  file_name: string
+}
+
+type OwnerTrustedPersonRow = {
+  id: string
+  name: string
+  email: string
+}
+
+type OwnerShareTokenRow = OwnerShareTokenBaseRow & {
+  documents: OwnerShareDocumentRow | null
+  trusted_persons: OwnerTrustedPersonRow | null
+}
+
+async function fetchOwnerShareRows(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, ownerId: string) {
+  let data: OwnerShareTokenBaseRow[] | null = null
+  let error: ShareTokenError | null = null
+
+  {
+    const result = await supabase
+      .from('document_share_tokens')
+      .select('id, document_id, trusted_person_id, wrapped_dek_for_tp, expires_at, permission, revoked_at, created_at')
+      .eq('owner_id', ownerId)
+
+    data = (result.data ?? null) as OwnerShareTokenBaseRow[] | null
+    error = result.error
+  }
+
+  if (isLegacyShareTokenSchemaError(error)) {
+    emitStructuredWarn({
+      event_type: 'api',
+      event_message: '[Share Token API] Falling back to legacy share-token schema for owner list',
+      endpoint: '/api/documents/share-token',
+      metadata: {
+        operation: 'list_owner',
+        code: error?.code ?? null,
+        message: error?.message ?? null,
+      },
+    })
+
+    const legacyResult = await supabase
+      .from('document_share_tokens')
+      .select('id, document_id, trusted_person_id, wrapped_dek_for_tp, created_at')
+      .eq('owner_id', ownerId)
+
+    data = (legacyResult.data ?? null) as OwnerShareTokenBaseRow[] | null
+    error = legacyResult.error
+  }
+
+  return { data, error }
 }
 
 export async function POST(request: Request) {
@@ -133,58 +194,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  let data: OwnerShareTokenRow[] | null = null
-  let error: { message: string; code?: string | null; details?: string | null; hint?: string | null } | null = null
-
-  {
-    const result = await supabase
-      .from('document_share_tokens')
-      .select(`
-        id,
-        document_id,
-        trusted_person_id,
-        wrapped_dek_for_tp,
-        expires_at,
-        permission,
-        revoked_at,
-        created_at,
-        documents!inner(id, title, category, file_name),
-        trusted_persons!inner(id, name, email)
-      `)
-      .eq('owner_id', ownerId)
-
-    data = (result.data ?? null) as OwnerShareTokenRow[] | null
-    error = result.error
-  }
-
-  if (isLegacyShareTokenSchemaError(error)) {
-    emitStructuredWarn({
-      event_type: 'api',
-      event_message: '[Share Token API] Falling back to legacy share-token schema for owner list',
-      endpoint: '/api/documents/share-token',
-      metadata: {
-        operation: 'list_owner',
-        code: error?.code ?? null,
-        message: error?.message ?? null,
-      },
-    })
-
-    const legacyResult = await supabase
-      .from('document_share_tokens')
-      .select(`
-        id,
-        document_id,
-        trusted_person_id,
-        wrapped_dek_for_tp,
-        created_at,
-        documents!inner(id, title, category, file_name),
-        trusted_persons!inner(id, name, email)
-      `)
-      .eq('owner_id', ownerId)
-
-    data = (legacyResult.data ?? null) as OwnerShareTokenRow[] | null
-    error = legacyResult.error
-  }
+  const { data, error } = await fetchOwnerShareRows(supabase, ownerId)
 
   if (error) {
     emitStructuredError({
@@ -199,9 +209,76 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
-  const tokens = (data ?? [])
+  const activeTokens = (data ?? [])
     .map((token) => withLegacyShareTokenDefaults(token))
     .filter((token) => isActiveShareToken(token))
+
+  if (activeTokens.length === 0) {
+    return NextResponse.json({ tokens: [] })
+  }
+
+  const documentIds = [...new Set(activeTokens.map((token) => token.document_id))]
+  const trustedPersonIds = [...new Set(activeTokens.map((token) => token.trusted_person_id))]
+
+  let documentsById = new Map<string, OwnerShareDocumentRow>()
+  if (documentIds.length > 0) {
+    const { data: documents, error: documentsError } = await supabase
+      .from('documents')
+      .select('id, title, category, file_name')
+      .in('id', documentIds)
+      .eq('user_id', ownerId)
+
+    if (documentsError) {
+      emitStructuredWarn({
+        event_type: 'api',
+        event_message: '[Share Token API] Unable to hydrate owner share documents',
+        endpoint: '/api/documents/share-token',
+        metadata: {
+          operation: 'list_owner_documents',
+          code: documentsError.code ?? null,
+          message: documentsError.message,
+          ownerId,
+        },
+      })
+    } else {
+      documentsById = new Map(
+        (documents ?? []).map((document) => [document.id, document as OwnerShareDocumentRow])
+      )
+    }
+  }
+
+  let trustedPersonsById = new Map<string, OwnerTrustedPersonRow>()
+  if (trustedPersonIds.length > 0) {
+    const { data: trustedPersons, error: trustedPersonsError } = await supabase
+      .from('trusted_persons')
+      .select('id, name, email')
+      .in('id', trustedPersonIds)
+      .eq('user_id', ownerId)
+
+    if (trustedPersonsError) {
+      emitStructuredWarn({
+        event_type: 'api',
+        event_message: '[Share Token API] Unable to hydrate owner trusted-person metadata',
+        endpoint: '/api/documents/share-token',
+        metadata: {
+          operation: 'list_owner_trusted_persons',
+          code: trustedPersonsError.code ?? null,
+          message: trustedPersonsError.message,
+          ownerId,
+        },
+      })
+    } else {
+      trustedPersonsById = new Map(
+        (trustedPersons ?? []).map((trustedPerson) => [trustedPerson.id, trustedPerson as OwnerTrustedPersonRow])
+      )
+    }
+  }
+
+  const tokens: OwnerShareTokenRow[] = activeTokens.map((token) => ({
+    ...token,
+    documents: documentsById.get(token.document_id) ?? null,
+    trusted_persons: trustedPersonsById.get(token.trusted_person_id) ?? null,
+  }))
 
   return NextResponse.json({ tokens })
 }

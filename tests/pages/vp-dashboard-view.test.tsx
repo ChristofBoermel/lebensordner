@@ -88,6 +88,7 @@ describe('VpDashboardViewPage access level UX', () => {
     global.URL.createObjectURL = vi.fn(() => 'blob:mock')
     global.URL.revokeObjectURL = vi.fn()
     window.open = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     document.body.innerHTML = ''
   })
 
