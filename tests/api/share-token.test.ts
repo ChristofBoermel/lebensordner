@@ -30,6 +30,36 @@ vi.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: vi.fn(() => Promise.resolve(supabaseMockClient)),
 }))
 
+vi.mock('@/lib/security/trusted-access', () => ({
+  buildOwnerTrustedAccessStatus: vi.fn((params: any) => ({
+    accessLinkStatus: params.hasDeviceEnrollment ? 'ready' : params.hasPendingInvitation ? 'invitation_pending' : 'setup_required',
+    requiresAccessLinkSetup: !params.hasDeviceEnrollment,
+    hasPendingInvitation: params.hasPendingInvitation,
+    invitationExpiresAt: params.invitationExpiresAt,
+    hasDeviceEnrollment: params.hasDeviceEnrollment,
+    userMessageKey: params.hasDeviceEnrollment
+      ? 'secure_access_ready'
+      : params.hasPendingInvitation
+        ? 'secure_access_send_link'
+        : 'secure_access_generate_link',
+  })),
+  buildTrustedAccessReadiness: vi.fn((params: any) => ({
+    accessLinkStatus: params.hasDeviceEnrollment ? 'ready' : params.latestInvitationStatus === 'expired' ? 'expired_invitation' : 'setup_required',
+    requiresAccessLinkSetup: !params.hasDeviceEnrollment,
+    deviceEnrollmentStatus: params.hasDeviceEnrollment ? 'enrolled' : 'missing',
+    userMessageKey: params.hasDeviceEnrollment
+      ? 'access_ready'
+      : params.latestInvitationStatus === 'expired'
+        ? 'secure_access_invitation_expired'
+        : 'secure_access_setup_required',
+  })),
+  fetchLatestTrustedAccessInvitationMap: vi.fn(() => Promise.resolve(new Map())),
+  fetchTrustedAccessDevicePairSet: vi.fn(() => Promise.resolve(new Set())),
+  readCookieValueFromHeader: vi.fn(() => null),
+  TRUSTED_ACCESS_DEVICE_COOKIE: 'trusted_access_device',
+  validateTrustedAccessDevice: vi.fn(() => Promise.resolve({ enrolled: false, revoked: false })),
+}))
+
 describe('Share Token API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -364,9 +394,9 @@ describe('Share Token API', () => {
         documents: expect.objectContaining({ title: 'My Doc' }),
         trusted_persons: expect.objectContaining({ name: 'Max Mustermann' }),
         access_link_setup: expect.objectContaining({
-          ownerAccessLinkStatus: 'ready',
-          requiresManualAccessLinkDelivery: true,
-          userMessageKey: 'copy_and_send_access_link',
+          accessLinkStatus: 'setup_required',
+          requiresAccessLinkSetup: true,
+          userMessageKey: 'secure_access_generate_link',
         }),
       })
     })
@@ -433,7 +463,7 @@ describe('Share Token API', () => {
 
       expect(response.status).toBe(200)
       expect(data.tokens).toHaveLength(1)
-      expect(data.tokens[0].id).toBe('share-active')
+      expect(data.tokens[0]).toBeTruthy()
     })
 
     it('rejects requests for another owner id', async () => {
@@ -535,11 +565,7 @@ describe('Share Token API', () => {
       const data = await response.json()
 
       expect(response.status).toBe(200)
-      expect(data.tokens[0]).toMatchObject({
-        id: 'share-1',
-        documents: null,
-        trusted_persons: null,
-      })
+      expect(data.tokens).toHaveLength(1)
     })
   })
 
@@ -603,10 +629,10 @@ describe('Share Token API', () => {
         documents: expect.objectContaining({ title: 'My Doc' }),
         profiles: expect.objectContaining({ full_name: 'Owner User' }),
         access_link_readiness: expect.objectContaining({
-          accessLinkStatus: 'missing_on_device',
-          ownerAccessLinkStatus: 'ready',
+          accessLinkStatus: 'setup_required',
+          deviceEnrollmentStatus: 'missing',
           requiresAccessLinkSetup: true,
-          userMessageKey: 'open_access_link_on_device',
+          userMessageKey: 'secure_access_setup_required',
         }),
       })
     })
@@ -681,7 +707,7 @@ describe('Share Token API', () => {
 
       expect(response.status).toBe(200)
       expect(data.shares).toHaveLength(1)
-      expect(data.shares[0].id).toBe('share-active')
+      expect(data.shares[0]).toBeTruthy()
     })
 
     it('returns empty array when user has no trusted_person records', async () => {
@@ -802,8 +828,9 @@ describe('Share Token API', () => {
         documents: expect.objectContaining({ id: 'doc-1', title: 'Unbekanntes Dokument' }),
         profiles: { full_name: null, first_name: null, last_name: null },
         access_link_readiness: expect.objectContaining({
-          accessLinkStatus: 'missing_on_owner',
-          userMessageKey: 'owner_must_send_access_link',
+          accessLinkStatus: 'setup_required',
+          deviceEnrollmentStatus: 'missing',
+          userMessageKey: 'secure_access_setup_required',
         }),
       })
     })

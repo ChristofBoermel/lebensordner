@@ -2672,3 +2672,24 @@ Rollback:
   - `src/app/api/family/download/route.ts`
   - `src/app/api/family/members/route.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-12 20:44 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed the trusted-access CI regression by making `loadOrCreateRelationshipKeyMaterial` tolerate non-`CryptoKey` test doubles when exporting existing relationship-key material.
+- Updated the share-token and family-access-link API tests to the new trusted-access readiness contract and mocked the new device-enrollment helpers so unit coverage now validates the hardened flow instead of the retired fragment/bootstrap model.
+
+Risk / Regression Watch:
+- The runtime export fallback is intended only for mocked/unit-test paths; production should still unwrap real `CryptoKey` instances, so monitor for unexpected string-like key material outside tests.
+- The updated tests now assert the new readiness shape (`setup_required` / device enrollment) and no longer cover the retired `missing_on_owner` / `missing_on_device` contract.
+
+Verification:
+- `npm test -- --run tests/lib/security/relationship-key.test.ts tests/api/family-access-link.test.ts tests/api/share-token.test.ts`
+- `npm test -- --run tests/api/family-access-link.test.ts tests/api/share-token.test.ts tests/components/sharing.test.tsx tests/pages/vp-dashboard-view.test.tsx tests/pages/zugriff.test.tsx`
+
+Rollback:
+- Revert:
+  - `src/lib/security/relationship-key.ts`
+  - `tests/api/family-access-link.test.ts`
+  - `tests/api/share-token.test.ts`
+  - `docs/ai-changelog.md`

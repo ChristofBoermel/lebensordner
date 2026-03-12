@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const adminBuilder: Record<string, unknown> = {}
 const adminSingle = vi.fn()
+const adminMaybeSingle = vi.fn()
 const adminThen = vi.fn()
 
 for (const method of ['select', 'eq', 'in', 'is', 'order'] as const) {
   adminBuilder[method] = vi.fn(() => adminBuilder)
 }
 adminBuilder.single = adminSingle
+adminBuilder.maybeSingle = adminMaybeSingle
 adminBuilder.then = adminThen
 
 const adminClient = {
@@ -36,6 +38,12 @@ vi.mock('@/lib/security/trusted-person-guard', () => ({
   ),
 }))
 
+const getActiveTrustedPersonShareTokensMock = vi.fn()
+
+vi.mock('@/lib/security/trusted-person-shares', () => ({
+  getActiveTrustedPersonShareTokens: (...args: unknown[]) => getActiveTrustedPersonShareTokensMock(...args),
+}))
+
 vi.mock('@/lib/security/audit-log', () => ({
   logSecurityEvent: vi.fn(),
   EVENT_TRUSTED_PERSON_DOCUMENT_VIEWED: 'trusted_person_document_viewed',
@@ -43,6 +51,24 @@ vi.mock('@/lib/security/audit-log', () => ({
 
 vi.mock('@/app/api/family/view/stream/route', () => ({
   generateStreamToken: vi.fn(() => 'stream-token-123'),
+}))
+
+vi.mock('@/lib/security/trusted-access', () => ({
+  buildTrustedAccessReadiness: vi.fn((params: any) => ({
+    accessLinkStatus: params.hasDeviceEnrollment ? 'ready' : 'setup_required',
+    requiresAccessLinkSetup: !params.hasDeviceEnrollment,
+    deviceEnrollmentStatus: params.hasDeviceEnrollment ? 'enrolled' : 'missing',
+    userMessageKey: params.hasDeviceEnrollment ? 'access_ready' : 'secure_access_setup_required',
+  })),
+  fetchLatestTrustedAccessInvitationMap: vi.fn(() => Promise.resolve(new Map())),
+  readCookieValueFromHeader: vi.fn((cookieHeader: string | null) => cookieHeader),
+  TRUSTED_ACCESS_DEVICE_COOKIE: 'trusted_access_device',
+  validateTrustedAccessDevice: vi.fn((_: any, params: any) =>
+    Promise.resolve({
+      enrolled: Boolean(params.rawCookieValue),
+      revoked: false,
+    })
+  ),
 }))
 
 describe('Family access-link readiness APIs', () => {
@@ -54,10 +80,24 @@ describe('Family access-link readiness APIs', () => {
     adminBuilder.is = vi.fn(() => adminBuilder)
     adminBuilder.order = vi.fn(() => adminBuilder)
     adminBuilder.single = adminSingle
+    adminBuilder.maybeSingle = adminMaybeSingle
     adminBuilder.then = adminThen
+    getActiveTrustedPersonShareTokensMock.mockResolvedValue({
+      tokens: [{ document_id: 'doc-1', wrapped_dek_for_tp: 'wrapped', expires_at: null, permission: 'download', revoked_at: null }],
+      tokenMap: { 'doc-1': 'wrapped' },
+      documentIds: ['doc-1'],
+    })
   })
 
-  it('returns ready access-link readiness from /api/family/view when the client signals the local key is present', async () => {
+  it('returns ready access-link readiness from /api/family/view when the device is enrolled', async () => {
+    adminMaybeSingle.mockResolvedValueOnce({
+      data: {
+        id: 'device-1',
+        device_secret_hash: 'valid-hash',
+        revoked_at: null,
+      },
+      error: null,
+    })
     adminSingle.mockResolvedValueOnce({
       data: {
         full_name: 'Owner User',
@@ -69,18 +109,6 @@ describe('Family access-link readiness APIs', () => {
     })
 
     adminThen
-      .mockImplementationOnce((onFulfilled: any, onRejected?: any) =>
-        Promise.resolve({
-          data: [{ owner_id: 'owner-1', trusted_person_id: 'tp-1' }],
-          error: null,
-        }).then(onFulfilled, onRejected)
-      )
-      .mockImplementationOnce((onFulfilled: any, onRejected?: any) =>
-        Promise.resolve({
-          data: [{ document_id: 'doc-1', wrapped_dek_for_tp: 'wrapped', expires_at: null }],
-          error: null,
-        }).then(onFulfilled, onRejected)
-      )
       .mockImplementationOnce((onFulfilled: any, onRejected?: any) =>
         Promise.resolve({
           data: [{
@@ -107,7 +135,9 @@ describe('Family access-link readiness APIs', () => {
 
     const response = await GET(
       new Request('http://localhost/api/family/view?ownerId=owner-1', {
-        headers: { 'x-lebensordner-access-link-key': 'present' },
+        headers: {
+          cookie: 'trusted_access_device=present',
+        },
       })
     )
     const data = await response.json()
@@ -116,14 +146,17 @@ describe('Family access-link readiness APIs', () => {
     expect(data.accessLinkReadiness).toMatchObject({
       accessLinkStatus: 'ready',
       requiresAccessLinkSetup: false,
-      ownerAccessLinkStatus: 'ready',
-      deviceAccessLinkStatus: 'ready',
+      deviceEnrollmentStatus: 'enrolled',
       userMessageKey: 'access_ready',
     })
     expect(data.encryptedDocumentCount).toBe(1)
   })
 
-  it('returns missing-on-owner readiness from /api/family/download when the owner has not created a relationship key', async () => {
+  it('returns setup-required readiness from /api/family/download when no device enrollment exists', async () => {
+    adminMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: null,
+    })
     adminSingle.mockResolvedValueOnce({
       data: {
         full_name: 'Owner User',
@@ -135,18 +168,6 @@ describe('Family access-link readiness APIs', () => {
     })
 
     adminThen
-      .mockImplementationOnce((onFulfilled: any, onRejected?: any) =>
-        Promise.resolve({
-          data: [],
-          error: null,
-        }).then(onFulfilled, onRejected)
-      )
-      .mockImplementationOnce((onFulfilled: any, onRejected?: any) =>
-        Promise.resolve({
-          data: [{ document_id: 'doc-1', wrapped_dek_for_tp: 'wrapped', expires_at: null, permission: 'download' }],
-          error: null,
-        }).then(onFulfilled, onRejected)
-      )
       .mockImplementationOnce((onFulfilled: any, onRejected?: any) =>
         Promise.resolve({
           data: [{
@@ -172,10 +193,10 @@ describe('Family access-link readiness APIs', () => {
     expect(response.status).toBe(200)
     expect(data.requiresClientDecryption).toBe(true)
     expect(data.accessLinkReadiness).toMatchObject({
-      accessLinkStatus: 'missing_on_owner',
+      accessLinkStatus: 'setup_required',
       requiresAccessLinkSetup: true,
-      ownerAccessLinkStatus: 'missing_on_owner',
-      userMessageKey: 'owner_must_send_access_link',
+      deviceEnrollmentStatus: 'missing',
+      userMessageKey: 'secure_access_setup_required',
     })
   })
 })

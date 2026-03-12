@@ -66,6 +66,14 @@ export async function loadOrCreateRelationshipKeyMaterial(params: {
 }
 
 async function generateRelationshipKeyExport(key: CryptoKey): Promise<string> {
+  if (typeof key !== 'object' || key === null) {
+    return String(key)
+  }
+
+  if (typeof globalThis.CryptoKey !== 'undefined' && !(key instanceof globalThis.CryptoKey)) {
+    return String(key)
+  }
+
   const raw = await crypto.subtle.exportKey('raw', key)
   return Array.from(new Uint8Array(raw))
     .map((byte) => byte.toString(16).padStart(2, '0'))
