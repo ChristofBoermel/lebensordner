@@ -8,6 +8,12 @@ import { emitStructuredError } from '@/lib/errors/structured-logger'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { guardTrustedPersonAccess } from '@/lib/security/trusted-person-guard'
 import { getActiveTrustedPersonShareTokens } from '@/lib/security/trusted-person-shares'
+import {
+  buildAccessLinkReadiness,
+  fetchRelationshipKeyPairSet,
+  hasRelationshipKeyForPair,
+  parseAccessLinkDeviceSignal,
+} from '@/lib/security/access-link-readiness'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -77,6 +83,26 @@ export async function GET(request: Request) {
       )
     }
     const trustedPerson = guard.trustedPerson
+    const deviceSignal = parseAccessLinkDeviceSignal(request)
+
+    let relationshipKeyPairs = new Set<string>()
+    try {
+      relationshipKeyPairs = await fetchRelationshipKeyPairSet(adminClient, [{
+        ownerId,
+        trustedPersonId: trustedPerson.id,
+      }])
+    } catch (relationshipKeyError: any) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `[Family View API] Error fetching relationship key readiness: ${relationshipKeyError?.message ?? String(relationshipKeyError)}`,
+        endpoint: '/api/family/view',
+      })
+    }
+
+    const accessLinkReadiness = buildAccessLinkReadiness(
+      hasRelationshipKeyForPair(relationshipKeyPairs, ownerId, trustedPerson.id),
+      deviceSignal
+    )
 
     // Get owner profile with subscription info
     const { data: ownerProfile, error: ownerError } = await adminClient
@@ -135,6 +161,8 @@ export async function GET(request: Request) {
         accessLevel: trustedPerson.access_level,
         documents: [],
         categories: categoryNames,
+        accessLinkReadiness,
+        encryptedDocumentCount: 0,
       })
     }
 
@@ -183,6 +211,8 @@ export async function GET(request: Request) {
         accessLevel: trustedPerson.access_level,
         documents: [],
         categories: categoryNames,
+        accessLinkReadiness,
+        encryptedDocumentCount: 0,
       })
     }
 
@@ -229,6 +259,8 @@ export async function GET(request: Request) {
       accessLevel: trustedPerson.access_level,
       documents: documentsWithTokens,
       categories: categoryNames,
+      accessLinkReadiness,
+      encryptedDocumentCount: documentsWithTokens.filter((document) => document.is_encrypted).length,
     })
   } catch (error: any) {
     emitStructuredError({

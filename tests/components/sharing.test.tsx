@@ -237,6 +237,7 @@ const makeReceivedShares = () => [
 
 describe('ReceivedSharesList', () => {
   beforeEach(() => {
+    localStorage.clear()
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ shares: makeReceivedShares() }),
@@ -294,8 +295,7 @@ describe('ReceivedSharesList', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const { client, single } = createSupabaseMock()
-    single.mockResolvedValueOnce({ data: null, error: { message: 'not found' } })
+    const { client } = createSupabaseMock()
     mockCreateClient.mockReturnValue(client)
 
     render(<ReceivedSharesList />)
@@ -307,7 +307,32 @@ describe('ReceivedSharesList', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Herunterladen' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Beziehungsschlüssel nicht gefunden')).toBeInTheDocument()
+      expect(screen.getByText('Zugriffslink nicht auf diesem Gerät geöffnet. Bitten Sie den Besitzer, den Link erneut zu senden.')).toBeInTheDocument()
+    })
+  })
+
+  it('keeps actions available when the backend reports missing_on_device but the local key exists', async () => {
+    localStorage.setItem('rk_owner-2', 'relationship-key-present')
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        shares: makeReceivedShares().map((share) => ({
+          ...share,
+          access_link_readiness: {
+            accessLinkStatus: 'missing_on_device',
+            requiresAccessLinkSetup: true,
+            userMessageKey: 'open_access_link_on_device',
+          },
+        })),
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<ReceivedSharesList />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Herunterladen' })).toBeInTheDocument()
     })
   })
 })

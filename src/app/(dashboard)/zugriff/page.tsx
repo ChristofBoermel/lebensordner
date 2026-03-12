@@ -47,7 +47,9 @@ import {
   FileText,
   Key,
   Share2,
+  AlertCircle,
 } from 'lucide-react'
+import { useThemeSafe } from '@/components/theme/theme-provider'
 import type { TrustedPerson, DocumentMetadata } from '@/types/database'
 import { SUBSCRIPTION_TIERS, canPerformAction, allowsFamilyDownloads, type TierConfig } from '@/lib/subscription-tiers'
 import Link from 'next/link'
@@ -116,6 +118,8 @@ export default function ZugriffPage() {
   const [isGeneratingRk, setIsGeneratingRk] = useState<string | null>(null)
   const [rkDialogOpen, setRkDialogOpen] = useState(false)
   const [rkLinkCopied, setRkLinkCopied] = useState(false)
+  const [rkPostCopyStep, setRkPostCopyStep] = useState(false)
+  const { seniorMode } = useThemeSafe()
 
   const [form, setForm] = useState({
     name: '',
@@ -1265,25 +1269,40 @@ export default function ZugriffPage() {
                               </span>
                             )}
                             {getInviteRowState(person) === 'connected' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleGenerateRelationshipKey(person)}
-                                disabled={isGeneratingRk === person.id}
-                                className="text-sage-600 hover:text-sage-700"
-                              >
-                                {isGeneratingRk === person.id ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                    Zugriffslink
-                                  </>
-                                ) : (
-                                  <>
-                                    <Key className="w-4 h-4 mr-1" />
-                                    Zugriffslink
-                                  </>
-                                )}
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleGenerateRelationshipKey(person)}
+                                  disabled={isGeneratingRk === person.id}
+                                  className="text-sage-600 hover:text-sage-700"
+                                >
+                                  {isGeneratingRk === person.id ? (
+                                    <>
+                                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                      Zugriffslink
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Key className="w-4 h-4 mr-1" />
+                                      Zugriffslink
+                                    </>
+                                  )}
+                                </Button>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="cursor-help">
+                                      <Info className="w-4 h-4 text-warmgray-400" aria-hidden="true" />
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-xs text-xs">
+                                    <p className="font-medium mb-1">Zwei separate Schritte:</p>
+                                    <p>1. Dokumente freigeben (bereits erledigt)</p>
+                                    <p>2. Zugriffslink manuell senden — die App sendet ihn nicht automatisch.</p>
+                                    <p className="mt-1 text-warmgray-400">Die Person muss ihn einmal pro Gerät öffnen.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
                             )}
                             <Button
                               variant="ghost"
@@ -2000,7 +2019,7 @@ export default function ZugriffPage() {
 
       {rkDialogOpen && rkShareUrl && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border border-warmgray-100">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border border-warmgray-100 max-h-[90vh] overflow-y-auto">
             <div className="p-6 space-y-4">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-xl bg-sage-100 flex items-center justify-center flex-shrink-0">
@@ -2009,45 +2028,102 @@ export default function ZugriffPage() {
                 <div>
                   <h3 className="text-lg font-semibold text-warmgray-900">Zugriffslink erstellt</h3>
                   <p className="text-sm text-warmgray-600">
-                    Teilen Sie diesen Link sicher mit der Vertrauensperson.
+                    Der Link wurde erstellt und ist bereit zum Versenden.
                   </p>
                 </div>
               </div>
 
-              <div className="bg-warmgray-50 border border-warmgray-100 rounded-lg p-3 font-mono text-xs sm:text-sm text-warmgray-700 break-all">
+              {/* Manual delivery explainer — always visible */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                  <div className="text-sm text-blue-800 space-y-1">
+                    <p className="font-semibold">Dieser Link wird nicht automatisch verschickt.</p>
+                    <p>Sie müssen ihn selbst per Messenger, E-Mail oder SMS weiterleiten.</p>
+                    {seniorMode && (
+                      <ol className="mt-2 space-y-1 list-decimal list-inside text-blue-700">
+                        <li>Kopieren Sie den Link unten mit dem Knopf.</li>
+                        <li>Öffnen Sie WhatsApp, E-Mail oder SMS.</li>
+                        <li>Fügen Sie den Link ein und senden Sie ihn.</li>
+                        <li>Die Person muss den Link einmal auf ihrem Gerät öffnen.</li>
+                        <li>Danach kann sie Ihre freigegebenen Dokumente sehen.</li>
+                      </ol>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-warmgray-50 border border-warmgray-100 rounded-lg p-3 font-mono text-xs sm:text-sm text-warmgray-700 break-all select-all">
                 {rkShareUrl}
               </div>
 
+              {/* Post-copy send-now CTA */}
+              {rkPostCopyStep && (
+                <div className="bg-green-50 border border-green-300 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                    <div className="text-sm text-green-800 space-y-1">
+                      <p className="font-semibold">Link kopiert!</p>
+                      <p className={seniorMode ? 'text-base font-medium' : ''}>
+                        Jetzt an Ihre Vertrauensperson senden — per WhatsApp, E-Mail oder SMS.
+                      </p>
+                      {seniorMode && (
+                        <p className="text-green-700 mt-1">
+                          Die Person muss den Link nur einmal öffnen. Danach funktioniert der Zugriff auf diesem Gerät dauerhaft.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-xs sm:text-sm">
-                Bewahren Sie diesen Link vertraulich auf. Jeder mit dem Link kann auf Ihre freigegebenen Dokumente zugreifen.
+                <span className="font-medium">Vertraulich:</span> Jeder mit diesem Link kann Ihre freigegebenen Dokumente lesen.
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(rkShareUrl)
-                    setRkLinkCopied(true)
-                    setTimeout(() => setRkLinkCopied(false), 2000)
-                  }}
-                  className="flex-1 justify-center"
-                >
-                  {rkLinkCopied ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Kopiert!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4 mr-2" />
-                      Link kopieren
-                    </>
-                  )}
-                </Button>
+                {!rkPostCopyStep ? (
+                  <Button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(rkShareUrl)
+                      setRkLinkCopied(true)
+                      setRkPostCopyStep(true)
+                    }}
+                    className="flex-1 justify-center"
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Link kopieren
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(rkShareUrl)
+                      setRkLinkCopied(true)
+                      setTimeout(() => setRkLinkCopied(false), 2000)
+                    }}
+                    variant="outline"
+                    className="flex-1 justify-center"
+                  >
+                    {rkLinkCopied ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />
+                        Nochmals kopiert
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 mr-2" />
+                        Nochmals kopieren
+                      </>
+                    )}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   onClick={() => {
                     setRkDialogOpen(false)
                     setRkShareUrl(null)
+                    setRkLinkCopied(false)
+                    setRkPostCopyStep(false)
                   }}
                   className="flex-1 justify-center"
                 >

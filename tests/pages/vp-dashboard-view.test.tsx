@@ -6,6 +6,10 @@ vi.mock('next/navigation', () => ({
   useParams: () => ({ ownerId: 'owner-123' }),
 }))
 
+vi.mock('@/components/theme/theme-provider', () => ({
+  useThemeSafe: () => ({ seniorMode: false }),
+}))
+
 const createClientMock = vi.fn()
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -26,6 +30,8 @@ function setupFetch({
   ownerName = 'Maria Musterfrau',
   accessLevel = 'immediate',
   shareTokensShouldFail = false,
+  accessLinkReadiness,
+  encryptedDocumentCount,
   downloadResponse,
   bytesResponse,
 }: {
@@ -33,12 +39,21 @@ function setupFetch({
   ownerName?: string
   accessLevel?: string | null
   shareTokensShouldFail?: boolean
+  accessLinkReadiness?: Record<string, unknown> | null
+  encryptedDocumentCount?: number
   downloadResponse?: () => Promise<Response>
   bytesResponse?: () => Promise<Response>
 } = {}) {
   global.fetch = vi.fn((url: string) => {
     if (url.includes('/api/family/view?ownerId=')) {
-      return createJsonResponse({ ownerName, accessLevel, documents, categories: {} })
+      return createJsonResponse({
+        ownerName,
+        accessLevel,
+        documents,
+        categories: {},
+        accessLinkReadiness: accessLinkReadiness ?? null,
+        encryptedDocumentCount: encryptedDocumentCount ?? documents.filter((doc) => doc.is_encrypted).length,
+      })
     }
 
     if (url.includes('/api/documents/share-token/received')) {
@@ -260,5 +275,46 @@ describe('VpDashboardViewPage access level UX', () => {
     )
     expect(appendSpy).toHaveBeenCalled()
     expect(removeSpy).toHaveBeenCalled()
+  })
+
+  it('still opens unencrypted documents when encrypted access-link setup is missing', async () => {
+    setupFetch({
+      accessLevel: 'immediate',
+      documents: [{ id: 'doc-1', title: 'Visible Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf', is_encrypted: false }],
+      accessLinkReadiness: {
+        accessLinkStatus: 'missing_on_owner',
+        requiresAccessLinkSetup: true,
+        userMessageKey: 'owner_must_send_access_link',
+      },
+      encryptedDocumentCount: 0,
+    })
+
+    render(<VpDashboardViewPage />)
+    const openBtn = await screen.findByRole('button', { name: /öffnen/i })
+
+    fireEvent.click(openBtn)
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/family/view/bytes?docId=doc-1'))
+    )
+  })
+
+  it('keeps bulk download available when all shared documents are unencrypted', async () => {
+    setupFetch({
+      accessLevel: 'immediate',
+      documents: [{ id: 'doc-1', title: 'Visible Doc', category: 'finanzen', file_name: 'test.pdf', file_type: 'application/pdf', is_encrypted: false }],
+      accessLinkReadiness: {
+        accessLinkStatus: 'missing_on_owner',
+        requiresAccessLinkSetup: true,
+        userMessageKey: 'owner_must_send_access_link',
+      },
+      encryptedDocumentCount: 0,
+    })
+
+    render(<VpDashboardViewPage />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /alle herunterladen/i })).toBeInTheDocument()
+    )
   })
 })

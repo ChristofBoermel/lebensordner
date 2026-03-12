@@ -2600,3 +2600,34 @@ Rollback:
   - `tests/components/sharing.test.tsx`
   - `tests/pages/zugriff.test.tsx`
   - `docs/ai-changelog.md`
+
+## 2026-03-12 01:15 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Added a shared backend access-link readiness helper and exposed additive readiness metadata on trusted-person share, family view, family download, family members, and owner share-token APIs.
+- Added owner-side manual-delivery guidance metadata so future frontend work can clearly distinguish “documents shared” from “Zugriffslink still needs to be copied and sent manually”.
+- Wrote backend and frontend handoff docs for the trusted access-link hardening follow-up.
+
+Risk / Regression Watch:
+- Backend can now prove owner relationship-key existence, but device/browser readiness still depends on the optional `x-lebensordner-access-link-key` header from the future frontend; until frontend adopts it, owner-specific recipient APIs will default effective readiness to `missing_on_device` when a relationship key exists.
+- Owner-side manual-delivery status is intentionally conservative because the app still does not track whether the owner actually sent the copied link out-of-band.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/api/share-token.test.ts tests/api/family-access-link.test.ts`
+
+Rollback:
+- Revert:
+  - `src/lib/security/access-link-readiness.ts`
+  - `src/app/api/documents/share-token/received/route.ts`
+  - `src/app/api/documents/share-token/route.ts`
+  - `src/app/api/family/view/route.ts`
+  - `src/app/api/family/download/route.ts`
+  - `src/app/api/family/members/route.ts`
+  - `tests/api/share-token.test.ts`
+  - `tests/api/family-access-link.test.ts`
+  - `docs/temp-backend-trusted-access-hardening.md`
+  - `docs/temp-frontend-trusted-access-hardening.md`
+  - `docs/ai-changelog.md`

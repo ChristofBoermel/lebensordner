@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { useThemeSafe } from "@/components/theme/theme-provider";
 
 interface SharedDocument {
   id: string;
@@ -14,10 +15,21 @@ interface SharedDocument {
   file_iv?: string | null;
 }
 
+interface AccessLinkReadiness {
+  accessLinkStatus: "ready" | "missing_on_device" | "missing_on_owner";
+  requiresAccessLinkSetup: boolean;
+  userMessageKey: "access_ready" | "open_access_link_on_device" | "owner_must_send_access_link";
+  ownerAccessLinkStatus: "ready" | "missing_on_owner";
+  deviceAccessLinkStatus: "ready" | "missing_on_device" | "unknown";
+  relationshipKeyStoredByOwner: boolean;
+}
+
 interface FamilyViewResponse {
   ownerName?: string;
   accessLevel?: string | null;
   documents?: SharedDocument[];
+  accessLinkReadiness?: AccessLinkReadiness;
+  encryptedDocumentCount?: number;
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string) {
@@ -31,9 +43,61 @@ function triggerBrowserDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function AccessLinkSetupBanner({
+  readiness,
+  seniorMode,
+}: {
+  readiness: AccessLinkReadiness;
+  seniorMode: boolean;
+}) {
+  if (readiness.accessLinkStatus === "missing_on_owner") {
+    return (
+      <div className="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-lg text-amber-900">
+        <p className="font-semibold mb-1">Zugriffslink noch nicht erstellt</p>
+        <p className="text-sm">
+          Der Besitzer hat den Zugriffslink noch nicht erstellt. Bitten Sie
+          ihn, in seiner Familien-Übersicht einen Zugriffslink zu erzeugen und
+          Ihnen zu senden.
+        </p>
+        {seniorMode && (
+          <ol className="mt-3 text-sm space-y-1 list-decimal list-inside text-amber-800">
+            <li>Schreiben Sie dem Besitzer eine Nachricht.</li>
+            <li>Bitten Sie ihn, in seiner Lebensordner-App einen Zugriffslink zu erstellen.</li>
+            <li>Er muss Ihnen diesen Link manuell schicken (per WhatsApp, SMS oder E-Mail).</li>
+            <li>Öffnen Sie den Link auf diesem Gerät — danach funktioniert der Zugriff.</li>
+          </ol>
+        )}
+      </div>
+    );
+  }
+
+  if (readiness.accessLinkStatus === "missing_on_device") {
+    return (
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-300 rounded-lg text-blue-900">
+        <p className="font-semibold mb-1">Zugriffslink auf diesem Gerät fehlt</p>
+        <p className="text-sm">
+          Sie müssen den Zugriffslink des Besitzers einmal auf diesem Browser
+          öffnen. Bitten Sie den Besitzer, Ihnen den Link erneut zu senden.
+        </p>
+        {seniorMode && (
+          <ol className="mt-3 text-sm space-y-1 list-decimal list-inside text-blue-800">
+            <li>Bitten Sie den Besitzer, Ihnen den Zugriffslink erneut zu senden.</li>
+            <li>Öffnen Sie den Link auf genau diesem Gerät und diesem Browser.</li>
+            <li>Der Zugriff wird dann auf diesem Gerät dauerhaft gespeichert.</li>
+            <li>Bei jedem neuen Gerät oder Browser müssen Sie diesen Schritt wiederholen.</li>
+          </ol>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export default function VpDashboardViewPage() {
   const params = useParams();
   const ownerId = params.ownerId as string;
+  const { seniorMode } = useThemeSafe();
 
   const [documents, setDocuments] = useState<SharedDocument[]>([]);
   const [shareTokens, setShareTokens] = useState<Record<string, string>>({});
@@ -44,10 +108,15 @@ export default function VpDashboardViewPage() {
   const [viewError, setViewError] = useState<string | null>(null);
   const [ownerName, setOwnerName] = useState<string>("Lebensordner");
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(true);
+  const [accessLinkReadiness, setAccessLinkReadiness] =
+    useState<AccessLinkReadiness | null>(null);
+  const [encryptedDocumentCount, setEncryptedDocumentCount] = useState(0);
 
-  const canDownloadAll = accessLevel === 'immediate' && documents.length > 0;
-  const canOpenDocuments = accessLevel === 'immediate' || accessLevel === 'emergency';
+  const canDownloadAll = accessLevel === "immediate" && documents.length > 0;
+  const canOpenDocuments =
+    accessLevel === "immediate" || accessLevel === "emergency";
 
+  // allowed: I/O - read relationship key from localStorage
   useEffect(() => {
     const stored = localStorage.getItem(`rk_${ownerId}`);
     setRk(stored);
@@ -55,15 +124,24 @@ export default function VpDashboardViewPage() {
   }, [ownerId]);
 
   useEffect(() => {
-    if (!ownerId) return;
+    if (!ownerId || hasKey === null) return;
     // allowed: I/O - hydrate trusted-person dashboard from share-scoped APIs
     async function hydrateSharedDocuments() {
       setIsLoadingDocuments(true);
       setViewError(null);
 
       try {
-        const documentsRes = await fetch(`/api/family/view?ownerId=${encodeURIComponent(ownerId)}`);
-        const documentsData: FamilyViewResponse & { error?: string } = await documentsRes.json();
+        const deviceSignal = hasKey ? "present" : "missing";
+        const documentsRes = await fetch(
+          `/api/family/view?ownerId=${encodeURIComponent(ownerId)}`,
+          {
+            headers: {
+              "x-lebensordner-access-link-key": deviceSignal,
+            },
+          },
+        );
+        const documentsData: FamilyViewResponse & { error?: string } =
+          await documentsRes.json();
         if (!documentsRes.ok) {
           setDocuments([]);
           setOwnerName("Lebensordner");
@@ -77,6 +155,10 @@ export default function VpDashboardViewPage() {
         setDocuments(nextDocuments);
         setOwnerName(documentsData.ownerName || "Lebensordner");
         setAccessLevel(documentsData.accessLevel ?? null);
+        setEncryptedDocumentCount(documentsData.encryptedDocumentCount ?? 0);
+        if (documentsData.accessLinkReadiness) {
+          setAccessLinkReadiness(documentsData.accessLinkReadiness);
+        }
 
         if (!nextDocuments.some((doc) => doc.is_encrypted)) {
           setShareTokens({});
@@ -84,7 +166,7 @@ export default function VpDashboardViewPage() {
         }
 
         try {
-          const shareTokensRes = await fetch('/api/documents/share-token/received');
+          const shareTokensRes = await fetch("/api/documents/share-token/received");
           const shareTokensData = shareTokensRes.ok
             ? await shareTokensRes.json()
             : { shares: [] };
@@ -103,6 +185,7 @@ export default function VpDashboardViewPage() {
         setDocuments([]);
         setOwnerName("Lebensordner");
         setAccessLevel(null);
+        setEncryptedDocumentCount(0);
         setShareTokens({});
         setViewError("Fehler beim Laden der Dokumente.");
       } finally {
@@ -111,10 +194,28 @@ export default function VpDashboardViewPage() {
     }
 
     hydrateSharedDocuments();
-  }, [ownerId]);
+  }, [ownerId, hasKey]);
 
   const handleViewDoc = async (doc: SharedDocument) => {
     setViewError(null);
+
+    if (
+      doc.is_encrypted &&
+      accessLinkReadiness &&
+      accessLinkReadiness.requiresAccessLinkSetup
+    ) {
+      if (accessLinkReadiness.accessLinkStatus === "missing_on_owner") {
+        setViewError(
+          "Der Besitzer muss zuerst einen Zugriffslink erstellen und Ihnen senden.",
+        );
+      } else {
+        setViewError(
+          "Bitte öffnen Sie den Zugriffslink des Besitzers auf diesem Gerät, um Dokumente ansehen zu können.",
+        );
+      }
+      return;
+    }
+
     if (!doc.is_encrypted) {
       const bytesRes = await fetch(
         `/api/family/view/bytes?docId=${doc.id}&ownerId=${ownerId}`,
@@ -138,7 +239,7 @@ export default function VpDashboardViewPage() {
     }
     if (!rk) {
       setViewError(
-        "Kein Zugriffsschlüssel. Bitten Sie den Besitzer, Ihnen den Link erneut zu senden.",
+        "Zugriffslink nicht auf diesem Gerät geöffnet. Bitten Sie den Besitzer, Ihnen den Link erneut zu senden.",
       );
       return;
     }
@@ -155,7 +256,9 @@ export default function VpDashboardViewPage() {
       return;
     }
     const dek = await unwrapKey(wrappedDek, rkKey, "AES-GCM");
-    const bytesRes = await fetch(`/api/family/view/bytes?docId=${doc.id}&ownerId=${ownerId}`);
+    const bytesRes = await fetch(
+      `/api/family/view/bytes?docId=${doc.id}&ownerId=${ownerId}`,
+    );
     if (!bytesRes.ok) {
       setViewError("Fehler beim Laden der Datei.");
       return;
@@ -170,6 +273,24 @@ export default function VpDashboardViewPage() {
 
   const handleDownloadAll = async () => {
     setViewError(null);
+
+    if (
+      encryptedDocumentCount > 0 &&
+      accessLinkReadiness &&
+      accessLinkReadiness.requiresAccessLinkSetup
+    ) {
+      if (accessLinkReadiness.accessLinkStatus === "missing_on_owner") {
+        setViewError(
+          "Der Besitzer muss zuerst einen Zugriffslink erstellen und Ihnen senden.",
+        );
+      } else {
+        setViewError(
+          "Bitte öffnen Sie den Zugriffslink des Besitzers auf diesem Gerät, um Dokumente herunterladen zu können.",
+        );
+      }
+      return;
+    }
+
     setIsDownloading(true);
     try {
       const res = await fetch(`/api/family/download?ownerId=${ownerId}`);
@@ -200,7 +321,9 @@ export default function VpDashboardViewPage() {
 
       const zip = new JSZip();
       for (const doc of data.documents || []) {
-        const bytesRes = await fetch(`/api/family/view/bytes?docId=${doc.id}&ownerId=${ownerId}`);
+        const bytesRes = await fetch(
+          `/api/family/view/bytes?docId=${doc.id}&ownerId=${ownerId}`,
+        );
         if (!bytesRes.ok) {
           setViewError("Fehler beim Laden der Datei.");
           return;
@@ -233,41 +356,64 @@ export default function VpDashboardViewPage() {
 
   if (hasKey === null) return <div className="p-8">Laden...</div>;
 
+  const encryptionSetupRelevant = encryptedDocumentCount > 0;
+  const setupMissing =
+    encryptionSetupRelevant && accessLinkReadiness && accessLinkReadiness.requiresAccessLinkSetup;
+
   return (
     <div className="p-8 max-w-4xl mx-auto">
-      {!hasKey && (
+      {/* Access link readiness banner */}
+      {encryptionSetupRelevant && accessLinkReadiness && (
+        <AccessLinkSetupBanner
+          readiness={accessLinkReadiness}
+          seniorMode={seniorMode}
+        />
+      )}
+
+      {/* Legacy fallback: no readiness info yet but key missing */}
+      {!accessLinkReadiness && encryptionSetupRelevant && !hasKey && (
         <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
-          Kein Zugriffsschlüssel gefunden. Bitten Sie den Besitzer, Ihnen den
-          Zugriffslink erneut zu senden.
+          <p className="font-semibold mb-1">Zugriffslink fehlt auf diesem Gerät</p>
+          <p className="text-sm">
+            Bitten Sie den Besitzer, Ihnen den Zugriffslink erneut zu senden,
+            und öffnen Sie ihn auf diesem Gerät.
+          </p>
         </div>
       )}
+
       <h1 className="text-2xl font-bold mb-2">Dokumente</h1>
       <p className="text-sm text-gray-500 mb-6">Freigegeben von {ownerName}</p>
+
       {viewError && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           {viewError}
         </div>
       )}
-      <div className="mb-4">
-        {canDownloadAll ? (
-          <button
-            onClick={handleDownloadAll}
-            disabled={isDownloading}
-            data-testid="download-all-documents"
-            className="px-4 py-2 bg-sage-600 text-white rounded-lg hover:bg-sage-700 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isDownloading ? "Wird erstellt..." : "Alle herunterladen"}
-          </button>
-        ) : documents.length > 0 && accessLevel === 'emergency' ? (
-          <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm">
-            Ihr Zugriff ist auf Notfall-Ansicht beschränkt. Downloads sind nicht erlaubt.
-          </div>
-        ) : documents.length > 0 && accessLevel === 'after_confirmation' ? (
-          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-            Downloads erfordern eine Bestätigung durch den Besitzer.
-          </div>
-        ) : null}
-      </div>
+
+      {/* Download all — only show when setup is ready */}
+      {!setupMissing && (
+        <div className="mb-4">
+          {canDownloadAll ? (
+            <button
+              onClick={handleDownloadAll}
+              disabled={isDownloading}
+              data-testid="download-all-documents"
+              className="px-4 py-2 bg-sage-600 text-white rounded-lg hover:bg-sage-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isDownloading ? "Wird erstellt..." : "Alle herunterladen"}
+            </button>
+          ) : documents.length > 0 && accessLevel === "emergency" ? (
+            <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm">
+              Ihr Zugriff ist auf Notfall-Ansicht beschränkt. Downloads sind nicht erlaubt.
+            </div>
+          ) : documents.length > 0 && accessLevel === "after_confirmation" ? (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              Downloads erfordern eine Bestätigung durch den Besitzer.
+            </div>
+          ) : null}
+        </div>
+      )}
+
       {isLoadingDocuments ? (
         <div className="rounded-lg border border-slate-200 bg-white p-6 text-slate-600">
           Freigegebene Dokumente werden geladen...
@@ -280,34 +426,42 @@ export default function VpDashboardViewPage() {
           Es wurden noch keine Dokumente für Sie freigegeben.
         </div>
       ) : (
-      <div className="space-y-3">
-        {documents.map((doc) => (
-          <div
-            key={doc.id}
-            data-testid={`shared-document-${doc.id}`}
-            className="flex items-center justify-between p-4 border rounded-lg"
-          >
-            <div>
-              <p className="font-medium">
-                {doc.is_encrypted ? "[Verschlüsselt]" : doc.title}
-              </p>
-              <p className="text-sm text-gray-500">{doc.category}</p>
+        <div className="space-y-3">
+          {documents.map((doc) => (
+            <div
+              key={doc.id}
+              data-testid={`shared-document-${doc.id}`}
+              className="flex items-center justify-between p-4 border rounded-lg"
+            >
+              <div>
+                <p className="font-medium">
+                  {doc.is_encrypted ? "[Verschlüsselt]" : doc.title}
+                </p>
+                <p className="text-sm text-gray-500">{doc.category}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                {setupMissing && doc.is_encrypted ? (
+                  <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                    {accessLinkReadiness?.accessLinkStatus === "missing_on_owner"
+                      ? "Zugriffslink fehlt beim Besitzer"
+                      : "Zugriffslink auf diesem Gerät öffnen"}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleViewDoc(doc)}
+                    disabled={!canOpenDocuments}
+                    className="px-4 py-2 bg-sage-600 text-white rounded-lg hover:bg-sage-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Öffnen
+                  </button>
+                )}
+                {!setupMissing && !canOpenDocuments && accessLevel === "after_confirmation" && (
+                  <span className="text-xs text-amber-700">Bestätigung erforderlich</span>
+                )}
+              </div>
             </div>
-            <div className="flex flex-col items-end gap-1">
-              <button
-                onClick={() => handleViewDoc(doc)}
-                disabled={!canOpenDocuments}
-                className="px-4 py-2 bg-sage-600 text-white rounded-lg hover:bg-sage-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Öffnen
-              </button>
-              {!canOpenDocuments && accessLevel === 'after_confirmation' && (
-                <span className="text-xs text-amber-700">Bestätigung erforderlich</span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
       )}
     </div>
   );

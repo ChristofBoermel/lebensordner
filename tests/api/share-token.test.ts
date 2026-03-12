@@ -340,6 +340,12 @@ describe('Share Token API', () => {
             error: null,
           }).then(onFulfilled)
         )
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({
+            data: [{ owner_id: 'owner-id', trusted_person_id: 'tp-1' }],
+            error: null,
+          }).then(onFulfilled)
+        )
 
       vi.resetModules()
       const { GET } = await import('@/app/api/documents/share-token/route')
@@ -357,6 +363,11 @@ describe('Share Token API', () => {
         revoked_at: null,
         documents: expect.objectContaining({ title: 'My Doc' }),
         trusted_persons: expect.objectContaining({ name: 'Max Mustermann' }),
+        access_link_setup: expect.objectContaining({
+          ownerAccessLinkStatus: 'ready',
+          requiresManualAccessLinkDelivery: true,
+          userMessageKey: 'copy_and_send_access_link',
+        }),
       })
     })
 
@@ -572,6 +583,12 @@ describe('Share Token API', () => {
             error: null,
           }).then(onFulfilled)
         )
+        .mockImplementationOnce((onFulfilled: any) =>
+          Promise.resolve({
+            data: [{ owner_id: 'owner-id', trusted_person_id: 'tp-1' }],
+            error: null,
+          }).then(onFulfilled)
+        )
 
       vi.resetModules()
       const { GET } = await import('@/app/api/documents/share-token/received/route')
@@ -585,6 +602,12 @@ describe('Share Token API', () => {
         id: 'share-1',
         documents: expect.objectContaining({ title: 'My Doc' }),
         profiles: expect.objectContaining({ full_name: 'Owner User' }),
+        access_link_readiness: expect.objectContaining({
+          accessLinkStatus: 'missing_on_device',
+          ownerAccessLinkStatus: 'ready',
+          requiresAccessLinkSetup: true,
+          userMessageKey: 'open_access_link_on_device',
+        }),
       })
     })
 
@@ -778,6 +801,10 @@ describe('Share Token API', () => {
         trusted_person_id: 'tp-1',
         documents: expect.objectContaining({ id: 'doc-1', title: 'Unbekanntes Dokument' }),
         profiles: { full_name: null, first_name: null, last_name: null },
+        access_link_readiness: expect.objectContaining({
+          accessLinkStatus: 'missing_on_owner',
+          userMessageKey: 'owner_must_send_access_link',
+        }),
       })
     })
   })

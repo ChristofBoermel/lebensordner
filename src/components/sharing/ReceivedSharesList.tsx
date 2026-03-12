@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2, AlertTriangle } from 'lucide-react'
+import { Loader2, AlertTriangle, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,9 +10,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { useVault } from '@/lib/vault/VaultContext'
-import { unwrapKey, decryptFile } from '@/lib/security/document-e2ee'
-import { createClient } from '@/lib/supabase/client'
+import { importRawHexKey, unwrapKey, decryptFile } from '@/lib/security/document-e2ee'
+
+interface AccessLinkReadiness {
+  accessLinkStatus: 'ready' | 'missing_on_device' | 'missing_on_owner'
+  requiresAccessLinkSetup: boolean
+  userMessageKey: 'access_ready' | 'open_access_link_on_device' | 'owner_must_send_access_link'
+}
 
 interface ReceivedShare {
   id: string
@@ -35,10 +39,10 @@ interface ReceivedShare {
     first_name: string | null
     last_name: string | null
   }
+  access_link_readiness?: AccessLinkReadiness
 }
 
 export function ReceivedSharesList() {
-  const { isUnlocked, masterKey, requestUnlock } = useVault()
   const [shares, setShares] = useState<ReceivedShare[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -49,8 +53,6 @@ export function ReceivedSharesList() {
   const [isDecrypting, setIsDecrypting] = useState(false)
   const [decryptError, setDecryptError] = useState<string | null>(null)
   const [errorShareId, setErrorShareId] = useState<string | null>(null)
-
-  const supabase = createClient()
 
   async function fetchShares() {
     setIsLoading(true)
@@ -84,27 +86,40 @@ export function ReceivedSharesList() {
     return Math.round((new Date(expiresAt).getTime() - Date.now()) / 3600000)
   }
 
-  const decryptShare = async (share: ReceivedShare): Promise<{ url: string; type: string; fileName: string } | null> => {
-    if (!isUnlocked || !masterKey) {
-      requestUnlock()
-      return null
+  function hasLocalAccessLink(ownerId: string): boolean {
+    if (typeof window === 'undefined') {
+      return false
     }
 
+    return Boolean(window.localStorage.getItem(`rk_${ownerId}`))
+  }
+
+  function resolveSetupMissing(share: ReceivedShare): boolean {
+    const readiness = share.access_link_readiness
+    if (!readiness?.requiresAccessLinkSetup) {
+      return false
+    }
+
+    if (readiness.accessLinkStatus === 'missing_on_owner') {
+      return true
+    }
+
+    return !hasLocalAccessLink(share.owner_id)
+  }
+
+  const decryptShare = async (share: ReceivedShare): Promise<{ url: string; type: string; fileName: string } | null> => {
     setIsDecrypting(true)
     setDecryptError(null)
     setErrorShareId(share.id)
 
     try {
-      const { data: rkData, error: rkError } = await supabase
-        .from('document_relationship_keys')
-        .select('wrapped_rk')
-        .eq('owner_id', share.owner_id)
-        .eq('trusted_person_id', share.trusted_person_id)
-        .single()
+      // Use localStorage relationship key — no browser-direct DB query
+      const rkHex = localStorage.getItem(`rk_${share.owner_id}`)
+      if (!rkHex) {
+        throw new Error('Zugriffslink nicht auf diesem Gerät geöffnet. Bitten Sie den Besitzer, den Link erneut zu senden.')
+      }
 
-      if (rkError || !rkData?.wrapped_rk) throw new Error('Beziehungsschlüssel nicht gefunden')
-
-      const rk = await unwrapKey(rkData.wrapped_rk, masterKey, 'AES-KW')
+      const rk = await importRawHexKey(rkHex, ['wrapKey', 'unwrapKey'])
       const dek = await unwrapKey(share.wrapped_dek_for_tp, rk, 'AES-GCM')
 
       const res = await fetch(`/api/documents/share-token/${share.id}/file`)
@@ -217,6 +232,8 @@ export function ReceivedSharesList() {
         {shares.map((share) => {
           const hoursLeft = share.expires_at ? getHoursLeft(share.expires_at) : null
           const expiringSoon = hoursLeft !== null && hoursLeft <= 48 && hoursLeft > 0
+          const readiness = share.access_link_readiness
+          const setupMissing = resolveSetupMissing(share)
 
           return (
             <div
@@ -248,33 +265,47 @@ export function ReceivedSharesList() {
                     </span>
                   )}
                 </div>
+
+                {/* Access link setup guidance */}
+                {setupMissing && readiness && (
+                  <div className="mt-2 flex items-start gap-1.5 text-xs rounded-md px-2 py-1.5 bg-amber-50 border border-amber-200 text-amber-800">
+                    <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                    {readiness.accessLinkStatus === 'missing_on_owner'
+                      ? 'Der Besitzer hat den Zugriffslink noch nicht erstellt. Bitte ihn, ihn zu erstellen und zu senden.'
+                      : 'Zugriffslink auf diesem Gerät noch nicht geöffnet. Bitte den Besitzer, den Link erneut zu senden.'}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
                 {decryptError && errorShareId === share.id && (
-                  <p className="text-xs text-red-600">{decryptError}</p>
+                  <p className="text-xs text-red-600 max-w-[200px]">{decryptError}</p>
                 )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleView(share)}
-                  disabled={isDecrypting && viewingShareId === share.id}
-                >
-                  {isDecrypting && viewingShareId === share.id ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    'Ansehen'
-                  )}
-                </Button>
-                {share.permission === 'download' && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDownload(share)}
-                    disabled={isDecrypting}
-                  >
-                    Herunterladen
-                  </Button>
+                {!setupMissing && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleView(share)}
+                      disabled={isDecrypting && viewingShareId === share.id}
+                    >
+                      {isDecrypting && viewingShareId === share.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        'Ansehen'
+                      )}
+                    </Button>
+                    {share.permission === 'download' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDownload(share)}
+                        disabled={isDecrypting}
+                      >
+                        Herunterladen
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             </div>

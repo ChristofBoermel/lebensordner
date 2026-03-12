@@ -5,6 +5,11 @@ import {
   isLegacyShareTokenSchemaError,
   withLegacyShareTokenDefaults,
 } from '@/lib/security/share-token-compat'
+import {
+  buildManualAccessLinkGuidance,
+  fetchRelationshipKeyPairSet,
+  hasRelationshipKeyForPair,
+} from '@/lib/security/access-link-readiness'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
 type ShareTokenError = {
@@ -41,6 +46,7 @@ type OwnerTrustedPersonRow = {
 type OwnerShareTokenRow = OwnerShareTokenBaseRow & {
   documents: OwnerShareDocumentRow | null
   trusted_persons: OwnerTrustedPersonRow | null
+  access_link_setup: ReturnType<typeof buildManualAccessLinkGuidance>
 }
 
 async function fetchOwnerShareRows(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, ownerId: string) {
@@ -275,10 +281,36 @@ export async function GET(request: Request) {
     }
   }
 
+  let relationshipKeyPairs = new Set<string>()
+  try {
+    relationshipKeyPairs = await fetchRelationshipKeyPairSet(
+      supabase,
+      activeTokens.map((token) => ({
+        ownerId,
+        trustedPersonId: token.trusted_person_id,
+      }))
+    )
+  } catch (relationshipKeyError: any) {
+    emitStructuredWarn({
+      event_type: 'api',
+      event_message: '[Share Token API] Unable to hydrate owner access-link readiness',
+      endpoint: '/api/documents/share-token',
+      metadata: {
+        operation: 'list_owner_access_link_status',
+        message: relationshipKeyError?.message ?? String(relationshipKeyError),
+        ownerId,
+      },
+    })
+  }
+
   const tokens: OwnerShareTokenRow[] = activeTokens.map((token) => ({
     ...token,
     documents: documentsById.get(token.document_id) ?? null,
     trusted_persons: trustedPersonsById.get(token.trusted_person_id) ?? null,
+    access_link_setup: buildManualAccessLinkGuidance(
+      hasRelationshipKeyForPair(relationshipKeyPairs, ownerId, token.trusted_person_id),
+      true
+    ),
   }))
 
   return NextResponse.json({ tokens })

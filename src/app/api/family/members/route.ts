@@ -13,6 +13,11 @@ import {
   isLegacyShareTokenSchemaError,
   withLegacyShareTokenDefaults,
 } from "@/lib/security/share-token-compat";
+import {
+  buildManualAccessLinkGuidance,
+  fetchRelationshipKeyPairSet,
+  hasRelationshipKeyForPair,
+} from "@/lib/security/access-link-readiness";
 
 const getSupabaseAdmin = () =>
   createClient(
@@ -40,6 +45,7 @@ interface FamilyMember {
     canDownload: boolean;
     viewOnly: boolean;
   };
+  accessLinkSetup?: ReturnType<typeof buildManualAccessLinkGuidance>;
 }
 
 type ShareCountRow = {
@@ -347,9 +353,37 @@ export async function GET(request: Request) {
       }
     }
 
+    let outgoingRelationshipKeyPairs = new Set<string>();
+    if (outgoingLinks && outgoingLinks.length > 0) {
+      try {
+        outgoingRelationshipKeyPairs = await fetchRelationshipKeyPairSet(
+          adminClient,
+          outgoingLinks.map((link) => ({
+            ownerId: user.id,
+            trustedPersonId: link.id,
+          })),
+        );
+      } catch (error: any) {
+        emitStructuredWarn({
+          event_type: "api",
+          event_message: "[Family Members API] Unable to hydrate outgoing access-link readiness",
+          endpoint: "/api/family/members",
+          metadata: {
+            operation: "outgoing_access_link_status",
+            message: error?.message ?? String(error),
+          },
+        });
+      }
+    }
+
     const outgoingMembers: FamilyMember[] = (outgoingLinks || []).map((link) => {
       const sharedDocsCount = outgoingShareCountMap.get(link.id) ?? 0;
       const hasSharedDocuments = sharedDocsCount > 0;
+      const hasRelationshipKey = hasRelationshipKeyForPair(
+        outgoingRelationshipKeyPairs,
+        user.id,
+        link.id,
+      );
       return {
         id: link.linked_user_id!,
         name: link.name,
@@ -364,6 +398,10 @@ export async function GET(request: Request) {
           hasSharedDocuments && canTrustedPersonPerformAction(link.access_level, "view"),
         canDownloadSharedDocuments:
           hasSharedDocuments && canTrustedPersonPerformAction(link.access_level, "download"),
+        accessLinkSetup: buildManualAccessLinkGuidance(
+          hasRelationshipKey,
+          hasSharedDocuments,
+        ),
       };
     });
 

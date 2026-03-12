@@ -7,6 +7,11 @@ import {
   isLegacyShareTokenSchemaError,
   withLegacyShareTokenDefaults,
 } from '@/lib/security/share-token-compat'
+import {
+  buildAccessLinkReadiness,
+  fetchRelationshipKeyPairSet,
+  hasRelationshipKeyForPair,
+} from '@/lib/security/access-link-readiness'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
 type ShareTokenError = {
@@ -45,6 +50,7 @@ type ReceivedShareProfileRow = {
 type ReceivedShareRow = ReceivedShareBaseRow & {
   documents: ReceivedShareDocumentRow | null
   profiles: ReceivedShareProfileRow | null
+  access_link_readiness: ReturnType<typeof buildAccessLinkReadiness>
 }
 
 function createMissingDocumentFallback(documentId: string): ReceivedShareDocumentRow {
@@ -237,10 +243,35 @@ export async function GET(request: Request) {
     }
   }
 
+  let relationshipKeyPairs = new Set<string>()
+  try {
+    relationshipKeyPairs = await fetchRelationshipKeyPairSet(
+      adminClient,
+      activeShares.map((share) => ({
+        ownerId: share.owner_id,
+        trustedPersonId: share.trusted_person_id,
+      }))
+    )
+  } catch (relationshipKeyError: any) {
+    emitStructuredWarn({
+      event_type: 'api',
+      event_message: '[Received Share Token API] Unable to hydrate relationship-key readiness metadata',
+      endpoint: '/api/documents/share-token/received',
+      metadata: {
+        operation: 'list_received_relationship_keys',
+        message: relationshipKeyError?.message ?? String(relationshipKeyError),
+      },
+    })
+  }
+
   const shares: ReceivedShareRow[] = activeShares.map((share) => ({
     ...share,
     documents: documentsById.get(share.document_id) ?? createMissingDocumentFallback(share.document_id),
     profiles: profilesByOwnerId.get(share.owner_id) ?? createMissingProfileFallback(),
+    access_link_readiness: buildAccessLinkReadiness(
+      hasRelationshipKeyForPair(relationshipKeyPairs, share.owner_id, share.trusted_person_id),
+      'unknown'
+    ),
   }))
 
   return NextResponse.json({ shares })
