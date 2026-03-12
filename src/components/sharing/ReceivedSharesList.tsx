@@ -18,6 +18,7 @@ interface ReceivedShare {
   id: string
   document_id: string
   owner_id: string
+  trusted_person_id: string
   wrapped_dek_for_tp: string
   expires_at: string | null
   permission: string
@@ -47,6 +48,7 @@ export function ReceivedSharesList() {
   const [blobFileName, setBlobFileName] = useState<string>('')
   const [isDecrypting, setIsDecrypting] = useState(false)
   const [decryptError, setDecryptError] = useState<string | null>(null)
+  const [errorShareId, setErrorShareId] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -90,25 +92,14 @@ export function ReceivedSharesList() {
 
     setIsDecrypting(true)
     setDecryptError(null)
+    setErrorShareId(share.id)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Nicht angemeldet')
-
-      const { data: trustedPerson, error: tpError } = await supabase
-        .from('trusted_persons')
-        .select('id')
-        .eq('linked_user_id', user.id)
-        .eq('user_id', share.owner_id)
-        .single()
-
-      if (tpError || !trustedPerson) throw new Error('Vertrauensperson nicht gefunden')
-
       const { data: rkData, error: rkError } = await supabase
         .from('document_relationship_keys')
         .select('wrapped_rk')
         .eq('owner_id', share.owner_id)
-        .eq('trusted_person_id', trustedPerson.id)
+        .eq('trusted_person_id', share.trusted_person_id)
         .single()
 
       if (rkError || !rkData?.wrapped_rk) throw new Error('Beziehungsschlüssel nicht gefunden')
@@ -148,6 +139,7 @@ export function ReceivedSharesList() {
   }
 
   const handleDownload = async (share: ReceivedShare) => {
+    setErrorShareId(share.id)
     const result = await decryptShare(share)
     if (!result) return
 
@@ -259,7 +251,7 @@ export function ReceivedSharesList() {
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
-                {decryptError && viewingShareId === share.id && (
+                {decryptError && errorShareId === share.id && (
                   <p className="text-xs text-red-600">{decryptError}</p>
                 )}
                 <Button

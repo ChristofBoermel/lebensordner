@@ -2571,3 +2571,32 @@ Rollback:
 - Revert:
   - `tests/e2e/smoke/document-security.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-12 00:06 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed share reactivation by clearing `revoked_at` on share-token upsert so previously revoked document/person pairs can be shared again.
+- Switched recipient share-token listing to resolve linked trusted-person rows through the admin client under accepted/active filters, restoring trusted-person `Geteilte Dokumente` visibility under current `trusted_persons` RLS.
+- Removed the client-side trusted-person lookup from received-share decryption, and added visible trusted-person `/zugriff` download errors when encrypted family downloads are missing the local relationship key.
+
+Risk / Regression Watch:
+- Recipient share reads now depend on service-role hydration in `/api/documents/share-token/received`; monitor for unexpected empty states if trusted-person linkage data is stale.
+- Re-sharing a previously revoked row now revives the same row instead of requiring manual cleanup; revoke/delete analytics keyed by row id should be monitored if they assumed a permanently revoked state.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/api/share-token.test.ts tests/components/sharing.test.tsx tests/pages/zugriff.test.tsx`
+
+Rollback:
+- Revert:
+  - `src/app/api/documents/share-token/route.ts`
+  - `src/app/api/documents/share-token/received/route.ts`
+  - `src/app/api/documents/share-token/[id]/file/route.ts`
+  - `src/components/sharing/ReceivedSharesList.tsx`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `tests/api/share-token.test.ts`
+  - `tests/components/sharing.test.tsx`
+  - `tests/pages/zugriff.test.tsx`
+  - `docs/ai-changelog.md`

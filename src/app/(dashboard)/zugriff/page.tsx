@@ -135,6 +135,7 @@ export default function ZugriffPage() {
   const [viewerOwnerTier, setViewerOwnerTier] = useState<'free' | 'basic' | 'premium'>('free')
   const [isLoadingViewer, setIsLoadingViewer] = useState(false)
   const [downloadingFor, setDownloadingFor] = useState<string | null>(null)
+  const [familyDownloadErrors, setFamilyDownloadErrors] = useState<Record<string, string>>({})
   const familyLoadTriggeredRef = useRef(false)
 
   const [isBulkShareOpen, setIsBulkShareOpen] = useState(false)
@@ -413,6 +414,11 @@ export default function ZugriffPage() {
   // Handle downloading documents for a family member
   const handleDownloadDocuments = useCallback(async (memberId: string, memberName: string) => {
     setDownloadingFor(memberId)
+    setFamilyDownloadErrors((current) => {
+      const next = { ...current }
+      delete next[memberId]
+      return next
+    })
     setError(null)
 
     try {
@@ -499,6 +505,10 @@ export default function ZugriffPage() {
 
     } catch (err: any) {
       setError(err.message)
+      setFamilyDownloadErrors((current) => ({
+        ...current,
+        [memberId]: err.message,
+      }))
     } finally {
       setDownloadingFor(null)
     }
@@ -1624,6 +1634,11 @@ export default function ZugriffPage() {
                                     </div>
                                   )}
                                 </div>
+                                {familyDownloadErrors[member.id] && (
+                                  <p className="text-sm text-red-600">
+                                    {familyDownloadErrors[member.id]}
+                                  </p>
+                                )}
                               </div>
                             </CardContent>
                           </Card>

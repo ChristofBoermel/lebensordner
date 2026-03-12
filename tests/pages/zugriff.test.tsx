@@ -1183,7 +1183,13 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
   const setupFetchMocks = (options: {
     familyMembers?: typeof mockFamilyMembers
     viewResponse?: { ok: boolean; status?: number; data?: Record<string, unknown> }
-    downloadResponse?: { ok: boolean; status?: number; blob?: Blob }
+    downloadResponse?: {
+      ok: boolean
+      status?: number
+      blob?: Blob
+      contentType?: string
+      jsonData?: Record<string, unknown>
+    }
   } = {}) => {
     mockFetch.mockImplementation((url: string, init?: RequestInit) => {
       const urlStr = url.toString()
@@ -1237,9 +1243,13 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
           status: response.status ?? (response.ok ? 200 : 403),
           headers: {
             get: (name: string) =>
-              name === 'Content-Disposition' ? 'attachment; filename="test.zip"' : null,
+              name === 'Content-Disposition'
+                ? 'attachment; filename="test.zip"'
+                : name === 'Content-Type'
+                  ? (response.contentType ?? 'application/zip')
+                  : null,
           },
-          json: () => Promise.resolve({ error: 'Download failed' }),
+          json: () => Promise.resolve(response.jsonData ?? { error: 'Download failed' }),
           blob: () => Promise.resolve(response.blob ?? new Blob()),
         })
       }
@@ -1618,6 +1628,49 @@ describe('ZugriffPage Familie Tab Full Integration', () => {
 
       await waitFor(() => {
         expect(screen.queryByText(/Wird geladen/i)).not.toBeInTheDocument()
+      }, { timeout: TEST_TIMEOUT })
+    }, TEST_TIMEOUT)
+
+    it('should show an inline error when encrypted family download needs a missing relationship key', async () => {
+      setBasicUser()
+      localStorage.removeItem('rk_member-premium')
+      setupFetchMocks({
+        downloadResponse: {
+          ok: true,
+          contentType: 'application/json',
+          jsonData: {
+            requiresClientDecryption: true,
+            ownerName: 'Max Mustermann',
+            documents: [
+              {
+                id: 'doc-1',
+                file_name: 'verschluesselt.pdf',
+                file_type: 'application/pdf',
+                category: 'identitaet',
+                is_encrypted: true,
+                wrapped_dek_for_tp: 'wrapped-key',
+                file_iv: 'iv-123',
+              },
+            ],
+          },
+        },
+      })
+
+      render(<ZugriffPage />)
+
+      await waitForPageLoad()
+
+      await userEvent.click(screen.getByRole('tab', { name: /Familie/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText('Max Mustermann')).toBeInTheDocument()
+      }, { timeout: TEST_TIMEOUT })
+
+      const downloadButtons = screen.getAllByRole('button', { name: /Dokumente von.*herunterladen/i })
+      await userEvent.click(downloadButtons[0])
+
+      await waitFor(() => {
+        expect(screen.getByText('Kein Zugriffsschlüssel gefunden. Bitte den Zugriffslink erneut öffnen.')).toBeInTheDocument()
       }, { timeout: TEST_TIMEOUT })
     }, TEST_TIMEOUT)
   })

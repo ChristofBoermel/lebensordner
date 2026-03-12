@@ -201,6 +201,7 @@ const makeReceivedShares = () => [
     id: 'rshare-1',
     document_id: 'doc-1',
     owner_id: 'owner-1',
+    trusted_person_id: 'tp-1',
     wrapped_dek_for_tp: 'wrapped',
     expires_at: soonExpiry,
     permission: 'view',
@@ -218,6 +219,7 @@ const makeReceivedShares = () => [
     id: 'rshare-2',
     document_id: 'doc-2',
     owner_id: 'owner-2',
+    trusted_person_id: 'tp-2',
     wrapped_dek_for_tp: 'wrapped2',
     expires_at: laterExpiry,
     permission: 'download',
@@ -283,5 +285,29 @@ describe('ReceivedSharesList', () => {
 
     const downloadButtons = screen.getAllByRole('button', { name: 'Herunterladen' })
     expect(downloadButtons).toHaveLength(1)
+  })
+
+  it('shows decrypt error when download fails because the relationship key is missing', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ shares: makeReceivedShares() }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { client, single } = createSupabaseMock()
+    single.mockResolvedValueOnce({ data: null, error: { message: 'not found' } })
+    mockCreateClient.mockReturnValue(client)
+
+    render(<ReceivedSharesList />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Download Dokument')).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Herunterladen' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Beziehungsschlüssel nicht gefunden')).toBeInTheDocument()
+    })
   })
 })

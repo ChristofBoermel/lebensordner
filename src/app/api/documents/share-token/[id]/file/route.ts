@@ -31,6 +31,7 @@ export async function GET(
       .select('id')
       .eq('linked_user_id', user.id)
       .eq('invitation_status', 'accepted')
+      .eq('is_active', true)
 
     if (tpError || !trustedPersons || trustedPersons.length === 0) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })

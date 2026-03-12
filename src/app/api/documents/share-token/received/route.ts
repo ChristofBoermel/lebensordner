@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
+import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { isActiveShareToken } from '@/lib/security/share-token-status'
 import {
   isLegacyShareTokenSchemaError,
@@ -18,6 +20,7 @@ type ReceivedShareBaseRow = {
   id: string
   document_id: string
   owner_id: string
+  trusted_person_id: string
   wrapped_dek_for_tp: string
   expires_at?: string | null
   permission?: string
@@ -64,7 +67,7 @@ function createMissingProfileFallback(): ReceivedShareProfileRow {
 }
 
 async function fetchReceivedShareRows(
-  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  supabase: { from: (table: string) => any },
   trustedPersonIds: string[]
 ) {
   let data: ReceivedShareBaseRow[] | null = null
@@ -73,7 +76,7 @@ async function fetchReceivedShareRows(
   {
     const result = await supabase
       .from('document_share_tokens')
-      .select('id, document_id, owner_id, wrapped_dek_for_tp, expires_at, permission, revoked_at')
+      .select('id, document_id, owner_id, trusted_person_id, wrapped_dek_for_tp, expires_at, permission, revoked_at')
       .in('trusted_person_id', trustedPersonIds)
 
     data = (result.data ?? null) as ReceivedShareBaseRow[] | null
@@ -94,7 +97,7 @@ async function fetchReceivedShareRows(
 
     const legacyResult = await supabase
       .from('document_share_tokens')
-      .select('id, document_id, owner_id, wrapped_dek_for_tp')
+      .select('id, document_id, owner_id, trusted_person_id, wrapped_dek_for_tp')
       .in('trusted_person_id', trustedPersonIds)
 
     data = (legacyResult.data ?? null) as ReceivedShareBaseRow[] | null
@@ -104,18 +107,33 @@ async function fetchReceivedShareRows(
   return { data, error }
 }
 
-export async function GET() {
+function getSupabaseAdmin() {
+  return createClient(
+    process.env['SUPABASE_URL']!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
+export async function GET(request: Request) {
   const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await resolveAuthenticatedUser(
+    supabase,
+    request,
+    '/api/documents/share-token/received'
+  )
 
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { data: trustedPersons, error: trustedPersonsError } = await supabase
+  const adminClient = getSupabaseAdmin()
+
+  const { data: trustedPersons, error: trustedPersonsError } = await adminClient
     .from('trusted_persons')
     .select('id')
     .eq('linked_user_id', user.id)
+    .eq('invitation_status', 'accepted')
+    .eq('is_active', true)
 
   if (trustedPersonsError) {
     emitStructuredError({
@@ -136,7 +154,7 @@ export async function GET() {
     return NextResponse.json({ shares: [] })
   }
 
-  const { data, error } = await fetchReceivedShareRows(supabase, trustedPersonIds)
+  const { data, error } = await fetchReceivedShareRows(adminClient, trustedPersonIds)
 
   if (error) {
     emitStructuredError({
@@ -164,7 +182,7 @@ export async function GET() {
 
   let documentsById = new Map<string, ReceivedShareDocumentRow>()
   if (documentIds.length > 0) {
-    const { data: documents, error: documentsError } = await supabase
+    const { data: documents, error: documentsError } = await adminClient
       .from('documents')
       .select('id, title, category, file_name, file_iv, file_type')
       .in('id', documentIds)
@@ -189,7 +207,7 @@ export async function GET() {
 
   let profilesByOwnerId = new Map<string, ReceivedShareProfileRow>()
   if (ownerIds.length > 0) {
-    const { data: profiles, error: profilesError } = await supabase
+    const { data: profiles, error: profilesError } = await adminClient
       .from('profiles')
       .select('id, full_name, first_name, last_name')
       .in('id', ownerIds)

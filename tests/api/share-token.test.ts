@@ -70,7 +70,11 @@ describe('Share Token API', () => {
 
       expect(response.status).toBe(200)
       expect(builder.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ expires_at: '2027-01-01T00:00:00Z', permission: 'download' }),
+        expect.objectContaining({
+          expires_at: '2027-01-01T00:00:00Z',
+          permission: 'download',
+          revoked_at: null,
+        }),
         expect.any(Object)
       )
     })
@@ -100,7 +104,40 @@ describe('Share Token API', () => {
 
       expect(response.status).toBe(200)
       expect(builder.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ permission: 'view', expires_at: null }),
+        expect.objectContaining({ permission: 'view', expires_at: null, revoked_at: null }),
+        expect.any(Object)
+      )
+    })
+
+    it('reactivates a previously revoked share by writing revoked_at as null', async () => {
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'doc-1' }, error: null })
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: 'tp-user' }, error: null })
+      thenFn.mockImplementationOnce((onFulfilled: any) =>
+        Promise.resolve({ data: null, error: null }).then(onFulfilled)
+      )
+
+      vi.resetModules()
+      const { POST } = await import('@/app/api/documents/share-token/route')
+
+      const response = await POST(
+        new Request('http://localhost/api/documents/share-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            documentId: 'doc-1',
+            trustedPersonId: 'tp-1',
+            wrapped_dek_for_tp: 'wrapped-key',
+          }),
+        })
+      )
+
+      expect(response.status).toBe(200)
+      expect(builder.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          document_id: 'doc-1',
+          trusted_person_id: 'tp-1',
+          revoked_at: null,
+        }),
         expect.any(Object)
       )
     })
@@ -497,7 +534,7 @@ describe('Share Token API', () => {
 
   describe('GET /api/documents/share-token/received', () => {
     it('returns shares for recipient with nested documents and profiles', async () => {
-      thenFn
+      adminThenFn
         .mockImplementationOnce((onFulfilled: any) =>
           Promise.resolve({ data: [{ id: 'tp-1' }], error: null }).then(onFulfilled)
         )
@@ -507,6 +544,7 @@ describe('Share Token API', () => {
               id: 'share-1',
               document_id: 'doc-1',
               owner_id: 'owner-id',
+              trusted_person_id: 'tp-1',
               wrapped_dek_for_tp: 'wrapped-key',
               expires_at: null,
               permission: 'view',
@@ -538,7 +576,7 @@ describe('Share Token API', () => {
       vi.resetModules()
       const { GET } = await import('@/app/api/documents/share-token/received/route')
 
-      const response = await GET()
+      const response = await GET(new Request('http://localhost/api/documents/share-token/received'))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -551,7 +589,7 @@ describe('Share Token API', () => {
     })
 
     it('filters revoked and expired received shares', async () => {
-      thenFn
+      adminThenFn
         .mockImplementationOnce((onFulfilled: any) =>
           Promise.resolve({ data: [{ id: 'tp-1' }], error: null }).then(onFulfilled)
         )
@@ -562,6 +600,7 @@ describe('Share Token API', () => {
                 id: 'share-active',
                 document_id: 'doc-1',
                 owner_id: 'owner-id',
+                trusted_person_id: 'tp-1',
                 wrapped_dek_for_tp: 'wrapped-key',
                 expires_at: '2099-01-01T00:00:00Z',
                 permission: 'download',
@@ -571,6 +610,7 @@ describe('Share Token API', () => {
                 id: 'share-revoked',
                 document_id: 'doc-2',
                 owner_id: 'owner-id',
+                trusted_person_id: 'tp-1',
                 wrapped_dek_for_tp: 'wrapped-key',
                 expires_at: '2099-01-01T00:00:00Z',
                 permission: 'view',
@@ -580,6 +620,7 @@ describe('Share Token API', () => {
                 id: 'share-expired',
                 document_id: 'doc-3',
                 owner_id: 'owner-id',
+                trusted_person_id: 'tp-1',
                 wrapped_dek_for_tp: 'wrapped-key',
                 expires_at: '2020-01-01T00:00:00Z',
                 permission: 'view',
@@ -612,7 +653,7 @@ describe('Share Token API', () => {
       vi.resetModules()
       const { GET } = await import('@/app/api/documents/share-token/received/route')
 
-      const response = await GET()
+      const response = await GET(new Request('http://localhost/api/documents/share-token/received'))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -621,14 +662,14 @@ describe('Share Token API', () => {
     })
 
     it('returns empty array when user has no trusted_person records', async () => {
-      thenFn.mockImplementationOnce((onFulfilled: any) =>
+      adminThenFn.mockImplementationOnce((onFulfilled: any) =>
         Promise.resolve({ data: [], error: null }).then(onFulfilled)
       )
 
       vi.resetModules()
       const { GET } = await import('@/app/api/documents/share-token/received/route')
 
-      const response = await GET()
+      const response = await GET(new Request('http://localhost/api/documents/share-token/received'))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -636,7 +677,7 @@ describe('Share Token API', () => {
     })
 
     it('falls back to legacy schema when recipient list optional columns are missing', async () => {
-      thenFn
+      adminThenFn
         .mockImplementationOnce((onFulfilled: any) =>
           Promise.resolve({ data: [{ id: 'tp-1' }], error: null }).then(onFulfilled)
         )
@@ -652,6 +693,7 @@ describe('Share Token API', () => {
               id: 'share-1',
               document_id: 'doc-1',
               owner_id: 'owner-id',
+              trusted_person_id: 'tp-1',
               wrapped_dek_for_tp: 'wrapped-key',
             }],
             error: null,
@@ -680,7 +722,7 @@ describe('Share Token API', () => {
       vi.resetModules()
       const { GET } = await import('@/app/api/documents/share-token/received/route')
 
-      const response = await GET()
+      const response = await GET(new Request('http://localhost/api/documents/share-token/received'))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -692,7 +734,7 @@ describe('Share Token API', () => {
     })
 
     it('keeps received shares when document and profile hydration fails', async () => {
-      thenFn
+      adminThenFn
         .mockImplementationOnce((onFulfilled: any) =>
           Promise.resolve({ data: [{ id: 'tp-1' }], error: null }).then(onFulfilled)
         )
@@ -702,6 +744,7 @@ describe('Share Token API', () => {
               id: 'share-1',
               document_id: 'doc-1',
               owner_id: 'owner-id',
+              trusted_person_id: 'tp-1',
               wrapped_dek_for_tp: 'wrapped-key',
               expires_at: null,
               permission: 'view',
@@ -726,12 +769,13 @@ describe('Share Token API', () => {
       vi.resetModules()
       const { GET } = await import('@/app/api/documents/share-token/received/route')
 
-      const response = await GET()
+      const response = await GET(new Request('http://localhost/api/documents/share-token/received'))
       const data = await response.json()
 
       expect(response.status).toBe(200)
       expect(data.shares[0]).toMatchObject({
         id: 'share-1',
+        trusted_person_id: 'tp-1',
         documents: expect.objectContaining({ id: 'doc-1', title: 'Unbekanntes Dokument' }),
         profiles: { full_name: null, first_name: null, last_name: null },
       })

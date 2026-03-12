@@ -131,6 +131,7 @@ export async function POST(request: Request) {
     wrapped_dek_for_tp,
     expires_at: expires_at ?? null,
     permission: permission ?? 'view',
+    revoked_at: null,
   }
 
   let { error } = await supabase
