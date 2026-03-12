@@ -9,11 +9,12 @@ import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { guardTrustedPersonAccess } from '@/lib/security/trusted-person-guard'
 import { getActiveTrustedPersonShareTokens } from '@/lib/security/trusted-person-shares'
 import {
-  buildAccessLinkReadiness,
-  fetchRelationshipKeyPairSet,
-  hasRelationshipKeyForPair,
-  parseAccessLinkDeviceSignal,
-} from '@/lib/security/access-link-readiness'
+  buildTrustedAccessReadiness,
+  fetchLatestTrustedAccessInvitationMap,
+  readCookieValueFromHeader,
+  TRUSTED_ACCESS_DEVICE_COOKIE,
+  validateTrustedAccessDevice,
+} from '@/lib/security/trusted-access'
 
 const getSupabaseAdmin = () => createClient(
   process.env['SUPABASE_URL']!,
@@ -83,26 +84,26 @@ export async function GET(request: Request) {
       )
     }
     const trustedPerson = guard.trustedPerson
-    const deviceSignal = parseAccessLinkDeviceSignal(request)
-
-    let relationshipKeyPairs = new Set<string>()
+    let deviceEnrollment = { enrolled: false, revoked: false }
+    let latestInvitationMap = new Map<string, { status: string; expiresAt: string | null }>()
     try {
-      relationshipKeyPairs = await fetchRelationshipKeyPairSet(adminClient, [{
+      deviceEnrollment = await validateTrustedAccessDevice(adminClient, {
+        rawCookieValue: readCookieValueFromHeader(request.headers.get('cookie'), TRUSTED_ACCESS_DEVICE_COOKIE),
+        ownerId,
+        trustedPersonId: trustedPerson.id,
+        userId: user.id,
+      })
+      latestInvitationMap = await fetchLatestTrustedAccessInvitationMap(adminClient, [{
         ownerId,
         trustedPersonId: trustedPerson.id,
       }])
     } catch (relationshipKeyError: any) {
       emitStructuredError({
         error_type: 'api',
-        error_message: `[Family View API] Error fetching relationship key readiness: ${relationshipKeyError?.message ?? String(relationshipKeyError)}`,
+        error_message: `[Family View API] Error fetching trusted-access readiness: ${relationshipKeyError?.message ?? String(relationshipKeyError)}`,
         endpoint: '/api/family/view',
       })
     }
-
-    const accessLinkReadiness = buildAccessLinkReadiness(
-      hasRelationshipKeyForPair(relationshipKeyPairs, ownerId, trustedPerson.id),
-      deviceSignal
-    )
 
     // Get owner profile with subscription info
     const { data: ownerProfile, error: ownerError } = await adminClient
@@ -155,6 +156,13 @@ export async function GET(request: Request) {
     )
 
     if (documentIds.length === 0) {
+      const accessLinkReadiness = buildTrustedAccessReadiness({
+        hasExplicitShares: false,
+        hasDeviceEnrollment: deviceEnrollment.enrolled,
+        deviceRevoked: deviceEnrollment.revoked,
+        latestInvitationStatus:
+          latestInvitationMap.get(`${ownerId}:${trustedPerson.id}`)?.status ?? null,
+      })
       return NextResponse.json({
         ownerName,
         ownerTier: ownerTier.id,
@@ -174,6 +182,14 @@ export async function GET(request: Request) {
       .in('id', documentIds)
       .order('category')
       .order('title')
+
+    const accessLinkReadiness = buildTrustedAccessReadiness({
+      hasExplicitShares: true,
+      hasDeviceEnrollment: deviceEnrollment.enrolled,
+      deviceRevoked: deviceEnrollment.revoked,
+      latestInvitationStatus:
+        latestInvitationMap.get(`${ownerId}:${trustedPerson.id}`)?.status ?? null,
+    })
 
     if (docsError) {
       emitStructuredError({

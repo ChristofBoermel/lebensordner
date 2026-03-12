@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient, setSessionPersistence, clearSupabaseLocalStorage } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,7 +39,10 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
 
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+  const nextPath = searchParams.get('next')
+  const safeNextPath = nextPath && nextPath.startsWith('/') ? nextPath : null
   const { capture, identify } = usePostHog()
   // allowed: imperative-sync - imperative turnstile widget reset API
   const turnstileRef = useRef<TurnstileWidgetRef>(null)
@@ -168,7 +171,7 @@ export default function LoginPage() {
             // Consent sync failure must not block login
           }
 
-          router.push('/dashboard')
+          router.push(safeNextPath ?? '/dashboard')
           router.refresh()
         }
         return
@@ -340,7 +343,7 @@ export default function LoginPage() {
           // Consent sync failure must not block login
         }
 
-        router.push('/dashboard')
+        router.push(safeNextPath ?? '/dashboard')
         router.refresh()
       }
     } catch (err) {

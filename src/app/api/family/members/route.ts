@@ -14,10 +14,10 @@ import {
   withLegacyShareTokenDefaults,
 } from "@/lib/security/share-token-compat";
 import {
-  buildManualAccessLinkGuidance,
-  fetchRelationshipKeyPairSet,
-  hasRelationshipKeyForPair,
-} from "@/lib/security/access-link-readiness";
+  buildOwnerTrustedAccessStatus,
+  fetchLatestTrustedAccessInvitationMap,
+  fetchTrustedAccessDevicePairSet,
+} from "@/lib/security/trusted-access";
 
 const getSupabaseAdmin = () =>
   createClient(
@@ -45,7 +45,7 @@ interface FamilyMember {
     canDownload: boolean;
     viewOnly: boolean;
   };
-  accessLinkSetup?: ReturnType<typeof buildManualAccessLinkGuidance>;
+  accessLinkSetup?: ReturnType<typeof buildOwnerTrustedAccessStatus>;
 }
 
 type ShareCountRow = {
@@ -353,10 +353,18 @@ export async function GET(request: Request) {
       }
     }
 
-    let outgoingRelationshipKeyPairs = new Set<string>();
+    let outgoingDeviceEnrollmentPairs = new Set<string>();
+    let outgoingInvitationMap = new Map<string, { status: string; expiresAt: string | null }>();
     if (outgoingLinks && outgoingLinks.length > 0) {
       try {
-        outgoingRelationshipKeyPairs = await fetchRelationshipKeyPairSet(
+        outgoingDeviceEnrollmentPairs = await fetchTrustedAccessDevicePairSet(
+          adminClient,
+          outgoingLinks.map((link) => ({
+            ownerId: user.id,
+            trustedPersonId: link.id,
+          })),
+        );
+        outgoingInvitationMap = await fetchLatestTrustedAccessInvitationMap(
           adminClient,
           outgoingLinks.map((link) => ({
             ownerId: user.id,
@@ -379,11 +387,7 @@ export async function GET(request: Request) {
     const outgoingMembers: FamilyMember[] = (outgoingLinks || []).map((link) => {
       const sharedDocsCount = outgoingShareCountMap.get(link.id) ?? 0;
       const hasSharedDocuments = sharedDocsCount > 0;
-      const hasRelationshipKey = hasRelationshipKeyForPair(
-        outgoingRelationshipKeyPairs,
-        user.id,
-        link.id,
-      );
+      const invitationStatus = outgoingInvitationMap.get(`${user.id}:${link.id}`);
       return {
         id: link.linked_user_id!,
         name: link.name,
@@ -398,10 +402,12 @@ export async function GET(request: Request) {
           hasSharedDocuments && canTrustedPersonPerformAction(link.access_level, "view"),
         canDownloadSharedDocuments:
           hasSharedDocuments && canTrustedPersonPerformAction(link.access_level, "download"),
-        accessLinkSetup: buildManualAccessLinkGuidance(
-          hasRelationshipKey,
-          hasSharedDocuments,
-        ),
+        accessLinkSetup: buildOwnerTrustedAccessStatus({
+          hasExplicitShares: hasSharedDocuments,
+          hasPendingInvitation: invitationStatus?.status === 'pending',
+          invitationExpiresAt: invitationStatus?.expiresAt ?? null,
+          hasDeviceEnrollment: outgoingDeviceEnrollmentPairs.has(`${user.id}:${link.id}:*`),
+        }),
       };
     });
 

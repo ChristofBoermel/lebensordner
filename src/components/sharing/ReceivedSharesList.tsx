@@ -13,9 +13,15 @@ import {
 import { importRawHexKey, unwrapKey, decryptFile } from '@/lib/security/document-e2ee'
 
 interface AccessLinkReadiness {
-  accessLinkStatus: 'ready' | 'missing_on_device' | 'missing_on_owner'
+  accessLinkStatus: 'ready' | 'setup_required' | 'expired_invitation' | 'wrong_account' | 'revoked'
   requiresAccessLinkSetup: boolean
-  userMessageKey: 'access_ready' | 'open_access_link_on_device' | 'owner_must_send_access_link'
+  deviceEnrollmentStatus: 'enrolled' | 'missing' | 'revoked'
+  userMessageKey:
+    | 'access_ready'
+    | 'secure_access_setup_required'
+    | 'secure_access_invitation_expired'
+    | 'secure_access_wrong_account'
+    | 'secure_access_revoked'
 }
 
 interface ReceivedShare {
@@ -100,11 +106,15 @@ export function ReceivedSharesList() {
       return false
     }
 
-    if (readiness.accessLinkStatus === 'missing_on_owner') {
+    if (readiness.accessLinkStatus === 'expired_invitation' || readiness.accessLinkStatus === 'revoked') {
       return true
     }
 
-    return !hasLocalAccessLink(share.owner_id)
+    if (share.documents.file_iv) {
+      return !hasLocalAccessLink(share.owner_id)
+    }
+
+    return readiness.deviceEnrollmentStatus !== 'enrolled'
   }
 
   const decryptShare = async (share: ReceivedShare): Promise<{ url: string; type: string; fileName: string } | null> => {
@@ -270,9 +280,11 @@ export function ReceivedSharesList() {
                 {setupMissing && readiness && (
                   <div className="mt-2 flex items-start gap-1.5 text-xs rounded-md px-2 py-1.5 bg-amber-50 border border-amber-200 text-amber-800">
                     <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" aria-hidden="true" />
-                    {readiness.accessLinkStatus === 'missing_on_owner'
-                      ? 'Der Besitzer hat den Zugriffslink noch nicht erstellt. Bitte ihn, ihn zu erstellen und zu senden.'
-                      : 'Zugriffslink auf diesem Gerät noch nicht geöffnet. Bitte den Besitzer, den Link erneut zu senden.'}
+                    {readiness.accessLinkStatus === 'expired_invitation'
+                      ? 'Der sichere Zugriffslink ist abgelaufen. Bitte den Besitzer um einen neuen Link bitten.'
+                      : readiness.accessLinkStatus === 'revoked'
+                        ? 'Der sichere Zugriff wurde widerrufen.'
+                        : 'Sicherer Zugriff auf diesem Geraet fehlt noch. Bitte den Besitzer um einen neuen sicheren Link bitten.'}
                   </div>
                 )}
               </div>

@@ -11,6 +11,16 @@ export async function loadOrCreateRelationshipKey(params: {
   trustedPersonId: string
   masterKey: CryptoKey
 }): Promise<CryptoKey> {
+  const material = await loadOrCreateRelationshipKeyMaterial(params)
+  return material.key
+}
+
+export async function loadOrCreateRelationshipKeyMaterial(params: {
+  supabase: any
+  ownerId: string
+  trustedPersonId: string
+  masterKey: CryptoKey
+}): Promise<{ hex: string; key: CryptoKey }> {
   const { supabase, ownerId, trustedPersonId, masterKey } = params
 
   const { data: existingKey, error: existingKeyError } = await supabase
@@ -25,7 +35,11 @@ export async function loadOrCreateRelationshipKey(params: {
   }
 
   if (existingKey?.wrapped_rk) {
-    return unwrapKey(existingKey.wrapped_rk, masterKey, 'AES-KW')
+    const key = await unwrapKey(existingKey.wrapped_rk, masterKey, 'AES-KW')
+    return {
+      hex: await generateRelationshipKeyExport(key),
+      key,
+    }
   }
 
   const relationshipKey = await generateRelationshipKey()
@@ -45,5 +59,15 @@ export async function loadOrCreateRelationshipKey(params: {
     throw new Error('Beziehungsschlüssel konnte nicht erstellt werden')
   }
 
-  return relationshipCryptoKey
+  return {
+    hex: relationshipKey,
+    key: relationshipCryptoKey,
+  }
+}
+
+async function generateRelationshipKeyExport(key: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey('raw', key)
+  return Array.from(new Uint8Array(raw))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
 }

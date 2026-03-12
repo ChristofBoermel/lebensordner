@@ -16,12 +16,15 @@ interface SharedDocument {
 }
 
 interface AccessLinkReadiness {
-  accessLinkStatus: "ready" | "missing_on_device" | "missing_on_owner";
+  accessLinkStatus: "ready" | "setup_required" | "expired_invitation" | "wrong_account" | "revoked";
   requiresAccessLinkSetup: boolean;
-  userMessageKey: "access_ready" | "open_access_link_on_device" | "owner_must_send_access_link";
-  ownerAccessLinkStatus: "ready" | "missing_on_owner";
-  deviceAccessLinkStatus: "ready" | "missing_on_device" | "unknown";
-  relationshipKeyStoredByOwner: boolean;
+  deviceEnrollmentStatus: "enrolled" | "missing" | "revoked";
+  userMessageKey:
+    | "access_ready"
+    | "secure_access_setup_required"
+    | "secure_access_invitation_expired"
+    | "secure_access_wrong_account"
+    | "secure_access_revoked";
 }
 
 interface FamilyViewResponse {
@@ -50,14 +53,13 @@ function AccessLinkSetupBanner({
   readiness: AccessLinkReadiness;
   seniorMode: boolean;
 }) {
-  if (readiness.accessLinkStatus === "missing_on_owner") {
+  if (readiness.accessLinkStatus === "expired_invitation") {
     return (
       <div className="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-lg text-amber-900">
-        <p className="font-semibold mb-1">Zugriffslink noch nicht erstellt</p>
+        <p className="font-semibold mb-1">Sicherer Zugriffslink abgelaufen</p>
         <p className="text-sm">
-          Der Besitzer hat den Zugriffslink noch nicht erstellt. Bitten Sie
-          ihn, in seiner Familien-Übersicht einen Zugriffslink zu erzeugen und
-          Ihnen zu senden.
+          Bitten Sie den Besitzer, einen neuen sicheren Zugriffslink zu erzeugen
+          und Ihnen direkt zu senden.
         </p>
         {seniorMode && (
           <ol className="mt-3 text-sm space-y-1 list-decimal list-inside text-amber-800">
@@ -71,20 +73,32 @@ function AccessLinkSetupBanner({
     );
   }
 
-  if (readiness.accessLinkStatus === "missing_on_device") {
+  if (readiness.accessLinkStatus === "revoked") {
     return (
       <div className="mb-6 p-4 bg-blue-50 border border-blue-300 rounded-lg text-blue-900">
-        <p className="font-semibold mb-1">Zugriffslink auf diesem Gerät fehlt</p>
+        <p className="font-semibold mb-1">Sicherer Zugriff wurde widerrufen</p>
         <p className="text-sm">
-          Sie müssen den Zugriffslink des Besitzers einmal auf diesem Browser
-          öffnen. Bitten Sie den Besitzer, Ihnen den Link erneut zu senden.
+          Der Besitzer hat den sicheren Zugriff entfernt. Bitte nehmen Sie
+          Kontakt mit ihm auf, falls Sie weiterhin Zugriff benoetigen.
+        </p>
+      </div>
+    );
+  }
+
+  if (readiness.accessLinkStatus === "setup_required") {
+    return (
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-300 rounded-lg text-blue-900">
+        <p className="font-semibold mb-1">Sicherer Zugriff auf diesem Geraet fehlt</p>
+        <p className="text-sm">
+          Bitte oeffnen Sie einen aktuellen sicheren Zugriffslink des Besitzers
+          auf genau diesem Browser.
         </p>
         {seniorMode && (
           <ol className="mt-3 text-sm space-y-1 list-decimal list-inside text-blue-800">
-            <li>Bitten Sie den Besitzer, Ihnen den Zugriffslink erneut zu senden.</li>
-            <li>Öffnen Sie den Link auf genau diesem Gerät und diesem Browser.</li>
-            <li>Der Zugriff wird dann auf diesem Gerät dauerhaft gespeichert.</li>
-            <li>Bei jedem neuen Gerät oder Browser müssen Sie diesen Schritt wiederholen.</li>
+            <li>Bitten Sie den Besitzer um einen sicheren Zugriffslink.</li>
+            <li>Oeffnen Sie den Link auf genau diesem Geraet und Browser.</li>
+            <li>Melden Sie sich mit der eingeladenen E-Mail-Adresse an.</li>
+            <li>Bestaetigen Sie den Code aus Ihrer E-Mail.</li>
           </ol>
         )}
       </div>
@@ -131,14 +145,8 @@ export default function VpDashboardViewPage() {
       setViewError(null);
 
       try {
-        const deviceSignal = hasKey ? "present" : "missing";
         const documentsRes = await fetch(
           `/api/family/view?ownerId=${encodeURIComponent(ownerId)}`,
-          {
-            headers: {
-              "x-lebensordner-access-link-key": deviceSignal,
-            },
-          },
         );
         const documentsData: FamilyViewResponse & { error?: string } =
           await documentsRes.json();
@@ -204,15 +212,11 @@ export default function VpDashboardViewPage() {
       accessLinkReadiness &&
       accessLinkReadiness.requiresAccessLinkSetup
     ) {
-      if (accessLinkReadiness.accessLinkStatus === "missing_on_owner") {
-        setViewError(
-          "Der Besitzer muss zuerst einen Zugriffslink erstellen und Ihnen senden.",
-        );
-      } else {
-        setViewError(
-          "Bitte öffnen Sie den Zugriffslink des Besitzers auf diesem Gerät, um Dokumente ansehen zu können.",
-        );
-      }
+      setViewError(
+        accessLinkReadiness.accessLinkStatus === "expired_invitation"
+          ? "Der sichere Zugriffslink ist abgelaufen. Bitte den Besitzer um einen neuen Link bitten."
+          : "Bitte richten Sie den sicheren Zugriff auf diesem Geraet ein, bevor Sie verschluesselte Dokumente ansehen.",
+      );
       return;
     }
 
@@ -279,15 +283,11 @@ export default function VpDashboardViewPage() {
       accessLinkReadiness &&
       accessLinkReadiness.requiresAccessLinkSetup
     ) {
-      if (accessLinkReadiness.accessLinkStatus === "missing_on_owner") {
-        setViewError(
-          "Der Besitzer muss zuerst einen Zugriffslink erstellen und Ihnen senden.",
-        );
-      } else {
-        setViewError(
-          "Bitte öffnen Sie den Zugriffslink des Besitzers auf diesem Gerät, um Dokumente herunterladen zu können.",
-        );
-      }
+      setViewError(
+        accessLinkReadiness.accessLinkStatus === "expired_invitation"
+          ? "Der sichere Zugriffslink ist abgelaufen. Bitte den Besitzer um einen neuen Link bitten."
+          : "Bitte richten Sie den sicheren Zugriff auf diesem Geraet ein, bevor Sie verschluesselte Dokumente herunterladen.",
+      );
       return;
     }
 
@@ -442,9 +442,9 @@ export default function VpDashboardViewPage() {
               <div className="flex flex-col items-end gap-1">
                 {setupMissing && doc.is_encrypted ? (
                   <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                    {accessLinkReadiness?.accessLinkStatus === "missing_on_owner"
-                      ? "Zugriffslink fehlt beim Besitzer"
-                      : "Zugriffslink auf diesem Gerät öffnen"}
+                    {accessLinkReadiness?.accessLinkStatus === "expired_invitation"
+                      ? "Neuen sicheren Link anfordern"
+                      : "Sicheren Zugriff einrichten"}
                   </span>
                 ) : (
                   <button

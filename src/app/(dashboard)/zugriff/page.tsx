@@ -115,6 +115,7 @@ export default function ZugriffPage() {
   const [linkCopied, setLinkCopied] = useState(false)
   const vaultContext = useVault()
   const [rkShareUrl, setRkShareUrl] = useState<string | null>(null)
+  const [rkShareExpiresAt, setRkShareExpiresAt] = useState<string | null>(null)
   const [isGeneratingRk, setIsGeneratingRk] = useState<string | null>(null)
   const [rkDialogOpen, setRkDialogOpen] = useState(false)
   const [rkLinkCopied, setRkLinkCopied] = useState(false)
@@ -668,75 +669,37 @@ export default function ZugriffPage() {
     setIsGeneratingRk(person.id)
 
     try {
-      const { generateRelationshipKey, importRawHexKey, wrapKey, unwrapKey } = await import('@/lib/security/document-e2ee')
-      const rk = await generateRelationshipKey()
-      const rkCryptoKey = await importRawHexKey(rk, ['wrapKey', 'unwrapKey'])
-      const wrapped_rk = await wrapKey(rkCryptoKey, vaultContext.masterKey)
-
-      const relationshipKeyResponse = await fetch('/api/trusted-person/relationship-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trustedPersonId: person.id,
-          wrapped_rk,
-        }),
-      })
-      if (!relationshipKeyResponse.ok) {
-        throw new Error('Verknüpfungsschlüssel konnte nicht gespeichert werden')
-      }
-
+      const { loadOrCreateRelationshipKeyMaterial } = await import('@/lib/security/relationship-key')
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         throw new Error('Nicht angemeldet')
       }
 
-      const { data: documents, error: documentsError } = await supabase
-        .from('documents')
-        .select('id, wrapped_dek, file_iv, is_encrypted')
-        .eq('user_id', user.id)
-        .eq('is_encrypted', true)
+      const relationshipKey = await loadOrCreateRelationshipKeyMaterial({
+        supabase,
+        ownerId: user.id,
+        trustedPersonId: person.id,
+        masterKey: vaultContext.masterKey,
+      })
 
-      if (documentsError) {
-        throw new Error('Fehler beim Laden der Dokumente')
+      const invitationResponse = await fetch('/api/trusted-access/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trustedPersonId: person.id,
+          bootstrapRelationshipKey: relationshipKey.hex,
+        }),
+      })
+      const invitationData = await invitationResponse.json()
+      if (!invitationResponse.ok) {
+        throw new Error(invitationData.error || 'Sicherer Zugriffslink konnte nicht erstellt werden')
       }
 
-      const shareResults = await Promise.all(
-        (documents || []).map(async (doc) => {
-          try {
-            const dek = await unwrapKey(doc.wrapped_dek, vaultContext.masterKey!, 'AES-GCM')
-            const wrapped_dek_for_tp = await wrapKey(dek, rkCryptoKey)
-
-            const shareResponse = await fetch('/api/documents/share-token', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                documentId: doc.id,
-                trustedPersonId: person.id,
-                wrapped_dek_for_tp,
-              }),
-            })
-            return shareResponse.ok
-          } catch {
-            // Skip documents that fail to re-wrap for this trusted person.
-            return false
-          }
-        })
-      )
-
-      const successfulShares = shareResults.filter(Boolean).length
-      if (successfulShares === 0) {
-        throw new Error('Keine Dokumente konnten für diese Vertrauensperson freigegeben werden')
-      }
-
-      const shareUrl = `${window.location.origin}/zugriff/access?ownerId=${user.id}#${rk}`
-
-      setRkShareUrl(shareUrl)
+      setRkShareUrl(invitationData.invitationUrl)
+      setRkShareExpiresAt(invitationData.expiresAt ?? null)
       setRkDialogOpen(true)
-      if (successfulShares < (documents || []).length) {
-        setError('Einige Dokumente konnten nicht freigegeben werden. Bitte prüfen Sie die aktiven Freigaben.')
-      }
     } catch (err: any) {
-      alert('Fehler beim Erstellen des Zugriffslinks: ' + err.message)
+      alert('Fehler beim Erstellen des sicheren Zugriffslinks: ' + err.message)
     } finally {
       setIsGeneratingRk(null)
     }
@@ -1280,12 +1243,12 @@ export default function ZugriffPage() {
                                   {isGeneratingRk === person.id ? (
                                     <>
                                       <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                      Zugriffslink
+                                      Sicherer Link
                                     </>
                                   ) : (
                                     <>
                                       <Key className="w-4 h-4 mr-1" />
-                                      Zugriffslink
+                                      Sicherer Link
                                     </>
                                   )}
                                 </Button>
@@ -1298,8 +1261,8 @@ export default function ZugriffPage() {
                                   <TooltipContent side="top" className="max-w-xs text-xs">
                                     <p className="font-medium mb-1">Zwei separate Schritte:</p>
                                     <p>1. Dokumente freigeben (bereits erledigt)</p>
-                                    <p>2. Zugriffslink manuell senden — die App sendet ihn nicht automatisch.</p>
-                                    <p className="mt-1 text-warmgray-400">Die Person muss ihn einmal pro Gerät öffnen.</p>
+                                    <p>2. Sicheren Zugriffslink manuell senden — die App sendet ihn nicht automatisch.</p>
+                                    <p className="mt-1 text-warmgray-400">Er ist 15 Minuten gueltig und funktioniert nur einmal.</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </div>
@@ -2026,9 +1989,9 @@ export default function ZugriffPage() {
                   <Key className="w-5 h-5 text-sage-700" aria-hidden="true" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-warmgray-900">Zugriffslink erstellt</h3>
+                  <h3 className="text-lg font-semibold text-warmgray-900">Sicherer Zugriffslink erstellt</h3>
                   <p className="text-sm text-warmgray-600">
-                    Der Link wurde erstellt und ist bereit zum Versenden.
+                    Der Link wurde erstellt und ist bereit zum sofortigen Versenden.
                   </p>
                 </div>
               </div>
@@ -2040,13 +2003,15 @@ export default function ZugriffPage() {
                   <div className="text-sm text-blue-800 space-y-1">
                     <p className="font-semibold">Dieser Link wird nicht automatisch verschickt.</p>
                     <p>Sie müssen ihn selbst per Messenger, E-Mail oder SMS weiterleiten.</p>
+                    <p>Er verfällt nach 15 Minuten und kann nur einmal verwendet werden.</p>
+                    <p>Wenn sich die Vertrauensperson mit dem falschen Konto anmeldet, müssen Sie einen neuen Link erzeugen.</p>
                     {seniorMode && (
                       <ol className="mt-2 space-y-1 list-decimal list-inside text-blue-700">
-                        <li>Kopieren Sie den Link unten mit dem Knopf.</li>
-                        <li>Öffnen Sie WhatsApp, E-Mail oder SMS.</li>
-                        <li>Fügen Sie den Link ein und senden Sie ihn.</li>
-                        <li>Die Person muss den Link einmal auf ihrem Gerät öffnen.</li>
-                        <li>Danach kann sie Ihre freigegebenen Dokumente sehen.</li>
+                        <li>Dokumente sind bereits freigegeben.</li>
+                        <li>Kopieren Sie jetzt den sicheren Link.</li>
+                        <li>Senden Sie ihn sofort per WhatsApp, E-Mail oder SMS.</li>
+                        <li>Die Person meldet sich mit der eingeladenen E-Mail-Adresse an.</li>
+                        <li>Danach bestaetigt sie den Code aus ihrer E-Mail.</li>
                       </ol>
                     )}
                   </div>
@@ -2069,7 +2034,7 @@ export default function ZugriffPage() {
                       </p>
                       {seniorMode && (
                         <p className="text-green-700 mt-1">
-                          Die Person muss den Link nur einmal öffnen. Danach funktioniert der Zugriff auf diesem Gerät dauerhaft.
+                          Die Person muss den Link sofort oeffnen, sich anmelden und den Code aus ihrer E-Mail eingeben.
                         </p>
                       )}
                     </div>
@@ -2078,8 +2043,15 @@ export default function ZugriffPage() {
               )}
 
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-xs sm:text-sm">
-                <span className="font-medium">Vertraulich:</span> Jeder mit diesem Link kann Ihre freigegebenen Dokumente lesen.
+                <span className="font-medium">Wichtig:</span> Senden Sie den Link direkt nach dem Kopieren, weil er nur 15 Minuten gueltig ist.
               </div>
+
+              {rkShareExpiresAt && (
+                <div className="text-xs text-warmgray-500">
+                  Gueltig bis: {new Date(rkShareExpiresAt).toLocaleDateString('de-DE')}{' '}
+                  {new Date(rkShareExpiresAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-2">
                 {!rkPostCopyStep ? (
@@ -2122,6 +2094,7 @@ export default function ZugriffPage() {
                   onClick={() => {
                     setRkDialogOpen(false)
                     setRkShareUrl(null)
+                    setRkShareExpiresAt(null)
                     setRkLinkCopied(false)
                     setRkPostCopyStep(false)
                   }}

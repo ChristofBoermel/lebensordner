@@ -2631,3 +2631,44 @@ Rollback:
   - `docs/temp-backend-trusted-access-hardening.md`
   - `docs/temp-frontend-trusted-access-hardening.md`
   - `docs/ai-changelog.md`
+
+## 2026-03-12 20:21 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Replaced the fragment-based trusted-person access bootstrap with a server-controlled secure invitation flow: new `trusted_access_invitations`, OTP challenge, and device enrollment tables plus invitation creation, redemption, OTP send/verify, pending-state, and completion APIs.
+- Updated owner `/zugriff` link generation to create short-lived single-use secure invitation URLs without bulk-sharing encrypted documents, added login resume support via `next`, and added a new recipient secure-access setup page with OTP confirmation and browser enrollment.
+- Switched recipient readiness checks to the new trusted-access model and browser enrollment cookie across share-token, family view/download, trusted-person dashboard, and received-shares UI while keeping client-side relationship-key persistence only after server-validated redemption.
+
+Risk / Regression Watch:
+- The new device enrollment cookie now drives encrypted-document readiness; monitor multi-owner trusted-person setups and browser-storage clearing flows because the raw relationship key still persists client-side as a phase-one fallback after successful redemption.
+- Focused Vitest coverage for the old share-token readiness contract now needs refresh: `tests/api/share-token.test.ts` and `tests/api/family-access-link.test.ts` still assert the pre-hardening response shape and mock sequencing, so they currently fail even though typecheck/lint/logging checks pass.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/api/family-access-link.test.ts tests/api/share-token.test.ts tests/components/sharing.test.tsx tests/pages/vp-dashboard-view.test.tsx tests/pages/zugriff.test.tsx` (currently failing on outdated share-token/family-access-link expectations)
+
+Rollback:
+- Revert:
+  - `supabase/migrations/20260312090000_trusted_access_invitations.sql`
+  - `src/lib/security/trusted-access.ts`
+  - `src/lib/security/relationship-key.ts`
+  - `src/app/api/trusted-access/invitations/route.ts`
+  - `src/app/api/trusted-access/invitations/redeem/route.ts`
+  - `src/app/api/trusted-access/invitations/pending/route.ts`
+  - `src/app/api/trusted-access/invitations/otp/send/route.ts`
+  - `src/app/api/trusted-access/invitations/otp/verify/route.ts`
+  - `src/app/api/trusted-access/invitations/complete/route.ts`
+  - `src/app/(dashboard)/zugriff/access/redeem/page.tsx`
+  - `src/app/(dashboard)/zugriff/access/page.tsx`
+  - `src/app/(auth)/anmelden/page.tsx`
+  - `src/app/(dashboard)/zugriff/page.tsx`
+  - `src/app/(dashboard)/vp-dashboard/view/[ownerId]/page.tsx`
+  - `src/components/sharing/ReceivedSharesList.tsx`
+  - `src/app/api/documents/share-token/route.ts`
+  - `src/app/api/documents/share-token/received/route.ts`
+  - `src/app/api/family/view/route.ts`
+  - `src/app/api/family/download/route.ts`
+  - `src/app/api/family/members/route.ts`
+  - `docs/ai-changelog.md`

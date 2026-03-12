@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { isActiveShareToken } from '@/lib/security/share-token-status'
 import {
   isLegacyShareTokenSchemaError,
   withLegacyShareTokenDefaults,
 } from '@/lib/security/share-token-compat'
 import {
-  buildManualAccessLinkGuidance,
-  fetchRelationshipKeyPairSet,
-  hasRelationshipKeyForPair,
-} from '@/lib/security/access-link-readiness'
+  buildOwnerTrustedAccessStatus,
+  fetchLatestTrustedAccessInvitationMap,
+  fetchTrustedAccessDevicePairSet,
+} from '@/lib/security/trusted-access'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
 type ShareTokenError = {
@@ -46,8 +47,14 @@ type OwnerTrustedPersonRow = {
 type OwnerShareTokenRow = OwnerShareTokenBaseRow & {
   documents: OwnerShareDocumentRow | null
   trusted_persons: OwnerTrustedPersonRow | null
-  access_link_setup: ReturnType<typeof buildManualAccessLinkGuidance>
+  access_link_setup: ReturnType<typeof buildOwnerTrustedAccessStatus>
 }
+
+const getSupabaseAdmin = () =>
+  createClient(
+    process.env['SUPABASE_URL']!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
 
 async function fetchOwnerShareRows(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, ownerId: string) {
   let data: OwnerShareTokenBaseRow[] | null = null
@@ -281,10 +288,19 @@ export async function GET(request: Request) {
     }
   }
 
-  let relationshipKeyPairs = new Set<string>()
+  let deviceEnrollmentPairs = new Set<string>()
+  let latestInvitationMap = new Map<string, { status: string; expiresAt: string | null }>()
   try {
-    relationshipKeyPairs = await fetchRelationshipKeyPairSet(
-      supabase,
+    const adminClient = getSupabaseAdmin()
+    deviceEnrollmentPairs = await fetchTrustedAccessDevicePairSet(
+      adminClient,
+      activeTokens.map((token) => ({
+        ownerId,
+        trustedPersonId: token.trusted_person_id,
+      }))
+    )
+    latestInvitationMap = await fetchLatestTrustedAccessInvitationMap(
+      adminClient,
       activeTokens.map((token) => ({
         ownerId,
         trustedPersonId: token.trusted_person_id,
@@ -307,10 +323,14 @@ export async function GET(request: Request) {
     ...token,
     documents: documentsById.get(token.document_id) ?? null,
     trusted_persons: trustedPersonsById.get(token.trusted_person_id) ?? null,
-    access_link_setup: buildManualAccessLinkGuidance(
-      hasRelationshipKeyForPair(relationshipKeyPairs, ownerId, token.trusted_person_id),
-      true
-    ),
+    access_link_setup: buildOwnerTrustedAccessStatus({
+      hasExplicitShares: true,
+      hasPendingInvitation:
+        latestInvitationMap.get(`${ownerId}:${token.trusted_person_id}`)?.status === 'pending',
+      invitationExpiresAt:
+        latestInvitationMap.get(`${ownerId}:${token.trusted_person_id}`)?.expiresAt ?? null,
+      hasDeviceEnrollment: deviceEnrollmentPairs.has(`${ownerId}:${token.trusted_person_id}:*`),
+    }),
   }))
 
   return NextResponse.json({ tokens })

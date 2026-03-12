@@ -8,10 +8,12 @@ import {
   withLegacyShareTokenDefaults,
 } from '@/lib/security/share-token-compat'
 import {
-  buildAccessLinkReadiness,
-  fetchRelationshipKeyPairSet,
-  hasRelationshipKeyForPair,
-} from '@/lib/security/access-link-readiness'
+  buildTrustedAccessReadiness,
+  fetchLatestTrustedAccessInvitationMap,
+  readCookieValueFromHeader,
+  TRUSTED_ACCESS_DEVICE_COOKIE,
+  validateTrustedAccessDevice,
+} from '@/lib/security/trusted-access'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
 type ShareTokenError = {
@@ -50,7 +52,7 @@ type ReceivedShareProfileRow = {
 type ReceivedShareRow = ReceivedShareBaseRow & {
   documents: ReceivedShareDocumentRow | null
   profiles: ReceivedShareProfileRow | null
-  access_link_readiness: ReturnType<typeof buildAccessLinkReadiness>
+  access_link_readiness: ReturnType<typeof buildTrustedAccessReadiness>
 }
 
 function createMissingDocumentFallback(documentId: string): ReceivedShareDocumentRow {
@@ -243,9 +245,25 @@ export async function GET(request: Request) {
     }
   }
 
-  let relationshipKeyPairs = new Set<string>()
+  const deviceCookieValue = readCookieValueFromHeader(request.headers.get('cookie'), TRUSTED_ACCESS_DEVICE_COOKIE)
+  const deviceEnrollmentMap = new Map<string, { enrolled: boolean; revoked: boolean }>()
+  let latestInvitationMap = new Map<string, { status: string; expiresAt: string | null }>()
   try {
-    relationshipKeyPairs = await fetchRelationshipKeyPairSet(
+    for (const share of activeShares) {
+      const key = `${share.owner_id}:${share.trusted_person_id}`
+      if (!deviceEnrollmentMap.has(key)) {
+        deviceEnrollmentMap.set(
+          key,
+          await validateTrustedAccessDevice(adminClient, {
+            rawCookieValue: deviceCookieValue,
+            ownerId: share.owner_id,
+            trustedPersonId: share.trusted_person_id,
+            userId: user.id,
+          })
+        )
+      }
+    }
+    latestInvitationMap = await fetchLatestTrustedAccessInvitationMap(
       adminClient,
       activeShares.map((share) => ({
         ownerId: share.owner_id,
@@ -255,10 +273,10 @@ export async function GET(request: Request) {
   } catch (relationshipKeyError: any) {
     emitStructuredWarn({
       event_type: 'api',
-      event_message: '[Received Share Token API] Unable to hydrate relationship-key readiness metadata',
+      event_message: '[Received Share Token API] Unable to hydrate trusted-access readiness metadata',
       endpoint: '/api/documents/share-token/received',
       metadata: {
-        operation: 'list_received_relationship_keys',
+        operation: 'list_received_trusted_access',
         message: relationshipKeyError?.message ?? String(relationshipKeyError),
       },
     })
@@ -268,10 +286,15 @@ export async function GET(request: Request) {
     ...share,
     documents: documentsById.get(share.document_id) ?? createMissingDocumentFallback(share.document_id),
     profiles: profilesByOwnerId.get(share.owner_id) ?? createMissingProfileFallback(),
-    access_link_readiness: buildAccessLinkReadiness(
-      hasRelationshipKeyForPair(relationshipKeyPairs, share.owner_id, share.trusted_person_id),
-      'unknown'
-    ),
+    access_link_readiness: buildTrustedAccessReadiness({
+      hasExplicitShares: true,
+      hasDeviceEnrollment:
+        deviceEnrollmentMap.get(`${share.owner_id}:${share.trusted_person_id}`)?.enrolled ?? false,
+      deviceRevoked:
+        deviceEnrollmentMap.get(`${share.owner_id}:${share.trusted_person_id}`)?.revoked ?? false,
+      latestInvitationStatus:
+        latestInvitationMap.get(`${share.owner_id}:${share.trusted_person_id}`)?.status ?? null,
+    }),
   }))
 
   return NextResponse.json({ shares })
