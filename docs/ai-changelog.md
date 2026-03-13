@@ -2820,3 +2820,29 @@ Rollback:
   - `src/app/api/trusted-access/invitations/route.ts`
   - `tests/api/trusted-access-invitations.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-13 00:56 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed trusted-access redemption entry so newly generated secure links now go through `/api/trusted-access/invitations/redeem`, which sets the pending invitation cookie before redirecting unauthenticated users to login.
+- Exempted `/zugriff/access/redeem` from the generic protected-route middleware redirect so old page-based links can still recover instead of dropping the token at `/anmelden`.
+- Added a redeem-page fallback that forwards any legacy `?token=` page visits into the redeem API flow, plus regression coverage for the generated link target and middleware exception.
+
+Risk / Regression Watch:
+- Previously copied secure links that already expired will still fail as expected; this only repairs valid invitation links whose token was being lost before redemption.
+- The owner/trusted-user success toast described in the product flow is not implemented by this patch; the fix restores verification and browser enrollment, but cross-session confirmation UI still needs a separate implementation.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-invitations.test.ts tests/unit/supabase-middleware.test.ts`
+
+Rollback:
+- Revert:
+  - `src/app/api/trusted-access/invitations/route.ts`
+  - `src/app/(dashboard)/zugriff/access/redeem/page.tsx`
+  - `src/lib/supabase/middleware.ts`
+  - `tests/api/trusted-access-invitations.test.ts`
+  - `tests/unit/supabase-middleware.test.ts`
+  - `docs/ai-changelog.md`

@@ -17,6 +17,7 @@ function RedeemPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialStatus = searchParams.get('status')
+  const token = searchParams.get('token')
   const [pendingState, setPendingState] = useState<PendingState | null>(null)
   const [otp, setOtp] = useState('')
   const [message, setMessage] = useState<string | null>(null)
@@ -28,6 +29,11 @@ function RedeemPageInner() {
 
   // allowed: I/O - load pending secure-access redemption state from the server
   useEffect(() => {
+    if (token) {
+      window.location.replace(`/api/trusted-access/invitations/redeem?token=${encodeURIComponent(token)}`)
+      return
+    }
+
     async function loadPendingState() {
       if (initialStatus === 'expired' || initialStatus === 'revoked' || initialStatus === 'wrong_account') {
         setPendingState({
@@ -60,7 +66,7 @@ function RedeemPageInner() {
     }
 
     void loadPendingState()
-  }, [initialStatus])
+  }, [initialStatus, token])
 
   async function handleSendOtp() {
     setIsSendingOtp(true)

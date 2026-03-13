@@ -114,7 +114,7 @@ export async function POST(request: Request) {
     }
 
     const origin = resolvePublicOrigin(request)
-    const invitationUrl = `${origin}/zugriff/access/redeem?token=${encodeURIComponent(token)}`
+    const invitationUrl = `${origin}/api/trusted-access/invitations/redeem?token=${encodeURIComponent(token)}`
 
     return NextResponse.json({
       invitationUrl,

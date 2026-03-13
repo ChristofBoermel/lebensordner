@@ -58,7 +58,7 @@ describe('Trusted access invitations API', () => {
     vi.resetModules()
   })
 
-  it('creates a secure invitation link using forwarded public headers', async () => {
+  it('creates a secure invitation link using the redeem API entrypoint', async () => {
     const trustedPersonChain = {
       select: vi.fn(() => trustedPersonChain),
       eq: vi.fn(() => trustedPersonChain),
@@ -128,7 +128,7 @@ describe('Trusted access invitations API', () => {
 
     expect(response.status).toBe(200)
     expect(data).toMatchObject({
-      invitationUrl: 'https://lebensordner.org/zugriff/access/redeem?token=token-123',
+      invitationUrl: 'https://lebensordner.org/api/trusted-access/invitations/redeem?token=token-123',
       expiresAt: '2026-03-13T12:15:00.000Z',
       deliveryMode: 'manual',
       singleUse: true,

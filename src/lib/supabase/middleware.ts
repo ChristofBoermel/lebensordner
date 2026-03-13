@@ -78,8 +78,13 @@ export async function updateSession(request: NextRequest) {
   const protectedRoutes = ['/dashboard', '/dokumente', '/notfall', '/zugriff']
   const authRoutes = ['/anmelden', '/registrieren']
   const pathname = request.nextUrl.pathname
+  const isTrustedAccessRedeemRoute = pathname === '/zugriff/access/redeem'
 
-  if (!user && protectedRoutes.some(route => pathname.startsWith(route))) {
+  if (
+    !user &&
+    !isTrustedAccessRedeemRoute &&
+    protectedRoutes.some(route => pathname.startsWith(route))
+  ) {
     return NextResponse.redirect(new URL('/anmelden', request.url))
   }
 
