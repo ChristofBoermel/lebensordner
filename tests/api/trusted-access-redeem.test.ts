@@ -55,46 +55,29 @@ describe('Trusted access redeem API', () => {
   })
 
   it('redirects unauthenticated users to the public login origin while preserving the pending cookie', async () => {
+    const invitationRecord = {
+      id: 'inv-1',
+      owner_id: 'owner-1',
+      trusted_person_id: 'tp-1',
+      status: 'pending',
+      expires_at: '2099-03-13T12:15:00.000Z',
+      trusted_persons: {
+        id: 'tp-1',
+        email: 'trusted@example.com',
+        linked_user_id: 'trusted-user-1',
+        invitation_status: 'accepted',
+        is_active: true,
+      },
+    }
+
     const invitationChain = {
       select: vi.fn(() => invitationChain),
       eq: vi.fn(() => invitationChain),
       maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: 'inv-1',
-          owner_id: 'owner-1',
-          trusted_person_id: 'tp-1',
-          status: 'pending',
-          expires_at: '2099-03-13T12:15:00.000Z',
-          trusted_persons: {
-            id: 'tp-1',
-            email: 'trusted@example.com',
-            linked_user_id: 'trusted-user-1',
-            invitation_status: 'accepted',
-            is_active: true,
-          },
-        },
+        data: invitationRecord,
         error: null,
       }),
     }
-    invitationChain.eq
-      .mockImplementationOnce(() => invitationChain)
-      .mockImplementationOnce(() => Promise.resolve({
-        data: {
-          id: 'inv-1',
-          owner_id: 'owner-1',
-          trusted_person_id: 'tp-1',
-          status: 'pending',
-          expires_at: '2099-03-13T12:15:00.000Z',
-          trusted_persons: {
-            id: 'tp-1',
-            email: 'trusted@example.com',
-            linked_user_id: 'trusted-user-1',
-            invitation_status: 'accepted',
-            is_active: true,
-          },
-        },
-        error: null,
-      }))
 
     createClientMock.mockReturnValue({
       from: vi.fn(() => invitationChain),
@@ -113,5 +96,6 @@ describe('Trusted access redeem API', () => {
     expect(response.status).toBe(307)
     expect(response.headers.get('location')).toBe('https://lebensordner.org/anmelden?next=/zugriff/access/redeem')
     expect(response.cookies.get('trusted_access_pending')?.value).toBe('pending-cookie-value')
+    expect(response.headers.get('set-cookie')).toContain('trusted_access_pending=pending-cookie-value')
   })
 })

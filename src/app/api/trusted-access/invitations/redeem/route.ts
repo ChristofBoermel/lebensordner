@@ -16,6 +16,31 @@ const getSupabaseAdmin = () =>
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
+function setPendingInvitationCookie(
+  response: NextResponse,
+  invitation: {
+    id: string
+    owner_id: string
+    trusted_person_id: string
+  },
+  expectedEmail: string
+) {
+  response.cookies.set({
+    name: TRUSTED_ACCESS_PENDING_COOKIE,
+    value: createTrustedAccessPendingCookie({
+      invitationId: invitation.id,
+      ownerId: invitation.owner_id,
+      trustedPersonId: invitation.trusted_person_id,
+      expectedEmail,
+    }),
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: true,
+    path: '/',
+    maxAge: 15 * 60,
+  })
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const publicOrigin = resolvePublicOrigin(request)
@@ -96,26 +121,12 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL(`/zugriff/access/redeem?status=${nextStatus}`, publicOrigin))
     }
 
-    const response = NextResponse.redirect(new URL('/zugriff/access/redeem', publicOrigin))
-    response.cookies.set({
-      name: TRUSTED_ACCESS_PENDING_COOKIE,
-      value: createTrustedAccessPendingCookie({
-        invitationId: invitation.id,
-        ownerId: invitation.owner_id,
-        trustedPersonId: invitation.trusted_person_id,
-        expectedEmail: trustedPerson.email,
-      }),
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: true,
-      path: '/',
-      maxAge: 15 * 60,
-    })
-
     if (!user) {
-      return NextResponse.redirect(new URL('/anmelden?next=/zugriff/access/redeem', publicOrigin), {
-        headers: response.headers,
-      })
+      const loginRedirectResponse = NextResponse.redirect(
+        new URL('/anmelden?next=/zugriff/access/redeem', publicOrigin)
+      )
+      setPendingInvitationCookie(loginRedirectResponse, invitation, trustedPerson.email)
+      return loginRedirectResponse
     }
 
     const normalizedUserEmail = user.email?.toLowerCase().trim() ?? ''
@@ -134,11 +145,15 @@ export async function GET(request: Request) {
         },
       })
 
-      return NextResponse.redirect(new URL('/zugriff/access/redeem?status=wrong_account', publicOrigin), {
-        headers: response.headers,
-      })
+      const wrongAccountRedirectResponse = NextResponse.redirect(
+        new URL('/zugriff/access/redeem?status=wrong_account', publicOrigin)
+      )
+      setPendingInvitationCookie(wrongAccountRedirectResponse, invitation, trustedPerson.email)
+      return wrongAccountRedirectResponse
     }
 
+    const response = NextResponse.redirect(new URL('/zugriff/access/redeem', publicOrigin))
+    setPendingInvitationCookie(response, invitation, trustedPerson.email)
     return response
   } catch (error: any) {
     emitStructuredError({
