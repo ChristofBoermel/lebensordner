@@ -12,6 +12,8 @@ The goal is consistent handoffs, low duplication, and fewer regressions.
 - `docs/ai-context.md`: stable project context and architecture snapshot.
 - `docs/ops/*.md`: operational runbooks and incident procedures.
 - `docs/ai-changelog.md`: rolling memory for major implementation changes.
+- `ai/context/repo-guardrails.md`: generated internal AI bundle that includes `AGENTS.md`, `.claude/rules/*`, and AI collaboration context for prompt/eval workflows.
+- `ai/prompts/*`: internal-only prompt templates for coding, review, incident, and design-reference assistance.
 
 ## Required Workflow For Every AI Session
 1. Read `AGENTS.md` and cross-reference `.claude/rules/*` before implementing.
@@ -21,6 +23,7 @@ The goal is consistent handoffs, low duplication, and fewer regressions.
 - backend and API changes: `npm run type-check`, `npm run lint`
 - CI/CD or deploy changes: `python scripts/ops/pre-deploy-qa.py --no-tsc`
 - logging-sensitive API changes: `python scripts/ops/logging-audit.py`
+- internal AI workflow changes: `npm run ai:context`, `npm run ai:audit`, `npm run ai:eval`
 5. Add one entry to `docs/ai-changelog.md` for every major change.
 
 ## What Counts As A Major Change

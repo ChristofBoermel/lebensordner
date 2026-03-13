@@ -38,7 +38,13 @@
     "ui-audit:hints": "python scripts/ops/agent-rules-audit.py --fix-hints",
     "audit:agent-rules": "python scripts/ops/agent-rules-audit.py",
     "audit:logging": "python scripts/ops/logging-audit.py",
-    "audit:hook-discipline": "python scripts/ops/hook-discipline-audit.py"
+    "audit:hook-discipline": "python scripts/ops/hook-discipline-audit.py",
+    "ai:context": "python scripts/ops/build_ai_context.py",
+    "ai:audit": "python scripts/ops/ai-workflow-audit.py",
+    "ai:eval": "node scripts/ops/run-promptfoo.mjs eval -c ai/promptfoo/promptfooconfig.ci.yaml",
+    "ai:eval:live": "node scripts/ops/run-promptfoo.mjs eval -c ai/promptfoo/promptfooconfig.live.codex.yaml",
+    "ai:eval:live:codex": "node scripts/ops/run-promptfoo.mjs eval -c ai/promptfoo/promptfooconfig.live.codex.yaml",
+    "ai:eval:live:claude-frontend": "node scripts/ops/run-promptfoo.mjs eval -c ai/promptfoo/promptfooconfig.live.claude-frontend.yaml"
   },
   "keywords": [
     "lebensordner",
@@ -86,8 +92,8 @@
     "posthog-js": "^1.321.2",
     "posthog-node": "^5.21.0",
     "qrcode": "^1.5.4",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
     "react-dropzone": "^14.3.8",
     "resend": "^6.7.0",
     "stripe": "^20.1.2",
@@ -110,6 +116,7 @@
     "jsdom": "^27.0.1",
     "msw": "^2.12.7",
     "postcss": "^8.5.6",
+    "promptfoo": "^0.121.2",
     "tailwindcss": "^3.4.17",
     "turbo": "^2.6.1",
     "vitest": "^3.2.4"

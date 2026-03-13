@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import {
   buildTrustedAccessInvitationExpiry,
@@ -10,12 +10,6 @@ import {
   hashTrustedAccessToken,
   TRUSTED_ACCESS_INVITATION_TTL_MINUTES,
 } from '@/lib/security/trusted-access'
-
-const getSupabaseAdmin = () =>
-  createClient(
-    process.env['SUPABASE_URL']!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
 
 export async function POST(request: Request) {
   try {
@@ -39,7 +33,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
-    const adminClient = getSupabaseAdmin()
+    const adminClient = createServiceRoleSupabaseClient()
 
     const { data: trustedPerson, error: trustedPersonError } = await adminClient
       .from('trusted_persons')
@@ -69,12 +63,25 @@ export async function POST(request: Request) {
     const nowIso = new Date().toISOString()
     const expiresAt = buildTrustedAccessInvitationExpiry()
 
-    await adminClient
+    const { error: replaceInvitationError } = await adminClient
       .from('trusted_access_invitations')
       .update({ status: 'replaced', revoked_at: nowIso })
       .eq('owner_id', user.id)
       .eq('trusted_person_id', trustedPersonId)
       .eq('status', 'pending')
+
+    if (replaceInvitationError) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `[Trusted Access Invitations API] Failed to replace prior invitation: ${replaceInvitationError.message}`,
+        endpoint: '/api/trusted-access/invitations',
+        metadata: {
+          ownerId: user.id,
+          trustedPersonId,
+        },
+      })
+      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    }
 
     const token = generateTrustedAccessToken()
     const tokenHash = hashTrustedAccessToken(token)
@@ -117,9 +124,12 @@ export async function POST(request: Request) {
       expiresInMinutes: TRUSTED_ACCESS_INVITATION_TTL_MINUTES,
     })
   } catch (error: any) {
+    const errorMessage = error?.message ?? String(error)
+    const errorType = /service-role environment variables/i.test(errorMessage) ? 'config' : 'api'
+
     emitStructuredError({
-      error_type: 'api',
-      error_message: `[Trusted Access Invitations API] Unexpected error: ${error?.message ?? String(error)}`,
+      error_type: errorType,
+      error_message: `[Trusted Access Invitations API] Unexpected error: ${errorMessage}`,
       endpoint: '/api/trusted-access/invitations',
       stack: error?.stack,
     })

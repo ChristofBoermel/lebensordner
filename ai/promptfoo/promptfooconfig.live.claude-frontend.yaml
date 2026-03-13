@@ -1,0 +1,32 @@
+description: Lebensordner Claude-style frontend prompt pack
+
+prompts:
+  - ../prompts/frontend-implementation-assistant.md
+  - ../prompts/design-critic.md
+
+providers:
+  - echo
+
+tests:
+  - description: Claude-style frontend prompts include AGENTS and shared AI context requirements
+    assert:
+      - type: contains
+        value: AGENTS.md
+      - type: contains
+        value: docs/ai-context.md
+      - type: contains
+        value: docs/ai-collaboration.md
+  - description: Claude-style frontend prompts include .claude rules as non-optional context
+    assert:
+      - type: contains
+        value: .claude/rules
+      - type: contains
+        value: ai/context/repo-guardrails.md
+  - description: Claude-style frontend prompts preserve the internal-only scope and data boundary
+    assert:
+      - type: icontains
+        value: internal
+      - type: icontains
+        value: sensitive
+      - type: icontains
+        value: vault

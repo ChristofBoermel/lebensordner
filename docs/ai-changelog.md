@@ -2693,3 +2693,106 @@ Rollback:
   - `tests/api/family-access-link.test.ts`
   - `tests/api/share-token.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-12 21:21 UTC | Agent: Codex | Commit: d64c8b9
+
+Change:
+- Added an internal-only `ai/` workspace with prompt templates for implementation, review, incident/CI, and design critique plus a generated `ai/context/repo-guardrails.md` bundle that includes `AGENTS.md`, the mandatory `.claude/rules/*`, and the AI collaboration/context docs.
+- Installed `promptfoo`, added deterministic CI-safe eval configs and an isolated repo-local promptfoo runner, and introduced `scripts/ops/build_ai_context.py` plus `scripts/ops/ai-workflow-audit.py` so prompt workflows stay coupled to repository guardrails.
+- Wired the new internal AI workflow into `package.json`, updated `docs/ai-collaboration.md`, and added an `ai-workflow-guard` job to `.github/workflows/ci.yml` that rebuilds context, audits prompt scaffolding, and runs the promptfoo echo eval before other CI jobs.
+
+Risk / Regression Watch:
+- The promptfoo CI guard currently validates prompt structure and guardrail presence using the `echo` provider; it will not catch live-model quality regressions until `npm run ai:eval:live` is used with approved provider credentials.
+- `scripts/ops/run-promptfoo.mjs` forces promptfoo home/config into `.cache/promptfoo-home`; if future promptfoo upgrades change home-directory handling, re-verify local and CI execution before tightening the guard.
+
+Verification:
+- `python scripts/ops/build_ai_context.py`
+- `python scripts/ops/ai-workflow-audit.py`
+- `npm run ai:eval`
+- `npm run lint`
+- `npm run type-check`
+
+Rollback:
+- Revert:
+  - `.github/workflows/ci.yml`
+  - `docs/ai-collaboration.md`
+  - `package.json`
+  - `package-lock.json`
+  - `ai/`
+  - `scripts/ops/ai-workflow-audit.py`
+  - `scripts/ops/build_ai_context.py`
+  - `scripts/ops/run-promptfoo.mjs`
+  - `docs/ai-changelog.md`
+
+## 2026-03-12 21:28 UTC | Agent: Codex | Commit: d64c8b9
+
+Change:
+- Extended the internal AI workflow with a frontend-specific prompt template and split the optional live eval profiles by actual usage: Claude for frontend/design prompts and Codex/OpenAI for general implementation, review, and incident prompts.
+- Added provider-specific `promptfoo` configs for `anthropic:messages:claude-sonnet-4-6` and `openai:codex-sdk`, updated the deterministic CI config to include the new frontend implementation prompt, and exposed dedicated scripts in `package.json` for `ai:eval:live:claude-frontend` and `ai:eval:live:codex`.
+- Updated `ai/README.md` so the live workflow documents the environment variables and the optional `@openai/codex-sdk` dependency required for the Codex profile.
+
+Risk / Regression Watch:
+- The Codex live profile depends on the optional `@openai/codex-sdk` package and was not executed during verification; if you plan to use it immediately, install that dependency first and verify the provider still accepts the configured `model` and `working_dir` options.
+- The provider model identifiers used here reflect current promptfoo docs as of March 12, 2026; re-check the official provider docs if you later rotate to newer Claude or OpenAI/Codex model names.
+
+Verification:
+- `python scripts/ops/ai-workflow-audit.py`
+- `npm run ai:eval`
+
+Rollback:
+- Revert:
+  - `ai/README.md`
+  - `ai/prompts/frontend-implementation-assistant.md`
+  - `ai/promptfoo/promptfooconfig.ci.yaml`
+  - `ai/promptfoo/promptfooconfig.live.codex.yaml`
+  - `ai/promptfoo/promptfooconfig.live.claude-frontend.yaml`
+  - `package.json`
+  - `docs/ai-changelog.md`
+
+## 2026-03-12 22:35 UTC | Agent: Codex | Commit: d64c8b9
+
+Change:
+- Removed the paid API dependency from the provider-specific promptfoo profiles and converted the Claude-style frontend pack and Codex-style engineering pack into no-cost deterministic `echo` checks.
+- Updated `ai/README.md` to document the new no-cost workflow and kept the role split aligned with actual usage: Claude-style frontend prompts and Codex-style general engineering prompts.
+- Updated the internal AI workflow audit so it now enforces `echo` as the provider for both profile-specific packs instead of expecting Anthropic or Codex SDK integrations.
+
+Risk / Regression Watch:
+- The role-specific packs are now prompt-guardrail checks only, not live model evaluations, so they will not measure actual Claude or Codex answer quality unless a separate live-model workflow is introduced later.
+- The script names still include `ai:eval:live:*` for continuity; if that label becomes confusing, consider renaming them to `ai:eval:pack:*` in a follow-up cleanup.
+
+Verification:
+- `python scripts/ops/ai-workflow-audit.py`
+- `npm run ai:eval:live:codex`
+- `npm run ai:eval:live:claude-frontend`
+
+Rollback:
+- Revert:
+  - `ai/README.md`
+  - `ai/promptfoo/promptfooconfig.live.codex.yaml`
+  - `ai/promptfoo/promptfooconfig.live.claude-frontend.yaml`
+  - `scripts/ops/ai-workflow-audit.py`
+  - `docs/ai-changelog.md`
+
+## 2026-03-13 11:20 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Hardened `/api/trusted-access/invitations` so it now uses a shared service-role Supabase client helper with `SUPABASE_URL` or `NEXT_PUBLIC_SUPABASE_URL` fallback.
+- Added explicit error handling for replacing prior pending invitations before creating a new secure link.
+- Added a focused API regression test for successful invitation creation and service-role configuration failure handling.
+
+Risk / Regression Watch:
+- If your local or deployed database is missing the `trusted_access_*` tables, the route will still return 500; this patch makes the path safer and easier to diagnose, but it does not replace the required migration.
+- The new Vitest coverage could not be executed in this sandbox because `vite/esbuild` hit `spawn EPERM`; run the targeted test locally to confirm the mock chain behaves exactly as expected.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-invitations.test.ts` (blocked in sandbox: `spawn EPERM`)
+
+Rollback:
+- Revert:
+  - `src/lib/supabase/admin.ts`
+  - `src/app/api/trusted-access/invitations/route.ts`
+  - `tests/api/trusted-access-invitations.test.ts`
+  - `docs/ai-changelog.md`

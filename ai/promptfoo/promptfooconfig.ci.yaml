@@ -1,0 +1,39 @@
+description: Lebensordner internal AI prompt guard
+
+prompts:
+  - ../prompts/implementation-assistant.md
+  - ../prompts/frontend-implementation-assistant.md
+  - ../prompts/reviewer-assistant.md
+  - ../prompts/incident-assistant.md
+  - ../prompts/design-critic.md
+
+providers:
+  - echo
+
+tests:
+  - description: Includes AGENTS and shared AI context requirements
+    assert:
+      - type: contains
+        value: AGENTS.md
+      - type: contains
+        value: docs/ai-context.md
+      - type: contains
+        value: docs/ai-collaboration.md
+  - description: Includes .claude rules as non-optional context
+    assert:
+      - type: contains
+        value: .claude/rules
+      - type: contains
+        value: ai/context/repo-guardrails.md
+  - description: Keeps workflow internal-only
+    assert:
+      - type: icontains
+        value: internal
+      - type: icontains
+        value: do not
+  - description: Preserves the data boundary
+    assert:
+      - type: icontains
+        value: sensitive
+      - type: icontains
+        value: vault

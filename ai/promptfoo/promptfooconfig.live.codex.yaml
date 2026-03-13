@@ -1,0 +1,33 @@
+description: Lebensordner Codex-style general engineering prompt pack
+
+prompts:
+  - ../prompts/implementation-assistant.md
+  - ../prompts/reviewer-assistant.md
+  - ../prompts/incident-assistant.md
+
+providers:
+  - echo
+
+tests:
+  - description: Codex-style prompts include AGENTS and shared AI context requirements
+    assert:
+      - type: contains
+        value: AGENTS.md
+      - type: contains
+        value: docs/ai-context.md
+      - type: contains
+        value: docs/ai-collaboration.md
+  - description: Codex-style prompts include .claude rules as non-optional context
+    assert:
+      - type: contains
+        value: .claude/rules
+      - type: contains
+        value: ai/context/repo-guardrails.md
+  - description: Codex-style prompts preserve the internal-only scope and data boundary
+    assert:
+      - type: icontains
+        value: internal
+      - type: icontains
+        value: sensitive
+      - type: icontains
+        value: vault
