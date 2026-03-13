@@ -2846,3 +2846,47 @@ Rollback:
   - `tests/api/trusted-access-invitations.test.ts`
   - `tests/unit/supabase-middleware.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-13 01:15 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed `/api/trusted-access/invitations/redeem` to resolve all redirects from the public app origin instead of the internal container request origin.
+- Added a focused regression test covering the unauthenticated login redirect so secure-link redemption no longer produces `https://0.0.0.0:3000/anmelden?...` on production.
+
+Risk / Regression Watch:
+- This patch only corrects the redirect origin for the redeem flow; it does not change OTP verification or device enrollment semantics.
+- Any other route still constructing external redirects from `new URL(request.url)` behind the proxy chain may exhibit the same `0.0.0.0` problem and should be migrated to `resolvePublicOrigin`.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-redeem.test.ts tests/api/trusted-access-invitations.test.ts tests/unit/supabase-middleware.test.ts`
+
+Rollback:
+- Revert:
+  - `src/app/api/trusted-access/invitations/redeem/route.ts`
+  - `tests/api/trusted-access-redeem.test.ts`
+  - `docs/ai-changelog.md`
+
+## 2026-03-13 01:15 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed `/api/trusted-access/invitations/redeem` to resolve all redirects from the public app origin instead of the internal container request origin.
+- Added a focused regression test covering the unauthenticated login redirect so secure-link redemption no longer produces `https://0.0.0.0:3000/anmelden?...` on production.
+
+Risk / Regression Watch:
+- This patch only corrects the redirect origin for the redeem flow; it does not change OTP verification or device enrollment semantics.
+- Any other route still constructing external redirects from `new URL(request.url)` behind the proxy chain may exhibit the same `0.0.0.0` problem and should be migrated to `resolvePublicOrigin`.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-redeem.test.ts tests/api/trusted-access-invitations.test.ts tests/unit/supabase-middleware.test.ts`
+
+Rollback:
+- Revert:
+  - `src/app/api/trusted-access/invitations/redeem/route.ts`
+  - `tests/api/trusted-access-redeem.test.ts`
+  - `docs/ai-changelog.md`

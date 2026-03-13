@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredWarn, emitStructuredError } from '@/lib/errors/structured-logger'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { resolvePublicOrigin } from '@/lib/url/public-origin'
 import {
   createTrustedAccessPendingCookie,
   hashTrustedAccessToken,
@@ -17,10 +18,11 @@ const getSupabaseAdmin = () =>
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
+  const publicOrigin = resolvePublicOrigin(request)
   const token = url.searchParams.get('token')?.trim() ?? ''
 
   if (!token) {
-    return NextResponse.redirect(new URL('/zugriff/access/redeem?status=expired', url))
+    return NextResponse.redirect(new URL('/zugriff/access/redeem?status=expired', publicOrigin))
   }
 
   try {
@@ -58,7 +60,7 @@ export async function GET(request: Request) {
         error_message: `[Trusted Access Redeem API] Failed to load invitation: ${invitationError.message}`,
         endpoint: '/api/trusted-access/invitations/redeem',
       })
-      return NextResponse.redirect(new URL('/zugriff/access/redeem?status=expired', url))
+      return NextResponse.redirect(new URL('/zugriff/access/redeem?status=expired', publicOrigin))
     }
 
     const trustedPerson = Array.isArray(invitation?.trusted_persons)
@@ -91,10 +93,10 @@ export async function GET(request: Request) {
         },
       })
 
-      return NextResponse.redirect(new URL(`/zugriff/access/redeem?status=${nextStatus}`, url))
+      return NextResponse.redirect(new URL(`/zugriff/access/redeem?status=${nextStatus}`, publicOrigin))
     }
 
-    const response = NextResponse.redirect(new URL('/zugriff/access/redeem', url))
+    const response = NextResponse.redirect(new URL('/zugriff/access/redeem', publicOrigin))
     response.cookies.set({
       name: TRUSTED_ACCESS_PENDING_COOKIE,
       value: createTrustedAccessPendingCookie({
@@ -111,7 +113,7 @@ export async function GET(request: Request) {
     })
 
     if (!user) {
-      return NextResponse.redirect(new URL('/anmelden?next=/zugriff/access/redeem', url), {
+      return NextResponse.redirect(new URL('/anmelden?next=/zugriff/access/redeem', publicOrigin), {
         headers: response.headers,
       })
     }
@@ -132,7 +134,7 @@ export async function GET(request: Request) {
         },
       })
 
-      return NextResponse.redirect(new URL('/zugriff/access/redeem?status=wrong_account', url), {
+      return NextResponse.redirect(new URL('/zugriff/access/redeem?status=wrong_account', publicOrigin), {
         headers: response.headers,
       })
     }
@@ -145,6 +147,6 @@ export async function GET(request: Request) {
       endpoint: '/api/trusted-access/invitations/redeem',
       stack: error?.stack,
     })
-    return NextResponse.redirect(new URL('/zugriff/access/redeem?status=expired', url))
+    return NextResponse.redirect(new URL('/zugriff/access/redeem?status=expired', publicOrigin))
   }
 }
