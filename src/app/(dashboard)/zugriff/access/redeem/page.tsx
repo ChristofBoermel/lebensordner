@@ -29,11 +29,6 @@ function RedeemPageInner() {
 
   // allowed: I/O - load pending secure-access redemption state from the server
   useEffect(() => {
-    if (token) {
-      window.location.replace(`/api/trusted-access/invitations/redeem?token=${encodeURIComponent(token)}`)
-      return
-    }
-
     async function loadPendingState() {
       if (initialStatus === 'expired' || initialStatus === 'revoked' || initialStatus === 'wrong_account') {
         setPendingState({
@@ -49,7 +44,10 @@ function RedeemPageInner() {
       }
 
       try {
-        const response = await fetch('/api/trusted-access/invitations/pending')
+        const pendingUrl = token
+          ? `/api/trusted-access/invitations/pending?token=${encodeURIComponent(token)}`
+          : '/api/trusted-access/invitations/pending'
+        const response = await fetch(pendingUrl)
         const data = await response.json()
         if (!response.ok) {
           setPendingState({
@@ -58,6 +56,9 @@ function RedeemPageInner() {
           return
         }
         setPendingState(data)
+        if (token) {
+          window.history.replaceState(null, '', '/zugriff/access/redeem')
+        }
       } catch {
         setError('Der sichere Zugriff konnte nicht geladen werden.')
       } finally {

@@ -4,6 +4,8 @@ import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import {
+  createTrustedAccessPendingCookie,
+  hashTrustedAccessToken,
   readCookieValueFromHeader,
   readTrustedAccessOtpCookie,
   readTrustedAccessPendingCookie,
@@ -17,13 +19,40 @@ const getSupabaseAdmin = () =>
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
+function setPendingInvitationCookie(
+  response: NextResponse,
+  invitation: {
+    id: string
+    owner_id: string
+    trusted_person_id: string
+  },
+  expectedEmail: string
+) {
+  response.cookies.set({
+    name: TRUSTED_ACCESS_PENDING_COOKIE,
+    value: createTrustedAccessPendingCookie({
+      invitationId: invitation.id,
+      ownerId: invitation.owner_id,
+      trustedPersonId: invitation.trusted_person_id,
+      expectedEmail,
+    }),
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: true,
+    path: '/',
+    maxAge: 15 * 60,
+  })
+}
+
 export async function GET(request: Request) {
   try {
+    const url = new URL(request.url)
+    const token = url.searchParams.get('token')?.trim() ?? ''
     const pendingCookie = readTrustedAccessPendingCookie(
       readCookieValueFromHeader(request.headers.get('cookie'), TRUSTED_ACCESS_PENDING_COOKIE)
     )
 
-    if (!pendingCookie) {
+    if (!pendingCookie && !token) {
       return NextResponse.json(
         {
           status: 'expired_invitation',
@@ -41,8 +70,7 @@ export async function GET(request: Request) {
     )
 
     const adminClient = getSupabaseAdmin()
-
-    const { data: invitation, error: invitationError } = await adminClient
+    let invitationQuery = adminClient
       .from('trusted_access_invitations')
       .select(`
         id,
@@ -62,8 +90,12 @@ export async function GET(request: Request) {
           email
         )
       `)
-      .eq('id', pendingCookie.invitationId)
-      .maybeSingle()
+
+    invitationQuery = pendingCookie
+      ? invitationQuery.eq('id', pendingCookie.invitationId)
+      : invitationQuery.eq('token_hash', hashTrustedAccessToken(token))
+
+    const { data: invitation, error: invitationError } = await invitationQuery.maybeSingle()
 
     if (invitationError || !invitation) {
       return NextResponse.json(
@@ -113,7 +145,7 @@ export async function GET(request: Request) {
       readCookieValueFromHeader(request.headers.get('cookie'), TRUSTED_ACCESS_OTP_COOKIE)
     )
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       status: wrongAccount ? 'wrong_account' : 'setup_required',
       expectedEmail: trustedPerson.email,
       ownerName: ownerProfile?.full_name || ownerProfile?.email || 'Lebensordner',
@@ -121,6 +153,12 @@ export async function GET(request: Request) {
       otpVerified: Boolean(otpCookie && otpCookie.invitationId === invitation.id && otpCookie.userId === user?.id),
       userMessageKey: wrongAccount ? 'secure_access_wrong_account' : 'secure_access_setup_required',
     })
+
+    if (!pendingCookie) {
+      setPendingInvitationCookie(response, invitation, trustedPerson.email)
+    }
+
+    return response
   } catch (error: any) {
     emitStructuredError({
       error_type: 'api',

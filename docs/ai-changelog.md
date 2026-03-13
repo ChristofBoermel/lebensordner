@@ -2912,3 +2912,49 @@ Rollback:
   - `src/app/api/trusted-access/invitations/redeem/route.ts`
   - `tests/api/trusted-access-redeem.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-13 01:45 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Hardened the trusted-access login handoff by preserving the original invitation token in the `/anmelden?next=...` redirect.
+- After authentication, the trusted user now re-enters `/zugriff/access/redeem?token=...`, allowing the redeem API to rebuild pending state even if the pre-login pending cookie was not retained by the browser.
+
+Risk / Regression Watch:
+- This patch assumes the invitation token is still valid when the user finishes login; if login is delayed past the 15-minute TTL or a newer link replaces it, the flow will still end in an expired/replaced state.
+- The redirect path now includes the secure token in the `next` query parameter; it remains same-origin, but other logs or analytics touching auth URLs should avoid persisting full query strings.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-redeem.test.ts tests/api/trusted-access-invitations.test.ts tests/unit/supabase-middleware.test.ts`
+
+Rollback:
+- Revert:
+  - `src/app/api/trusted-access/invitations/redeem/route.ts`
+  - `tests/api/trusted-access-redeem.test.ts`
+  - `docs/ai-changelog.md`
+
+## 2026-03-13 02:01 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Hardened the trusted-access pending-state API so it can recover a valid invitation directly from the secure token when the `trusted_access_pending` cookie is missing after login.
+- Updated the redeem page to load pending state through `/api/trusted-access/invitations/pending?token=...` and immediately scrub the token from the browser URL once the pending cookie is re-established.
+- Added focused API coverage for token-based pending-state recovery.
+
+Risk / Regression Watch:
+- The secure token now remains in the post-login URL only until the redeem page finishes its first pending-state request; if a user closes the tab before that request completes, they may need to reopen the original link.
+- Vitest execution remains blocked in this sandbox by `vite/esbuild` `spawn EPERM`, so the new API regression test must be run in CI or on a normal local machine.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-pending.test.ts tests/api/trusted-access-redeem.test.ts tests/api/trusted-access-invitations.test.ts tests/unit/supabase-middleware.test.ts` (sandbox blocked: `spawn EPERM`)
+
+Rollback:
+- Revert:
+  - `src/app/api/trusted-access/invitations/pending/route.ts`
+  - `src/app/(dashboard)/zugriff/access/redeem/page.tsx`
+  - `tests/api/trusted-access-pending.test.ts`
+  - `docs/ai-changelog.md`
