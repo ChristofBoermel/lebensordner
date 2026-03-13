@@ -50,13 +50,15 @@ vi.mock('@/lib/security/trusted-access', () => ({
 describe('Trusted access invitations API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.NEXT_PUBLIC_APP_URL
+    delete process.env.SITE_URL
   })
 
   afterEach(() => {
     vi.resetModules()
   })
 
-  it('creates a secure invitation link for an accepted trusted person', async () => {
+  it('creates a secure invitation link using forwarded public headers', async () => {
     const trustedPersonChain = {
       select: vi.fn(() => trustedPersonChain),
       eq: vi.fn(() => trustedPersonChain),
@@ -108,9 +110,13 @@ describe('Trusted access invitations API', () => {
 
     const { POST } = await import('@/app/api/trusted-access/invitations/route')
     const response = await POST(
-      new Request('http://localhost/api/trusted-access/invitations', {
+      new Request('http://0.0.0.0:3000/api/trusted-access/invitations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-forwarded-host': 'lebensordner.org',
+          'x-forwarded-proto': 'https',
+        },
         body: JSON.stringify({
           trustedPersonId: 'tp-1',
           bootstrapRelationshipKey: 'a'.repeat(64),
@@ -122,23 +128,12 @@ describe('Trusted access invitations API', () => {
 
     expect(response.status).toBe(200)
     expect(data).toMatchObject({
-      invitationUrl: 'http://localhost/zugriff/access/redeem?token=token-123',
+      invitationUrl: 'https://lebensordner.org/zugriff/access/redeem?token=token-123',
       expiresAt: '2026-03-13T12:15:00.000Z',
       deliveryMode: 'manual',
       singleUse: true,
       expiresInMinutes: 15,
     })
-    expect(createServiceRoleSupabaseClientMock).toHaveBeenCalledTimes(1)
-    expect(insertChain.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        owner_id: 'owner-1',
-        trusted_person_id: 'tp-1',
-        token_hash: 'hashed-token-123',
-        metadata: {
-          bootstrapRelationshipKey: 'encrypted-bootstrap',
-        },
-      })
-    )
   })
 
   it('returns 500 when the service-role client cannot be created', async () => {

@@ -2796,3 +2796,27 @@ Rollback:
   - `src/app/api/trusted-access/invitations/route.ts`
   - `tests/api/trusted-access-invitations.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-13 00:35 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed trusted-access invitation link generation to resolve the public app origin from forwarded headers or public app env vars instead of the container-internal request origin.
+- Added a shared public-origin helper for request-based external URL generation.
+- Updated the trusted-access invitation API regression test to cover the proxy-forwarded production case.
+
+Risk / Regression Watch:
+- Any API route that still constructs external links with `new URL(request.url).origin` behind the proxy chain may have the same bug and should be migrated to the shared helper.
+- Production also required a PostgREST restart after the new trusted-access schema landed; future schema deploys should include a `rest` reload or recreate step.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-invitations.test.ts`
+
+Rollback:
+- Revert:
+  - `src/lib/url/public-origin.ts`
+  - `src/app/api/trusted-access/invitations/route.ts`
+  - `tests/api/trusted-access-invitations.test.ts`
+  - `docs/ai-changelog.md`

@@ -3,6 +3,7 @@ import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
 import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { resolvePublicOrigin } from '@/lib/url/public-origin'
 import {
   buildTrustedAccessInvitationExpiry,
   encryptTrustedAccessBootstrap,
@@ -112,7 +113,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
 
-    const origin = new URL(request.url).origin
+    const origin = resolvePublicOrigin(request)
     const invitationUrl = `${origin}/zugriff/access/redeem?token=${encodeURIComponent(token)}`
 
     return NextResponse.json({
