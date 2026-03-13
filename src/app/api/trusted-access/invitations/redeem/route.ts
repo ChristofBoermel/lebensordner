@@ -122,8 +122,9 @@ export async function GET(request: Request) {
     }
 
     if (!user) {
+      const nextPath = `/zugriff/access/redeem?token=${encodeURIComponent(token)}`
       const loginRedirectResponse = NextResponse.redirect(
-        new URL('/anmelden?next=/zugriff/access/redeem', publicOrigin)
+        new URL(`/anmelden?next=${encodeURIComponent(nextPath)}`, publicOrigin)
       )
       setPendingInvitationCookie(loginRedirectResponse, invitation, trustedPerson.email)
       return loginRedirectResponse

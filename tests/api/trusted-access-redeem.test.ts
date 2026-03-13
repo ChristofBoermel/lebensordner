@@ -54,7 +54,7 @@ describe('Trusted access redeem API', () => {
     vi.resetModules()
   })
 
-  it('redirects unauthenticated users to the public login origin while preserving the pending cookie', async () => {
+  it('redirects unauthenticated users to the public login origin while preserving the token and pending cookie', async () => {
     const invitationRecord = {
       id: 'inv-1',
       owner_id: 'owner-1',
@@ -94,7 +94,9 @@ describe('Trusted access redeem API', () => {
     )
 
     expect(response.status).toBe(307)
-    expect(response.headers.get('location')).toBe('https://lebensordner.org/anmelden?next=/zugriff/access/redeem')
+    expect(response.headers.get('location')).toBe(
+      'https://lebensordner.org/anmelden?next=%2Fzugriff%2Faccess%2Fredeem%3Ftoken%3Dtoken-123'
+    )
     expect(response.cookies.get('trusted_access_pending')?.value).toBe('pending-cookie-value')
     expect(response.headers.get('set-cookie')).toContain('trusted_access_pending=pending-cookie-value')
   })

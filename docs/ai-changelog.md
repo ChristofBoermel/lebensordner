@@ -2890,3 +2890,25 @@ Rollback:
   - `src/app/api/trusted-access/invitations/redeem/route.ts`
   - `tests/api/trusted-access-redeem.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-13 01:32 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed the trusted-access redeem flow so the pending invitation cookie is now set on the final login and wrong-account redirect responses instead of being copied indirectly through response headers.
+- This preserves the pending invitation across login and prevents `/api/trusted-access/invitations/pending` from returning `410 expired_invitation` immediately after a trusted user signs in.
+
+Risk / Regression Watch:
+- This patch only repairs cookie propagation across the redeem redirects; if a user still lands on `expired_invitation`, the next likely cause is the invitation record being replaced or expired rather than lost session state.
+- Other routes that rely on copying `response.headers` to preserve cookies should be treated as suspect and audited separately.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-redeem.test.ts tests/api/trusted-access-invitations.test.ts tests/unit/supabase-middleware.test.ts`
+
+Rollback:
+- Revert:
+  - `src/app/api/trusted-access/invitations/redeem/route.ts`
+  - `tests/api/trusted-access-redeem.test.ts`
+  - `docs/ai-changelog.md`
