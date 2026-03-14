@@ -10,7 +10,7 @@ export interface ShareEligibleTrustedPerson {
 
 type TrustedPersonRecipientRow = Pick<
   Database['public']['Tables']['trusted_persons']['Row'],
-  'id' | 'name' | 'email' | 'linked_user_id'
+  'id' | 'name' | 'email' | 'linked_user_id' | 'relationship_status'
 >
 
 export async function loadShareEligibleTrustedPersons(
@@ -32,10 +32,11 @@ export async function loadShareEligibleTrustedPersons(
 
   const { data, error } = await supabase
     .from('trusted_persons')
-    .select('id, name, email, linked_user_id')
+    .select('id, name, email, linked_user_id, relationship_status')
     .eq('user_id', user.id)
     .eq('invitation_status', 'accepted')
     .eq('is_active', true)
+    .eq('relationship_status', 'active')
     .not('linked_user_id', 'is', null)
     .order('created_at', { ascending: false })
 
