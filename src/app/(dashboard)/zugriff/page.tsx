@@ -55,6 +55,7 @@ import {
 } from '@/lib/trusted-persons/share-eligible'
 import { TrustedPersonStatusCard } from '@/components/trusted-access/TrustedPersonStatusCard'
 import { SetupLinkPanel } from '@/components/trusted-access/SetupLinkPanel'
+import { TrustedUserStatusView } from '@/components/trusted-access/TrustedUserStatusView'
 
 // Lazy load DocumentViewer for performance
 const DocumentViewer = dynamic(
@@ -176,8 +177,11 @@ export default function ZugriffPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-
-    if (window.location.hash === '#familie') {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('tab') === 'mein-zugriff') {
+      setActiveMainTab('mein-zugriff')
+      window.history.replaceState(null, '', window.location.pathname)
+    } else if (window.location.hash === '#familie') {
       setActiveMainTab('familie')
     }
   }, [])
@@ -946,6 +950,10 @@ export default function ZugriffPage() {
             <User className="w-4 h-4 mr-2" aria-hidden="true" />
             Familie
           </TabsTrigger>
+          <TabsTrigger value="mein-zugriff" className="flex-1 sm:flex-initial">
+            <Shield className="w-4 h-4 mr-2" aria-hidden="true" />
+            Mein Zugriff
+          </TabsTrigger>
         </TabsList>
 
         {/* Vertrauenspersonen Tab Content */}
@@ -1609,6 +1617,17 @@ export default function ZugriffPage() {
               </Dialog>
             </div>
           )}
+        </TabsContent>
+
+        {/* Mein Zugriff Tab Content - trusted user perspective */}
+        <TabsContent value="mein-zugriff" className="space-y-6 mt-6">
+          <div>
+            <h2 className="text-xl font-semibold text-warmgray-900 mb-1">Mein Zugriff</h2>
+            <p className="text-sm text-warmgray-600">
+              Status Ihrer Einladungen und freigegebenen Dokumente
+            </p>
+          </div>
+          <TrustedUserStatusView />
         </TabsContent>
       </Tabs>
 
