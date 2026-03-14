@@ -435,6 +435,8 @@ export interface Database {
           email_error: string | null
           email_retry_count: number
           email_status: 'pending' | 'sending' | 'sent' | 'failed' | null
+          relationship_status: 'invited' | 'accepted_pending_setup' | 'setup_link_sent' | 'active' | 'revoked'
+          invitation_expires_at: string | null
         }
         Insert: {
           id?: string
@@ -458,6 +460,8 @@ export interface Database {
           email_error?: string | null
           email_retry_count?: number
           email_status?: 'pending' | 'sending' | 'sent' | 'failed' | null
+          relationship_status?: 'invited' | 'accepted_pending_setup' | 'setup_link_sent' | 'active' | 'revoked' | null
+          invitation_expires_at?: string | null
         }
         Update: {
           id?: string
@@ -481,6 +485,8 @@ export interface Database {
           email_error?: string | null
           email_retry_count?: number
           email_status?: 'pending' | 'sending' | 'sent' | 'failed' | null
+          relationship_status?: 'invited' | 'accepted_pending_setup' | 'setup_link_sent' | 'active' | 'revoked' | null
+          invitation_expires_at?: string | null
         }
       }
       email_retry_queue: {
