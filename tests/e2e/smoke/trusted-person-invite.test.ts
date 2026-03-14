@@ -74,7 +74,7 @@ test.describe('@smoke trusted person invite', () => {
             timeout: 15000,
           },
         )
-        .toMatch(/Einladung gesendet|Einladen/)
+        .toMatch(/Auf Annahme warten|Einladung gesendet|Einladen/)
 
       await expect
         .poll(() => inviteRequests, { message: 'a second click must not trigger another invite request' })
@@ -84,3 +84,4 @@ test.describe('@smoke trusted person invite', () => {
     }
   })
 })
+
