@@ -44,17 +44,10 @@ export async function loadShareEligibleTrustedPersons(
     throw error
   }
 
-  return ((data ?? []) as TrustedPersonRecipientRow[])
-    .filter(
-      (
-        trustedPerson
-      ): trustedPerson is TrustedPersonRecipientRow & { linked_user_id: string } =>
-        typeof trustedPerson.linked_user_id === 'string' && trustedPerson.linked_user_id.length > 0
-    )
-    .map((trustedPerson) => ({
-      id: trustedPerson.id,
-      name: trustedPerson.name,
-      email: trustedPerson.email,
-      linked_user_id: trustedPerson.linked_user_id,
-    }))
+  return ((data ?? []) as TrustedPersonRecipientRow[]).map((trustedPerson) => ({
+    id: trustedPerson.id,
+    name: trustedPerson.name,
+    email: trustedPerson.email,
+    linked_user_id: trustedPerson.linked_user_id as string,
+  }))
 }
