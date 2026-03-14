@@ -1105,8 +1105,8 @@ describe('Dokumente UI Fixes — T-03', () => {
 
     const dialog = screen.getByRole('dialog')
 
-    const dialogHeader = dialog.querySelector('[class*="p-6"]')
-    expect(dialogHeader?.className).toContain('pr-14')
+    const dialogHeader = dialog.querySelector('[class*="pb-2"][class*="pr-14"]')
+    expect(dialogHeader).toBeInTheDocument()
 
     const scrollContainer = dialog.querySelector('[class*="overflow-y-auto"]')
     expect(scrollContainer).toBeInTheDocument()
