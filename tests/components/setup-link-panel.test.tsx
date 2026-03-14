@@ -14,6 +14,7 @@ describe('SetupLinkPanel', () => {
 
   it('shows the recipient name and email', () => {
     render(<SetupLinkPanel {...defaultProps} />)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText(/Senden Sie diesen Link/)).toBeInTheDocument()
     expect(screen.getByText(/anna@example.com/)).toBeInTheDocument()
   })
@@ -25,7 +26,7 @@ describe('SetupLinkPanel', () => {
 
   it('shows expiry information', () => {
     render(<SetupLinkPanel {...defaultProps} />)
-    expect(screen.getByText(/gültig/i)).toBeInTheDocument()
+    expect(screen.getByText(/gueltig|gültig/i)).toBeInTheDocument()
   })
 
   it('shows instructions about exact email requirement', () => {
@@ -37,7 +38,7 @@ describe('SetupLinkPanel', () => {
     const user = userEvent.setup()
     const onDismiss = vi.fn()
     render(<SetupLinkPanel {...defaultProps} onDismiss={onDismiss} />)
-    await user.click(screen.getByRole('button', { name: /verstanden|schließen|ok/i }))
+    await user.click(screen.getByRole('button', { name: /verstanden/i }))
     expect(onDismiss).toHaveBeenCalled()
   })
 })
