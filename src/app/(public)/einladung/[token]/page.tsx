@@ -60,19 +60,24 @@ export default function InvitationPage() {
   const handleAccept = async () => {
     setIsProcessing(true)
     try {
-      const response = await fetch('/api/invitation', {
+      if (!invitation?.id) throw new Error('Einladung nicht gefunden')
+
+      const response = await fetch(`/api/trusted-person/invitations/${invitation.id}/accept`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, action: 'accept', email: invitation?.email }),
       })
+      const data = await response.json()
 
       if (!response.ok) {
-        throw new Error('Fehler beim Akzeptieren')
+        if (data.error === 'wrong_account') {
+          setError(`Diese Einladung ist für eine andere E-Mail-Adresse bestimmt (${invitation?.email}). Bitte mit dem richtigen Konto anmelden.`)
+          return
+        }
+        throw new Error(data.error || 'Fehler beim Akzeptieren')
       }
 
       setAccepted(true)
-    } catch (err) {
-      setError('Fehler beim Akzeptieren der Einladung.')
+    } catch (err: any) {
+      setError(err.message || 'Fehler beim Akzeptieren der Einladung.')
     } finally {
       setIsProcessing(false)
     }
@@ -136,16 +141,15 @@ export default function InvitationPage() {
               <h2 className="text-xl font-semibold text-warmgray-900 mb-2">
                 Einladung angenommen!
               </h2>
-              <p className="text-warmgray-600 mb-6">
-                Sie sind jetzt als Vertrauensperson für {invitation?.owner_name} eingetragen.
-                Erstellen Sie ein Konto, um im Notfall auf die freigegebenen Dokumente zugreifen zu können.
+              <p className="text-warmgray-600 mb-2">
+                Sie haben die Einladung von <strong>{invitation?.owner_name}</strong> angenommen.
               </p>
-              <Button asChild>
-                <Link
-                  href={`/registrieren?email=${encodeURIComponent(invitation?.email || '')}&invited=true&next=${encodeURIComponent(invitedNext)}`}
-                >
-                  Konto erstellen
-                </Link>
+              <p className="text-warmgray-600 mb-6 text-sm">
+                Als nächsten Schritt sendet Ihnen {invitation?.owner_name} einen sicheren Einrichtungslink.
+                Sobald Sie diesen erhalten, können Sie den sicheren Zugriff einrichten.
+              </p>
+              <Button asChild variant="outline">
+                <Link href="/zugriff">Zur Übersicht</Link>
               </Button>
             </div>
           ) : declined ? (
