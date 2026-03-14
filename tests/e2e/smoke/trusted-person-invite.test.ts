@@ -32,9 +32,12 @@ test.describe('@smoke trusted person invite', () => {
       let inviteRequests = 0
       await page.route('**/api/trusted-person/invite', async (route) => {
         inviteRequests += 1
-        const response = await route.fetch()
         await new Promise((resolve) => setTimeout(resolve, 800))
-        await route.fulfill({ response })
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true }),
+        })
       })
 
       await page.goto('/zugriff')
@@ -80,8 +83,8 @@ test.describe('@smoke trusted person invite', () => {
         .poll(() => inviteRequests, { message: 'a second click must not trigger another invite request' })
         .toBe(1)
     } finally {
+      await page.unrouteAll({ behavior: 'ignoreErrors' })
       await scenario.cleanup()
     }
   })
 })
-

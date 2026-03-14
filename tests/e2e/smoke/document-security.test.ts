@@ -9,8 +9,25 @@ async function unlockVaultIfPrompted(page: Page, passphrase: string) {
     return false
   }
 
-  await page.getByLabel('Passwort').fill(passphrase)
-  await page.getByRole('button', { name: 'Entsperren' }).click()
+  let filled = false
+  let lastError: unknown = null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const passwordInput = unlockDialog.getByLabel('Passwort')
+    try {
+      await expect(passwordInput).toBeVisible({ timeout: 5000 })
+      await passwordInput.fill(passphrase, { timeout: 5000 })
+      filled = true
+      break
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  if (!filled) {
+    throw lastError instanceof Error ? lastError : new Error('Vault password input could not be filled')
+  }
+
+  await unlockDialog.getByRole('button', { name: 'Entsperren' }).click()
   await expect(unlockDialog).toBeHidden({ timeout: 15000 })
   return true
 }
@@ -78,5 +95,3 @@ test.describe('@smoke document lock and unlock', () => {
     }
   })
 })
-
-
