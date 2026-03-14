@@ -3067,3 +3067,17 @@ Verification:
 
 Rollback:
 - Revert `scripts/ops/hook-discipline-audit.py` and this changelog entry if you intentionally want CI to fail until one existing `useEffect` is refactored out of `src/`.
+## 2026-03-14T14:54:31Z - Codex - uncommitted
+Summary:
+- Stabilized the document-security Playwright smoke flow by asserting the document action menu transitions between `Extra-Sicherheit aktivieren` and `Extra-Sicherheit entfernen` instead of polling the row text for a badge label that was flaky in CI.
+
+Risk / Regression Notes:
+- Coverage still validates the real lock and unlock flow through the UI, but now against the stable action-state contract rather than a brittle textContent aggregation.
+- No application runtime code changed in this step; only the smoke assertion was tightened.
+
+Verification:
+- `npm run test:e2e:smoke`
+- `gh run view 23090120350 --log-failed`
+
+Rollback:
+- Revert `tests/e2e/smoke/document-security.test.ts` and this changelog entry to restore the previous badge-text assertion.

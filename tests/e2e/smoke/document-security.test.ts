@@ -15,6 +15,24 @@ async function unlockVaultIfPrompted(page: Page, passphrase: string) {
   return true
 }
 
+async function enableExtraSecurity(page: Page, documentId: string, passphrase: string) {
+  await page.getByTestId(`document-actions-${documentId}`).click()
+  await page.getByRole('menuitem', { name: 'Extra-Sicherheit aktivieren' }).click()
+  if (await unlockVaultIfPrompted(page, passphrase)) {
+    await page.getByTestId(`document-actions-${documentId}`).click()
+    await page.getByRole('menuitem', { name: 'Extra-Sicherheit aktivieren' }).click()
+  }
+}
+
+async function disableExtraSecurity(page: Page, documentId: string, passphrase: string) {
+  await page.getByTestId(`document-actions-${documentId}`).click()
+  await page.getByRole('menuitem', { name: 'Extra-Sicherheit entfernen' }).click()
+  if (await unlockVaultIfPrompted(page, passphrase)) {
+    await page.getByTestId(`document-actions-${documentId}`).click()
+    await page.getByRole('menuitem', { name: 'Extra-Sicherheit entfernen' }).click()
+  }
+}
+
 test.describe('@smoke document lock and unlock', () => {
   test.skip(!hasRequiredE2EEnv(), 'Supabase E2E environment variables are required')
 
@@ -38,28 +56,17 @@ test.describe('@smoke document lock and unlock', () => {
       })
       await page.goto('/dokumente?kategorie=identitaet')
 
-      await page.getByTestId(`document-actions-${document.id}`).click()
-      await page.getByRole('menuitem', { name: 'Extra-Sicherheit aktivieren' }).click()
-      if (await unlockVaultIfPrompted(page, owner.vaultPassphrase!)) {
-        await page.getByTestId(`document-actions-${document.id}`).click()
-        await page.getByRole('menuitem', { name: 'Extra-Sicherheit aktivieren' }).click()
-      }
-
-      const row = page.getByTestId(`document-row-${document.id}`)
-      await expect
-        .poll(async () => (await row.textContent()) ?? '', {
-          message: 'document row should show the secured badge after enabling extra security',
-          timeout: 15000,
-        })
-        .toContain('Gesichert')
+      await enableExtraSecurity(page, document.id, owner.vaultPassphrase!)
 
       await page.getByTestId(`document-actions-${document.id}`).click()
-      await page.getByRole('menuitem', { name: 'Extra-Sicherheit entfernen' }).click()
-      if (await unlockVaultIfPrompted(page, owner.vaultPassphrase!)) {
-        await page.getByTestId(`document-actions-${document.id}`).click()
-        await page.getByRole('menuitem', { name: 'Extra-Sicherheit entfernen' }).click()
-      }
-      await expect(row.getByText('Gesichert')).toHaveCount(0)
+      await expect(page.getByRole('menuitem', { name: 'Extra-Sicherheit entfernen' })).toBeVisible({ timeout: 15000 })
+      await page.keyboard.press('Escape')
+
+      await disableExtraSecurity(page, document.id, owner.vaultPassphrase!)
+
+      await page.getByTestId(`document-actions-${document.id}`).click()
+      await expect(page.getByRole('menuitem', { name: 'Extra-Sicherheit aktivieren' })).toBeVisible({ timeout: 15000 })
+      await page.keyboard.press('Escape')
     } finally {
       await scenario.cleanup()
     }
