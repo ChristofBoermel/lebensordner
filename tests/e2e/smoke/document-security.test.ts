@@ -9,27 +9,24 @@ async function unlockVaultIfPrompted(page: Page, passphrase: string) {
     return false
   }
 
-  let filled = false
   let lastError: unknown = null
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const passwordInput = unlockDialog.getByLabel('Passwort')
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
+      const passwordInput = page.getByLabel('Passwort').last()
       await expect(passwordInput).toBeVisible({ timeout: 5000 })
       await passwordInput.fill(passphrase, { timeout: 5000 })
-      filled = true
-      break
+
+      const unlockButton = page.getByRole('button', { name: 'Entsperren' }).last()
+      await expect(unlockButton).toBeVisible({ timeout: 5000 })
+      await unlockButton.click({ timeout: 5000 })
+      await expect(unlockDialog).toBeHidden({ timeout: 15000 })
+      return true
     } catch (error) {
       lastError = error
     }
   }
 
-  if (!filled) {
-    throw lastError instanceof Error ? lastError : new Error('Vault password input could not be filled')
-  }
-
-  await unlockDialog.getByRole('button', { name: 'Entsperren' }).click()
-  await expect(unlockDialog).toBeHidden({ timeout: 15000 })
-  return true
+  throw lastError instanceof Error ? lastError : new Error('Vault unlock dialog could not be completed')
 }
 
 async function openDocumentActions(page: Page, documentId: string) {
