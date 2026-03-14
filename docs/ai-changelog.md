@@ -3240,3 +3240,18 @@ Verification:
 
 Rollback:
 - Revert `src/app/(dashboard)/zugriff/page.tsx`, `src/components/trusted-access/TrustedUserAccessProvider.tsx`, `tests/mocks/supabase-client.ts`, `tests/components/trusted-user-access-provider.test.tsx`, `supabase/migrations/20260314211000_trusted_access_realtime.sql`, and this changelog entry to restore the prior polling/focus-only auto-refresh behavior.
+
+## 2026-03-14T21:33:00Z - Codex - uncommitted
+Summary:
+- Added the missing self-hosted Supabase Realtime service to the deploy stack and exposed it through Kong at `/supabase/realtime/v1/websocket` and `/supabase/realtime/v1/api`.
+- Extended deploy verification to require the Realtime container and probe the public Realtime health endpoint so websocket regressions are caught before rollout completes.
+
+Risk / Regression Notes:
+- This deploy-stack fix depends on the new `realtime` container starting successfully against the existing Supabase Postgres instance; if the container image or `_realtime` schema initialization fails, deploy verification will now fail closed.
+- Realtime health is now part of post-deploy smoke, so future Kong or container drift will block deploy instead of silently breaking client subscriptions.
+
+Verification:
+- `npm run qa:strict`
+
+Rollback:
+- Revert `deploy/docker-compose.yml`, `deploy/supabase/kong.yml`, `scripts/ops/verify-deploy.sh`, and this changelog entry to return to the previous deploy stack without self-hosted Realtime support.

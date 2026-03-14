@@ -217,7 +217,7 @@ require_env_key() {
 }
 
 echo "Checking required services are running/healthy..."
-for svc in nextjs worker caddy redis db kong grafana prometheus loki promtail postgres-exporter redis-exporter node-exporter; do
+for svc in nextjs worker caddy redis db kong realtime grafana prometheus loki promtail postgres-exporter redis-exporter node-exporter; do
   require_service_running "$svc"
   require_service_healthy_if_defined "$svc"
 done
@@ -285,6 +285,13 @@ REST_NO_KEY_STATUS="$(curl -sS -o /tmp/rest_openapi_no_key.json -w '%{http_code}
   "https://${DOMAIN}/supabase/rest/v1/")"
 [[ "$REST_NO_KEY_STATUS" == "401" ]] || fail "expected 401 for Supabase REST probe without apikey, got ${REST_NO_KEY_STATUS}"
 pass "Supabase REST key-auth probe passed"
+
+REALTIME_HEALTH_STATUS="$(curl -sS -o /tmp/realtime_health.json -w '%{http_code}' \
+  -H "apikey: ${ANON_KEY}" \
+  -H "Authorization: Bearer ${ANON_KEY}" \
+  "https://${DOMAIN}/supabase/realtime/v1/api/tenants/realtime-dev/health")"
+[[ "$REALTIME_HEALTH_STATUS" == "200" ]] || fail "unexpected status for Supabase Realtime health probe: ${REALTIME_HEALTH_STATUS}"
+pass "Supabase Realtime health probe passed"
 
 echo "Checking Grafana alert provisioning logs..."
 if docker compose logs --no-color --tail=400 grafana | grep -qiE "failure parsing rules|failed to parse|error loading alerting provisioning"; then
