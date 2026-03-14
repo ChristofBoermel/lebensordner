@@ -3113,3 +3113,22 @@ Verification:
 
 Rollback:
 - Revert `src/app/(dashboard)/zugriff/page.tsx`, `src/app/api/trusted-access/invitations/route.ts`, `tests/api/trusted-access-invitations.test.ts`, `tests/pages/zugriff.test.tsx`, and this changelog entry to restore the previous two-click setup-link UX and strict database handling.
+
+## 2026-03-14T17:02:49Z - Codex - uncommitted
+Summary:
+- Hardened trusted-user linking across owner creation, redeem handoff, and deploy verification: setup links now open in a focused dialog, pending-state lookup recovers from stale cookies by falling back to the token, and setup-link creation no longer fails closed when PostgREST schema cache briefly misses `trusted_persons.relationship_status`.
+- Added deploy-side PostgREST schema-cache refresh plus an internal `trusted_persons.relationship_status` smoke probe so this production failure mode is caught automatically after rollout.
+
+Risk / Regression Notes:
+- The setup-link API now fails open for the specific stale schema-cache error on the post-insert `relationship_status` update, so owner UI state may lag until cache refresh even though the setup link is valid.
+- Pending-state recovery now prefers any still-valid token-backed invitation over a stale pending cookie; this is intended to reduce false `410 expired_invitation` responses after login redirects.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-invitations.test.ts tests/api/trusted-access-pending.test.ts tests/pages/zugriff.test.tsx`
+- `npm run qa:strict`
+
+Rollback:
+- Revert `.github/workflows/deploy.yml`, `scripts/ops/verify-deploy.sh`, `src/components/trusted-access/SetupLinkPanel.tsx`, `src/app/api/trusted-access/invitations/route.ts`, `src/app/api/trusted-access/invitations/pending/route.ts`, the updated trusted-access tests, and this changelog entry to restore the previous inline setup-link panel, stricter pending lookup, and deploy behavior.

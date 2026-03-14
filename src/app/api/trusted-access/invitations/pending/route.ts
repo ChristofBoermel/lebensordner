@@ -38,6 +38,66 @@ function setPendingInvitationCookie(
   })
 }
 
+
+type PendingInvitationRecord = {
+  id: string
+  owner_id: string
+  trusted_person_id: string
+  status: string
+  expires_at: string
+  otp_verified_at: string | null
+  trusted_persons: {
+    id: string
+    email: string
+    linked_user_id: string | null
+    invitation_status: string
+    relationship_status: string
+    is_active: boolean
+  } | Array<{
+    id: string
+    email: string
+    linked_user_id: string | null
+    invitation_status: string
+    relationship_status: string
+    is_active: boolean
+  }> | null
+  profiles: {
+    full_name: string | null
+    email: string | null
+  } | Array<{
+    full_name: string | null
+    email: string | null
+  }> | null
+}
+
+function normalizeInvitationRelations(invitation: PendingInvitationRecord) {
+  const trustedPerson = Array.isArray(invitation.trusted_persons)
+    ? invitation.trusted_persons[0]
+    : invitation.trusted_persons
+  const ownerProfile = Array.isArray(invitation.profiles)
+    ? invitation.profiles[0]
+    : invitation.profiles
+
+  return { trustedPerson, ownerProfile }
+}
+
+function isUsablePendingInvitation(invitation: PendingInvitationRecord | null) {
+  if (!invitation) return false
+
+  const { trustedPerson } = normalizeInvitationRelations(invitation)
+  const expiresAtMs = new Date(invitation.expires_at).getTime()
+  const invitationExpired =
+    invitation.status !== 'pending' || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()
+
+  return Boolean(
+    !invitationExpired &&
+      trustedPerson &&
+      trustedPerson.invitation_status === 'accepted' &&
+      trustedPerson.is_active &&
+      trustedPerson.relationship_status !== 'revoked'
+  )
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
@@ -64,36 +124,67 @@ export async function GET(request: Request) {
     )
 
     const adminClient = createServiceRoleSupabaseClient()
-    let invitationQuery = adminClient
-      .from('trusted_access_invitations')
-      .select(`
-        id,
-        owner_id,
-        trusted_person_id,
-        status,
-        expires_at,
-        otp_verified_at,
-        trusted_persons:trusted_person_id (
+
+    async function loadInvitationBy(column: 'id' | 'token_hash', value: string) {
+      return adminClient
+        .from('trusted_access_invitations')
+        .select(`
           id,
-          email,
-          linked_user_id,
-          invitation_status,
-          relationship_status,
-          is_active
-        ),
-        profiles:owner_id (
-          full_name,
-          email
-        )
-      `)
+          owner_id,
+          trusted_person_id,
+          status,
+          expires_at,
+          otp_verified_at,
+          trusted_persons:trusted_person_id (
+            id,
+            email,
+            linked_user_id,
+            invitation_status,
+            relationship_status,
+            is_active
+          ),
+          profiles:owner_id (
+            full_name,
+            email
+          )
+        `)
+        .eq(column, value)
+        .maybeSingle()
+    }
 
-    invitationQuery = pendingCookie
-      ? invitationQuery.eq('id', pendingCookie.invitationId)
-      : invitationQuery.eq('token_hash', hashTrustedAccessToken(token))
+    const tokenHash = token ? hashTrustedAccessToken(token) : ''
+    const cookieResult = pendingCookie
+      ? await loadInvitationBy('id', pendingCookie.invitationId)
+      : { data: null, error: null }
+    const tokenResult = tokenHash
+      ? await loadInvitationBy('token_hash', tokenHash)
+      : { data: null, error: null }
 
-    const { data: invitation, error: invitationError } = await invitationQuery.maybeSingle()
+    if (cookieResult.error || tokenResult.error) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `[Trusted Access Pending API] Failed to load pending invitation: ${cookieResult.error?.message ?? tokenResult.error?.message ?? 'unknown error'}`,
+        endpoint: '/api/trusted-access/invitations/pending',
+        metadata: {
+          hasPendingCookie: Boolean(pendingCookie),
+          hasToken: Boolean(token),
+          cookieError: cookieResult.error?.message ?? null,
+          tokenError: tokenResult.error?.message ?? null,
+        },
+      })
+      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    }
 
-    if (invitationError || !invitation) {
+    const cookieInvitation = cookieResult.data as PendingInvitationRecord | null
+    const tokenInvitation = tokenResult.data as PendingInvitationRecord | null
+
+    const invitation = isUsablePendingInvitation(cookieInvitation)
+      ? cookieInvitation
+      : isUsablePendingInvitation(tokenInvitation)
+        ? tokenInvitation
+        : cookieInvitation ?? tokenInvitation
+
+    if (!invitation) {
       return NextResponse.json(
         {
           status: 'expired_invitation',
@@ -103,12 +194,7 @@ export async function GET(request: Request) {
       )
     }
 
-    const trustedPerson = Array.isArray(invitation.trusted_persons)
-      ? invitation.trusted_persons[0]
-      : invitation.trusted_persons
-    const ownerProfile = Array.isArray(invitation.profiles)
-      ? invitation.profiles[0]
-      : invitation.profiles
+    const { trustedPerson, ownerProfile } = normalizeInvitationRelations(invitation)
 
     const expiresAtMs = new Date(invitation.expires_at).getTime()
     const invitationExpired = invitation.status !== 'pending' || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()
@@ -155,7 +241,7 @@ export async function GET(request: Request) {
       userMessageKey: wrongAccount ? 'secure_access_wrong_account' : 'secure_access_setup_required',
     })
 
-    if (!pendingCookie) {
+    if (!pendingCookie || pendingCookie.invitationId !== invitation.id) {
       setPendingInvitationCookie(response, invitation, trustedPerson.email)
     }
 

@@ -58,6 +58,18 @@ function isLegacyRelationshipStatusConstraintError(error: {
   )
 }
 
+function isRelationshipStatusSchemaCacheError(error: {
+  code?: string | null
+  message?: string | null
+}) {
+  const normalized = `${error.message ?? ''}`.toLowerCase()
+  return (
+    error.code === 'PGRST204' &&
+    normalized.includes("could not find the 'relationship_status' column") &&
+    normalized.includes('schema cache')
+  )
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient()
@@ -218,6 +230,19 @@ export async function POST(request: Request) {
           endpoint: '/api/trusted-access/invitations',
           metadata: buildDatabaseErrorMetadata(
             'advance_relationship_status_legacy_constraint',
+            trustedPersonId,
+            user.id,
+            relationshipError,
+            trustedPerson.relationship_status
+          ),
+        })
+      } else if (isRelationshipStatusSchemaCacheError(relationshipError)) {
+        emitStructuredWarn({
+          event_type: 'api',
+          event_message: '[Trusted Access Invitations API] Skipped relationship_status transition due to stale PostgREST schema cache',
+          endpoint: '/api/trusted-access/invitations',
+          metadata: buildDatabaseErrorMetadata(
+            'advance_relationship_status_schema_cache',
             trustedPersonId,
             user.id,
             relationshipError,

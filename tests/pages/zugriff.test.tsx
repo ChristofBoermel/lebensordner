@@ -2601,6 +2601,7 @@ describe('ZugriffPage trusted person invite row states', () => {
     }, { timeout: TEST_TIMEOUT })
 
     await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
       expect(screen.getByText(/Sicherer Zugriffslink erstellt/i)).toBeInTheDocument()
     }, { timeout: TEST_TIMEOUT })
     expect(loadOrCreateRelationshipKeyMaterialMock).toHaveBeenCalledTimes(1)

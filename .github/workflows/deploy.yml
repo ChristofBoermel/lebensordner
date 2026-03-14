@@ -157,6 +157,10 @@ jobs:
             # Force recreate app/worker so runtime env changes are always applied.
             docker compose up -d --no-deps --force-recreate nextjs worker
             docker compose up -d --remove-orphans
+
+            # Refresh PostgREST schema cache so newly deployed trusted-access columns are visible immediately.
+            docker compose exec -T db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema';"
+            docker compose restart rest
         env:
           DEPLOY_SHA: ${{ env.TARGET_SHA }}
 

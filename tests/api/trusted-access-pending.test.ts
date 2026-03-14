@@ -122,6 +122,74 @@ describe('Trusted access pending API', () => {
     expect(response.headers.get('set-cookie')).toContain('trusted_access_pending=pending-cookie-value')
   })
 
+  it('falls back to the token when a stale pending cookie no longer resolves', async () => {
+    readTrustedAccessPendingCookieMock.mockReturnValue({
+      invitationId: 'stale-inv-1',
+      ownerId: 'owner-1',
+      trustedPersonId: 'tp-1',
+      expectedEmail: 'trusted@example.com',
+    })
+
+    const freshInvitationRecord = {
+      id: 'inv-1',
+      owner_id: 'owner-1',
+      trusted_person_id: 'tp-1',
+      status: 'pending',
+      expires_at: '2099-03-13T12:15:00.000Z',
+      otp_verified_at: null,
+      trusted_persons: {
+        id: 'tp-1',
+        email: 'trusted@example.com',
+        linked_user_id: 'trusted-user-1',
+        invitation_status: 'accepted',
+        relationship_status: 'setup_link_sent',
+        is_active: true,
+      },
+      profiles: {
+        full_name: 'Owner Example',
+        email: 'owner@example.com',
+      },
+    }
+
+    const invitationChain = {
+      select: vi.fn(() => invitationChain),
+      eq: vi.fn((column: string, value: string) => {
+        if (column === 'id') {
+          return {
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }
+        }
+        if (column === 'token_hash' && value === 'hashed-token-123') {
+          return {
+            maybeSingle: vi.fn().mockResolvedValue({ data: freshInvitationRecord, error: null }),
+          }
+        }
+        return {
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        }
+      }),
+    }
+
+    createServiceRoleSupabaseClientMock.mockReturnValue({
+      from: vi.fn(() => invitationChain),
+    })
+
+    const { GET } = await import('@/app/api/trusted-access/invitations/pending/route')
+    const response = await GET(
+      new Request('https://lebensordner.org/api/trusted-access/invitations/pending?token=token-123', {
+        headers: { cookie: 'trusted_access_pending=stale-cookie' },
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      status: 'setup_required',
+      relationshipStatus: 'setup_link_sent',
+      expectedEmail: 'trusted@example.com',
+    })
+    expect(response.cookies.get('trusted_access_pending')?.value).toBe('pending-cookie-value')
+  })
+
   it('returns expired when neither a pending cookie nor a token is available', async () => {
     const { GET } = await import('@/app/api/trusted-access/invitations/pending/route')
     const response = await GET(new Request('https://lebensordner.org/api/trusted-access/invitations/pending'))

@@ -104,6 +104,7 @@ async function probe(url, label) {
 
 async function main() {
   await probe(`${baseUrl}/rest/v1/profiles?select=id&limit=1`, 'internal rest probe')
+  await probe(`${baseUrl}/rest/v1/trusted_persons?select=relationship_status&limit=1`, 'trusted_persons relationship_status probe')
   await probe(`${baseUrl}/auth/v1/health`, 'internal auth health probe')
   console.log('PASS: internal nextjs->supabase probes succeeded')
 }

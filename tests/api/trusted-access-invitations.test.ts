@@ -321,6 +321,42 @@ describe('Trusted access invitations API', () => {
     )
   })
 
+
+  it('skips the relationship_status transition when PostgREST schema cache is stale', async () => {
+    const adminClient = createAdminClient({
+      relationshipResult: {
+        error: {
+          code: 'PGRST204',
+          message: "Could not find the 'relationship_status' column of 'trusted_persons' in the schema cache",
+        },
+      },
+    })
+    createServiceRoleSupabaseClientMock.mockReturnValue(adminClient)
+
+    const { POST } = await import('@/app/api/trusted-access/invitations/route')
+    const response = await POST(
+      new Request('http://localhost/api/trusted-access/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trustedPersonId: 'tp-1',
+          bootstrapRelationshipKey: 'a'.repeat(64),
+        }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(emitStructuredWarnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: '/api/trusted-access/invitations',
+        metadata: expect.objectContaining({
+          operation: 'advance_relationship_status_schema_cache',
+          errorCode: 'PGRST204',
+        }),
+      })
+    )
+  })
+
   it('returns 500 when the service-role client cannot be created', async () => {
     createServiceRoleSupabaseClientMock.mockImplementation(() => {
       throw new Error('Supabase service-role environment variables are missing')
