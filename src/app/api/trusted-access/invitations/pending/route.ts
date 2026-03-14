@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
-import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { emitStructuredError, emitStructuredInfo, emitStructuredWarn } from '@/lib/errors/structured-logger'
+import {
+  buildTrustedAccessOwnerName,
+  normalizeSingleRelation,
+  resolveTrustedAccessOwnerProfile,
+  type TrustedAccessTrustedPersonRelation,
+} from '@/lib/security/trusted-access-server'
 import {
   createTrustedAccessPendingCookie,
   hashTrustedAccessToken,
@@ -38,7 +44,6 @@ function setPendingInvitationCookie(
   })
 }
 
-
 type PendingInvitationRecord = {
   id: string
   owner_id: string
@@ -46,39 +51,13 @@ type PendingInvitationRecord = {
   status: string
   expires_at: string
   otp_verified_at: string | null
-  trusted_persons: {
-    id: string
-    email: string
-    linked_user_id: string | null
-    invitation_status: string
-    relationship_status: string
-    is_active: boolean
-  } | Array<{
-    id: string
-    email: string
-    linked_user_id: string | null
-    invitation_status: string
-    relationship_status: string
-    is_active: boolean
-  }> | null
-  profiles: {
-    full_name: string | null
-    email: string | null
-  } | Array<{
-    full_name: string | null
-    email: string | null
-  }> | null
+  trusted_persons: TrustedAccessTrustedPersonRelation | TrustedAccessTrustedPersonRelation[] | null
 }
 
 function normalizeInvitationRelations(invitation: PendingInvitationRecord) {
-  const trustedPerson = Array.isArray(invitation.trusted_persons)
-    ? invitation.trusted_persons[0]
-    : invitation.trusted_persons
-  const ownerProfile = Array.isArray(invitation.profiles)
-    ? invitation.profiles[0]
-    : invitation.profiles
-
-  return { trustedPerson, ownerProfile }
+  return {
+    trustedPerson: normalizeSingleRelation(invitation.trusted_persons),
+  }
 }
 
 function isUsablePendingInvitation(invitation: PendingInvitationRecord | null) {
@@ -101,6 +80,7 @@ function isUsablePendingInvitation(invitation: PendingInvitationRecord | null) {
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
+    const requestId = request.headers.get('x-request-id')?.trim() || null
     const token = url.searchParams.get('token')?.trim() ?? ''
     const pendingCookie = readTrustedAccessPendingCookie(
       readCookieValueFromHeader(request.headers.get('cookie'), TRUSTED_ACCESS_PENDING_COOKIE)
@@ -137,15 +117,12 @@ export async function GET(request: Request) {
           otp_verified_at,
           trusted_persons:trusted_person_id (
             id,
+            user_id,
             email,
             linked_user_id,
             invitation_status,
             relationship_status,
             is_active
-          ),
-          profiles:owner_id (
-            full_name,
-            email
           )
         `)
         .eq(column, value)
@@ -170,6 +147,8 @@ export async function GET(request: Request) {
         error_message: `[Trusted Access Pending API] Failed to load pending invitation: ${cookieResult.error?.message ?? tokenResult.error?.message ?? 'unknown error'}`,
         endpoint: '/api/trusted-access/invitations/pending',
         metadata: {
+          requestId,
+          operation: 'load_pending_invitation',
           hasPendingCookie: Boolean(pendingCookie),
           hasToken: Boolean(token),
           cookieError: cookieResult.error?.message ?? null,
@@ -187,6 +166,17 @@ export async function GET(request: Request) {
         : cookieInvitation ?? tokenInvitation
 
     if (!invitation) {
+      emitStructuredWarn({
+        event_type: 'api',
+        event_message: '[Trusted Access Pending API] Invitation not found or no longer usable',
+        endpoint: '/api/trusted-access/invitations/pending',
+        metadata: {
+          requestId,
+          operation: 'resolve_pending_invitation',
+          hasPendingCookie: Boolean(pendingCookie),
+          hasToken: Boolean(token),
+        },
+      })
       return NextResponse.json(
         {
           status: 'expired_invitation',
@@ -196,10 +186,11 @@ export async function GET(request: Request) {
       )
     }
 
-    const { trustedPerson, ownerProfile } = normalizeInvitationRelations(invitation)
+    const { trustedPerson } = normalizeInvitationRelations(invitation)
 
     const expiresAtMs = new Date(invitation.expires_at).getTime()
-    const invitationExpired = invitation.status !== 'pending' || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()
+    const invitationExpired =
+      invitation.status !== 'pending' || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()
     if (
       invitationExpired ||
       !trustedPerson ||
@@ -207,9 +198,25 @@ export async function GET(request: Request) {
       !trustedPerson.is_active ||
       trustedPerson.relationship_status === 'revoked'
     ) {
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: '[Trusted Access Pending API] Pending invitation is no longer valid',
+        endpoint: '/api/trusted-access/invitations/pending',
+        metadata: {
+          requestId,
+          operation: 'validate_pending_invitation',
+          invitationId: invitation.id,
+          trustedPersonId: invitation.trusted_person_id,
+          relationshipStatus: trustedPerson?.relationship_status ?? null,
+          invitationStatus: invitation.status,
+        },
+      })
       return NextResponse.json(
         {
-          status: invitation.status === 'revoked' || trustedPerson?.relationship_status === 'revoked' ? 'revoked' : 'expired_invitation',
+          status:
+            invitation.status === 'revoked' || trustedPerson?.relationship_status === 'revoked'
+              ? 'revoked'
+              : 'expired_invitation',
           userMessageKey:
             invitation.status === 'revoked' || trustedPerson?.relationship_status === 'revoked'
               ? 'secure_access_revoked'
@@ -226,6 +233,30 @@ export async function GET(request: Request) {
       trustedPerson.linked_user_id !== user.id ||
       normalizedUserEmail !== normalizedExpectedEmail
 
+    if (wrongAccount) {
+      emitStructuredWarn({
+        event_type: 'security',
+        event_message: '[Trusted Access Pending API] Wrong account attempted to redeem a trusted-access invitation',
+        endpoint: '/api/trusted-access/invitations/pending',
+        metadata: {
+          requestId,
+          operation: 'validate_pending_account',
+          invitationId: invitation.id,
+          trustedPersonId: trustedPerson.id,
+          userId: user?.id ?? null,
+        },
+      })
+    }
+
+    const ownerProfile = await resolveTrustedAccessOwnerProfile({
+      adminClient,
+      endpoint: '/api/trusted-access/invitations/pending',
+      operation: 'pending_owner_profile_lookup',
+      trustedPerson,
+      invitationId: invitation.id,
+      requestId,
+    })
+
     const otpCookie = readTrustedAccessOtpCookie(
       readCookieValueFromHeader(request.headers.get('cookie'), TRUSTED_ACCESS_OTP_COOKIE)
     )
@@ -234,16 +265,27 @@ export async function GET(request: Request) {
       status: wrongAccount ? 'wrong_account' : 'setup_required',
       relationshipStatus: trustedPerson.relationship_status,
       expectedEmail: trustedPerson.email,
-      ownerName: ownerProfile?.full_name || ownerProfile?.email || 'Lebensordner',
+      ownerName: buildTrustedAccessOwnerName(ownerProfile),
       invitationExpiresAt: invitation.expires_at,
       otpVerified: Boolean(
         invitation.otp_verified_at ||
-        (otpCookie && otpCookie.invitationId === invitation.id && otpCookie.userId === user?.id)
+          (otpCookie && otpCookie.invitationId === invitation.id && otpCookie.userId === user?.id)
       ),
       userMessageKey: wrongAccount ? 'secure_access_wrong_account' : 'secure_access_setup_required',
     })
 
     if (!pendingCookie || pendingCookie.invitationId !== invitation.id) {
+      emitStructuredInfo({
+        event_type: 'api',
+        event_message: '[Trusted Access Pending API] Refreshed pending invitation cookie from active invitation state',
+        endpoint: '/api/trusted-access/invitations/pending',
+        metadata: {
+          requestId,
+          operation: 'refresh_pending_cookie',
+          invitationId: invitation.id,
+          trustedPersonId: invitation.trusted_person_id,
+        },
+      })
       setPendingInvitationCookie(response, invitation, trustedPerson.email)
     }
 

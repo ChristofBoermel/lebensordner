@@ -3148,3 +3148,21 @@ Verification:
 
 Rollback:
 - Revert `src/app/api/trusted-access/invitations/pending/route.ts`, `tests/api/trusted-access-pending.test.ts`, and this changelog entry to restore the previous strict error handling.
+## 2026-03-14T18:09:26Z - Codex - uncommitted
+Summary:
+- Hardened trusted-user linking across `pending`, `otp/send`, and `complete` by removing the fragile `profiles:owner_id` PostgREST embed, resolving owner display data through `trusted_persons.user_id`, and degrading owner-name lookup failures to a safe fallback instead of returning `500`.
+- Added structured info/warn logging for pending resolution, wrong-account attempts, cookie refreshes, and owner-profile fallback, plus focused regressions and a deploy probe for the trusted-access invitation relation path.
+
+Risk / Regression Notes:
+- Owner profile lookup now intentionally fails open to the fallback label `Lebensordner`; invitation validity, account matching, and OTP/device setup still fail closed.
+- The new deploy probe validates the trusted-access relation path used by the server routes, but the full owner->redeem->login flow still depends on the existing smoke/E2E coverage outside this focused suite.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/api/trusted-access-pending.test.ts tests/api/trusted-access-otp-send.test.ts tests/api/trusted-access-complete.test.ts tests/api/trusted-access-invitations.test.ts tests/api/trusted-access-redeem.test.ts`
+- `npm run qa:strict`
+
+Rollback:
+- Revert `src/app/api/trusted-access/invitations/pending/route.ts`, `src/app/api/trusted-access/invitations/otp/send/route.ts`, `src/app/api/trusted-access/invitations/complete/route.ts`, `src/lib/security/trusted-access-server.ts`, `scripts/ops/verify-deploy.sh`, the trusted-access API tests, and this changelog entry to restore the previous embed-based owner lookup behavior.

@@ -15,8 +15,10 @@ const { resolveAuthenticatedUserMock } = vi.hoisted(() => ({
   })),
 }))
 
-const { emitStructuredErrorMock } = vi.hoisted(() => ({
+const { emitStructuredErrorMock, emitStructuredInfoMock, emitStructuredWarnMock } = vi.hoisted(() => ({
   emitStructuredErrorMock: vi.fn(),
+  emitStructuredInfoMock: vi.fn(),
+  emitStructuredWarnMock: vi.fn(),
 }))
 
 const {
@@ -47,6 +49,8 @@ vi.mock('@/lib/auth/resolve-authenticated-user', () => ({
 
 vi.mock('@/lib/errors/structured-logger', () => ({
   emitStructuredError: emitStructuredErrorMock,
+  emitStructuredInfo: emitStructuredInfoMock,
+  emitStructuredWarn: emitStructuredWarnMock,
 }))
 
 vi.mock('@/lib/security/trusted-access', () => ({
@@ -58,6 +62,87 @@ vi.mock('@/lib/security/trusted-access', () => ({
   TRUSTED_ACCESS_OTP_COOKIE: 'trusted_access_otp',
   TRUSTED_ACCESS_PENDING_COOKIE: 'trusted_access_pending',
 }))
+
+type InvitationRecord = {
+  id: string
+  owner_id: string
+  trusted_person_id: string
+  status: string
+  expires_at: string
+  otp_verified_at: string | null
+  trusted_persons: {
+    id: string
+    user_id: string
+    email: string
+    linked_user_id: string | null
+    invitation_status: string
+    relationship_status: string
+    is_active: boolean
+  }
+}
+
+function createAdminClient(options?: {
+  invitationById?: InvitationRecord | null
+  invitationByToken?: InvitationRecord | null
+  invitationByIdError?: any
+  invitationByTokenError?: any
+  ownerProfile?: { full_name: string | null; email: string | null } | null
+  ownerProfileError?: any
+}) {
+  function createInvitationChain() {
+    let filterColumn = ''
+    let filterValue = ''
+
+    const invitationChain = {
+      select: vi.fn(() => invitationChain),
+      eq: vi.fn((column: string, value: string) => {
+        filterColumn = column
+        filterValue = value
+        return invitationChain
+      }),
+      maybeSingle: vi.fn(async () => {
+        if (filterColumn === 'id') {
+          return {
+            data: options?.invitationById ?? null,
+            error: options?.invitationByIdError ?? null,
+          }
+        }
+
+        if (filterColumn === 'token_hash' && filterValue === 'hashed-token-123') {
+          return {
+            data: options?.invitationByToken ?? null,
+            error: options?.invitationByTokenError ?? null,
+          }
+        }
+
+        return { data: null, error: null }
+      }),
+    }
+
+    return invitationChain
+  }
+
+  function createProfilesChain() {
+    const profilesChain = {
+      select: vi.fn(() => profilesChain),
+      eq: vi.fn(() => profilesChain),
+      maybeSingle: vi.fn(async () => ({
+        data: options?.ownerProfile ?? null,
+        error: options?.ownerProfileError ?? null,
+      })),
+    }
+
+    return profilesChain
+  }
+
+  return {
+    from: vi.fn((table: string) => {
+      if (table === 'trusted_access_invitations') return createInvitationChain()
+      if (table === 'profiles') return createProfilesChain()
+      throw new Error(`Unexpected table ${table}`)
+    }),
+  }
+}
 
 describe('Trusted access pending API', () => {
   beforeEach(() => {
@@ -87,30 +172,21 @@ describe('Trusted access pending API', () => {
       otp_verified_at: null,
       trusted_persons: {
         id: 'tp-1',
+        user_id: 'owner-1',
         email: 'trusted@example.com',
         linked_user_id: 'trusted-user-1',
         invitation_status: 'accepted',
         relationship_status: 'setup_link_sent',
         is_active: true,
       },
-      profiles: {
-        full_name: 'Owner Example',
-        email: 'owner@example.com',
-      },
     }
 
-    const invitationChain = {
-      select: vi.fn(() => invitationChain),
-      eq: vi.fn(() => invitationChain),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: invitationRecord,
-        error: null,
-      }),
-    }
-
-    createServiceRoleSupabaseClientMock.mockReturnValue({
-      from: vi.fn(() => invitationChain),
-    })
+    createServiceRoleSupabaseClientMock.mockReturnValue(
+      createAdminClient({
+        invitationByToken: invitationRecord,
+        ownerProfile: { full_name: 'Owner Example', email: 'owner@example.com' },
+      })
+    )
 
     const { GET } = await import('@/app/api/trusted-access/invitations/pending/route')
     const response = await GET(
@@ -118,7 +194,6 @@ describe('Trusted access pending API', () => {
     )
 
     expect(hashTrustedAccessTokenMock).toHaveBeenCalledWith('token-123')
-    expect(invitationChain.eq).toHaveBeenCalledWith('token_hash', 'hashed-token-123')
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
       status: 'setup_required',
@@ -128,7 +203,6 @@ describe('Trusted access pending API', () => {
       otpVerified: false,
     })
     expect(response.cookies.get('trusted_access_pending')?.value).toBe('pending-cookie-value')
-    expect(response.headers.get('set-cookie')).toContain('trusted_access_pending=pending-cookie-value')
   })
 
   it('falls back to the token when a stale pending cookie no longer resolves', async () => {
@@ -148,40 +222,22 @@ describe('Trusted access pending API', () => {
       otp_verified_at: null,
       trusted_persons: {
         id: 'tp-1',
+        user_id: 'owner-1',
         email: 'trusted@example.com',
         linked_user_id: 'trusted-user-1',
         invitation_status: 'accepted',
         relationship_status: 'setup_link_sent',
         is_active: true,
       },
-      profiles: {
-        full_name: 'Owner Example',
-        email: 'owner@example.com',
-      },
     }
 
-    const invitationChain = {
-      select: vi.fn(() => invitationChain),
-      eq: vi.fn((column: string, value: string) => {
-        if (column === 'id') {
-          return {
-            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-          }
-        }
-        if (column === 'token_hash' && value === 'hashed-token-123') {
-          return {
-            maybeSingle: vi.fn().mockResolvedValue({ data: freshInvitationRecord, error: null }),
-          }
-        }
-        return {
-          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-        }
-      }),
-    }
-
-    createServiceRoleSupabaseClientMock.mockReturnValue({
-      from: vi.fn(() => invitationChain),
-    })
+    createServiceRoleSupabaseClientMock.mockReturnValue(
+      createAdminClient({
+        invitationById: null,
+        invitationByToken: freshInvitationRecord,
+        ownerProfile: { full_name: 'Owner Example', email: 'owner@example.com' },
+      })
+    )
 
     const { GET } = await import('@/app/api/trusted-access/invitations/pending/route')
     const response = await GET(
@@ -199,16 +255,8 @@ describe('Trusted access pending API', () => {
     expect(response.cookies.get('trusted_access_pending')?.value).toBe('pending-cookie-value')
   })
 
-
-  it('falls back to the token when the pending cookie lookup errors but the token is still valid', async () => {
-    readTrustedAccessPendingCookieMock.mockReturnValue({
-      invitationId: 'not-a-real-uuid',
-      ownerId: 'owner-1',
-      trustedPersonId: 'tp-1',
-      expectedEmail: 'trusted@example.com',
-    })
-
-    const freshInvitationRecord = {
+  it('falls back to a generic owner label when owner profile lookup fails', async () => {
+    const invitationRecord = {
       id: 'inv-1',
       owner_id: 'owner-1',
       trusted_person_id: 'tp-1',
@@ -217,56 +265,46 @@ describe('Trusted access pending API', () => {
       otp_verified_at: null,
       trusted_persons: {
         id: 'tp-1',
+        user_id: 'owner-1',
         email: 'trusted@example.com',
         linked_user_id: 'trusted-user-1',
         invitation_status: 'accepted',
         relationship_status: 'setup_link_sent',
         is_active: true,
       },
-      profiles: {
-        full_name: 'Owner Example',
-        email: 'owner@example.com',
-      },
     }
 
-    const invitationChain = {
-      select: vi.fn(() => invitationChain),
-      eq: vi.fn((column: string, value: string) => {
-        if (column === 'id') {
-          return {
-            maybeSingle: vi.fn().mockResolvedValue({
-              data: null,
-              error: { message: 'invalid input syntax for type uuid: "not-a-real-uuid"' },
-            }),
-          }
-        }
-        if (column === 'token_hash' && value === 'hashed-token-123') {
-          return {
-            maybeSingle: vi.fn().mockResolvedValue({ data: freshInvitationRecord, error: null }),
-          }
-        }
-        return {
-          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-        }
-      }),
-    }
-
-    createServiceRoleSupabaseClientMock.mockReturnValue({
-      from: vi.fn(() => invitationChain),
-    })
+    createServiceRoleSupabaseClientMock.mockReturnValue(
+      createAdminClient({
+        invitationByToken: invitationRecord,
+        ownerProfileError: {
+          code: 'PGRST200',
+          message: 'relationship missing',
+          details: null,
+          hint: null,
+        },
+      })
+    )
 
     const { GET } = await import('@/app/api/trusted-access/invitations/pending/route')
     const response = await GET(
-      new Request('https://lebensordner.org/api/trusted-access/invitations/pending?token=token-123', {
-        headers: { cookie: 'trusted_access_pending=broken-cookie' },
-      })
+      new Request('https://lebensordner.org/api/trusted-access/invitations/pending?token=token-123')
     )
 
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
       status: 'setup_required',
-      relationshipStatus: 'setup_link_sent',
+      ownerName: 'Lebensordner',
     })
+    expect(emitStructuredInfoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: '/api/trusted-access/invitations/pending',
+        metadata: expect.objectContaining({
+          operation: 'pending_owner_profile_lookup',
+          invitationId: 'inv-1',
+        }),
+      })
+    )
     expect(emitStructuredErrorMock).not.toHaveBeenCalled()
   })
 

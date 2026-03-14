@@ -3,6 +3,12 @@ import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 import { sendEmailWithTimeout } from '@/lib/email/resend-service'
 import {
+  buildTrustedAccessOwnerName,
+  normalizeSingleRelation,
+  resolveTrustedAccessOwnerProfile,
+  type TrustedAccessTrustedPersonRelation,
+} from '@/lib/security/trusted-access-server'
+import {
   buildTrustedAccessOtpExpiry,
   generateTrustedAccessOtp,
   hashTrustedAccessOtp,
@@ -26,8 +32,17 @@ function buildOtpEmail(input: { ownerName: string; otp: string }): string {
   `
 }
 
+type OtpInvitationRecord = {
+  id: string
+  owner_id: string
+  status: string
+  expires_at: string
+  trusted_persons: TrustedAccessTrustedPersonRelation | TrustedAccessTrustedPersonRelation[] | null
+}
+
 export async function POST(request: Request) {
   try {
+    const requestId = request.headers.get('x-request-id')?.trim() || null
     const pendingCookie = readTrustedAccessPendingCookie(
       readCookieValueFromHeader(request.headers.get('cookie'), TRUSTED_ACCESS_PENDING_COOKIE)
     )
@@ -57,15 +72,12 @@ export async function POST(request: Request) {
         expires_at,
         trusted_persons:trusted_person_id (
           id,
+          user_id,
           email,
           linked_user_id,
           invitation_status,
           relationship_status,
           is_active
-        ),
-        profiles:owner_id (
-          full_name,
-          email
         )
       `)
       .eq('id', pendingCookie.invitationId)
@@ -75,12 +87,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Link expired' }, { status: 410 })
     }
 
-    const trustedPerson = Array.isArray(invitation.trusted_persons)
-      ? invitation.trusted_persons[0]
-      : invitation.trusted_persons
-    const ownerProfile = Array.isArray(invitation.profiles)
-      ? invitation.profiles[0]
-      : invitation.profiles
+    const trustedPerson = normalizeSingleRelation(
+      (invitation as OtpInvitationRecord).trusted_persons
+    )
 
     const wrongAccount =
       !trustedPerson ||
@@ -100,6 +109,7 @@ export async function POST(request: Request) {
         event_message: '[Trusted Access OTP Send API] Wrong account blocked from OTP send',
         endpoint: '/api/trusted-access/invitations/otp/send',
         metadata: {
+          requestId,
           invitationId: pendingCookie.invitationId,
           userId: user.id,
         },
@@ -135,16 +145,34 @@ export async function POST(request: Request) {
         error_type: 'api',
         error_message: `[Trusted Access OTP Send API] Failed to create OTP challenge: ${otpInsertError.message}`,
         endpoint: '/api/trusted-access/invitations/otp/send',
+        metadata: {
+          requestId,
+          operation: 'create_otp_challenge',
+          invitationId: invitation.id,
+          trustedPersonId: trustedPerson.id,
+          errorCode: otpInsertError.code ?? null,
+          details: otpInsertError.details ?? null,
+          hint: otpInsertError.hint ?? null,
+        },
       })
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
+
+    const ownerProfile = await resolveTrustedAccessOwnerProfile({
+      adminClient,
+      endpoint: '/api/trusted-access/invitations/otp/send',
+      operation: 'otp_owner_profile_lookup',
+      trustedPerson,
+      invitationId: invitation.id,
+      requestId,
+    })
 
     const emailResult = await sendEmailWithTimeout({
       from: 'Lebensordner <noreply@lebensordner.org>',
       to: trustedPerson.email,
       subject: 'Code fuer sicheren Dokumentenzugang',
       html: buildOtpEmail({
-        ownerName: ownerProfile?.full_name || ownerProfile?.email || 'Lebensordner',
+        ownerName: buildTrustedAccessOwnerName(ownerProfile),
         otp,
       }),
     })
@@ -155,6 +183,7 @@ export async function POST(request: Request) {
         event_message: '[Trusted Access OTP Send API] OTP delivery failed',
         endpoint: '/api/trusted-access/invitations/otp/send',
         metadata: {
+          requestId,
           invitationId: invitation.id,
           trustedPersonId: trustedPerson.id,
           error: emailResult.error ?? null,

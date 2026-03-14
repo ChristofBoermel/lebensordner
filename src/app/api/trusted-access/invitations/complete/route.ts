@@ -3,6 +3,12 @@ import { NextResponse } from 'next/server'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 import {
+  buildTrustedAccessOwnerName,
+  normalizeSingleRelation,
+  resolveTrustedAccessOwnerProfile,
+  type TrustedAccessTrustedPersonRelation,
+} from '@/lib/security/trusted-access-server'
+import {
   createTrustedAccessDeviceCookie,
   decryptTrustedAccessBootstrap,
   emitTrustedAccessEvent,
@@ -17,8 +23,19 @@ import {
 import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
+type CompleteInvitationRecord = {
+  id: string
+  owner_id: string
+  trusted_person_id: string
+  status: string
+  expires_at: string
+  metadata: Record<string, string> | null
+  trusted_persons: TrustedAccessTrustedPersonRelation | TrustedAccessTrustedPersonRelation[] | null
+}
+
 export async function POST(request: Request) {
   try {
+    const requestId = request.headers.get('x-request-id')?.trim() || null
     const pendingCookie = readTrustedAccessPendingCookie(
       readCookieValueFromHeader(request.headers.get('cookie'), TRUSTED_ACCESS_PENDING_COOKIE)
     )
@@ -57,15 +74,12 @@ export async function POST(request: Request) {
         metadata,
         trusted_persons:trusted_person_id (
           id,
+          user_id,
           email,
           linked_user_id,
           invitation_status,
           relationship_status,
           is_active
-        ),
-        profiles:owner_id (
-          full_name,
-          email
         )
       `)
       .eq('id', pendingCookie.invitationId)
@@ -75,12 +89,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Link expired' }, { status: 410 })
     }
 
-    const trustedPerson = Array.isArray(invitation.trusted_persons)
-      ? invitation.trusted_persons[0]
-      : invitation.trusted_persons
-    const ownerProfile = Array.isArray(invitation.profiles)
-      ? invitation.profiles[0]
-      : invitation.profiles
+    const trustedPerson = normalizeSingleRelation(
+      (invitation as CompleteInvitationRecord).trusted_persons
+    )
 
     const wrongAccount =
       !trustedPerson ||
@@ -92,6 +103,7 @@ export async function POST(request: Request) {
       wrongAccount ||
       invitation.status !== 'pending' ||
       expired ||
+      !trustedPerson ||
       trustedPerson.invitation_status !== 'accepted' ||
       !trustedPerson.is_active ||
       trustedPerson.relationship_status === 'revoked'
@@ -101,6 +113,7 @@ export async function POST(request: Request) {
         event_message: '[Trusted Access Complete API] Invitation completion rejected',
         endpoint: '/api/trusted-access/invitations/complete',
         metadata: {
+          requestId,
           invitationId: invitation.id,
           status: invitation.status,
           userId: user.id,
@@ -118,7 +131,10 @@ export async function POST(request: Request) {
         error_type: 'api',
         error_message: '[Trusted Access Complete API] Missing bootstrap relationship key',
         endpoint: '/api/trusted-access/invitations/complete',
-        metadata: { invitationId: invitation.id },
+        metadata: {
+          requestId,
+          invitationId: invitation.id,
+        },
       })
       return NextResponse.json({ error: 'Bootstrap unavailable' }, { status: 500 })
     }
@@ -146,6 +162,15 @@ export async function POST(request: Request) {
         error_type: 'api',
         error_message: `[Trusted Access Complete API] Failed to create device enrollment: ${deviceError?.message ?? 'unknown error'}`,
         endpoint: '/api/trusted-access/invitations/complete',
+        metadata: {
+          requestId,
+          operation: 'create_device_enrollment',
+          invitationId: invitation.id,
+          trustedPersonId: invitation.trusted_person_id,
+          errorCode: deviceError?.code ?? null,
+          details: deviceError?.details ?? null,
+          hint: deviceError?.hint ?? null,
+        },
       })
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
@@ -186,10 +211,19 @@ export async function POST(request: Request) {
       })
     }
 
+    const ownerProfile = await resolveTrustedAccessOwnerProfile({
+      adminClient,
+      endpoint: '/api/trusted-access/invitations/complete',
+      operation: 'complete_owner_profile_lookup',
+      trustedPerson,
+      invitationId: invitation.id,
+      requestId,
+    })
+
     const response = NextResponse.json({
       success: true,
       ownerId: invitation.owner_id,
-      ownerName: ownerProfile?.full_name || ownerProfile?.email || 'Lebensordner',
+      ownerName: buildTrustedAccessOwnerName(ownerProfile),
       relationshipKey: bootstrapRelationshipKey,
       redirectTo: `/vp-dashboard/view/${invitation.owner_id}`,
     })
