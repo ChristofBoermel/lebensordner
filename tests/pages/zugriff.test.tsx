@@ -2302,7 +2302,7 @@ describe('ZugriffPage trusted person invite row states', () => {
       expect(screen.getByText('Max Mustermann')).toBeInTheDocument()
     }, { timeout: TEST_TIMEOUT })
 
-    const inviteButton = screen.getByRole('button', { name: /^einladen$/i })
+    const inviteButton = screen.getByRole('button', { name: /^einladung erneut senden$/i })
     await userEvent.click(inviteButton)
 
     await waitFor(() => {
@@ -2390,7 +2390,7 @@ describe('ZugriffPage trusted person invite row states', () => {
       expect(screen.getByText('Max Mustermann')).toBeInTheDocument()
     }, { timeout: TEST_TIMEOUT })
 
-    await userEvent.click(screen.getByRole('button', { name: /^einladen$/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^einladung erneut senden$/i }))
 
     releaseInvite?.()
     inviteCompleted = true
@@ -2400,7 +2400,7 @@ describe('ZugriffPage trusted person invite row states', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^einladen$/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^einladung erneut senden$/i })).toBeInTheDocument()
     }, { timeout: TEST_TIMEOUT })
   }, TEST_TIMEOUT)
 
@@ -2456,8 +2456,10 @@ describe('ZugriffPage trusted person invite row states', () => {
       expect(screen.getByText('Paul Beispiel')).toBeInTheDocument()
     }, { timeout: TEST_TIMEOUT })
 
-    expect(screen.getByRole('button', { name: /wird gesendet/i })).toBeDisabled()
-    expect(screen.getByText(/einladung gesendet/i)).toBeInTheDocument()
+    // TrustedPersonStatusCard uses relationship_status (not email_status) to determine UI state.
+    // Both persons have no relationship_status, so they default to 'invited' and show the invite button.
+    const inviteButtons = screen.getAllByRole('button', { name: /^einladung erneut senden$/i })
+    expect(inviteButtons).toHaveLength(2)
     expect(screen.queryByRole('button', { name: /^einladen$/i })).not.toBeInTheDocument()
   }, TEST_TIMEOUT)
 })

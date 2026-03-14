@@ -26,13 +26,9 @@ import {
   User,
   Shield,
   Mail,
-  Phone,
-  Edit2,
   Trash2,
   Loader2,
   CheckCircle2,
-  XCircle,
-  Send,
   Crown,
   Link2,
   Clock,
@@ -45,9 +41,7 @@ import {
   Calendar,
   ArrowRight,
   FileText,
-  Key,
   Share2,
-  AlertCircle,
 } from 'lucide-react'
 import { useThemeSafe } from '@/components/theme/theme-provider'
 import type { TrustedPerson, DocumentMetadata } from '@/types/database'
@@ -59,6 +53,8 @@ import {
   loadShareEligibleTrustedPersons,
   type ShareEligibleTrustedPerson,
 } from '@/lib/trusted-persons/share-eligible'
+import { TrustedPersonStatusCard } from '@/components/trusted-access/TrustedPersonStatusCard'
+import { SetupLinkPanel } from '@/components/trusted-access/SetupLinkPanel'
 
 // Lazy load DocumentViewer for performance
 const DocumentViewer = dynamic(
@@ -114,12 +110,14 @@ export default function ZugriffPage() {
   const [isGeneratingLink, setIsGeneratingLink] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const vaultContext = useVault()
-  const [rkShareUrl, setRkShareUrl] = useState<string | null>(null)
-  const [rkShareExpiresAt, setRkShareExpiresAt] = useState<string | null>(null)
   const [isGeneratingRk, setIsGeneratingRk] = useState<string | null>(null)
-  const [rkDialogOpen, setRkDialogOpen] = useState(false)
-  const [rkLinkCopied, setRkLinkCopied] = useState(false)
-  const [rkPostCopyStep, setRkPostCopyStep] = useState(false)
+  const [setupLinkPanel, setSetupLinkPanel] = useState<{
+    personId: string
+    url: string
+    name: string
+    email: string
+    expiresAt: string
+  } | null>(null)
   const { seniorMode } = useThemeSafe()
 
   const [form, setForm] = useState({
@@ -654,10 +652,10 @@ export default function ZugriffPage() {
     }
   }
 
-  const handleGenerateRelationshipKey = async (person: TrustedPerson) => {
-    const isConnected = person.invitation_status === 'accepted' && person.linked_user_id !== null
-    if (!isConnected) {
-      setError('Diese Vertrauensperson muss ihr Konto zuerst verknüpfen.')
+  const handleCreateSetupLink = async (person: TrustedPerson) => {
+    const status = person.relationship_status
+    if (status !== 'accepted_pending_setup' && status !== 'setup_link_sent') {
+      setError('Sicherer Link kann erst nach Annahme der Einladung erstellt werden.')
       return
     }
 
@@ -671,9 +669,7 @@ export default function ZugriffPage() {
     try {
       const { loadOrCreateRelationshipKeyMaterial } = await import('@/lib/security/relationship-key')
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        throw new Error('Nicht angemeldet')
-      }
+      if (!user) throw new Error('Nicht angemeldet')
 
       const relationshipKey = await loadOrCreateRelationshipKeyMaterial({
         supabase,
@@ -682,7 +678,7 @@ export default function ZugriffPage() {
         masterKey: vaultContext.masterKey,
       })
 
-      const invitationResponse = await fetch('/api/trusted-access/invitations', {
+      const invitationResponse = await fetch('/api/trusted-access/setup-links', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -695,11 +691,16 @@ export default function ZugriffPage() {
         throw new Error(invitationData.error || 'Sicherer Zugriffslink konnte nicht erstellt werden')
       }
 
-      setRkShareUrl(invitationData.invitationUrl)
-      setRkShareExpiresAt(invitationData.expiresAt ?? null)
-      setRkDialogOpen(true)
+      await fetchTrustedPersons(false)
+      setSetupLinkPanel({
+        personId: person.id,
+        url: invitationData.invitationUrl,
+        name: person.name,
+        email: person.email,
+        expiresAt: invitationData.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
     } catch (err: any) {
-      alert('Fehler beim Erstellen des sicheren Zugriffslinks: ' + err.message)
+      setError('Fehler beim Erstellen des sicheren Zugriffslinks: ' + err.message)
     } finally {
       setIsGeneratingRk(null)
     }
@@ -1137,165 +1138,17 @@ export default function ZugriffPage() {
               {activePersons.length > 0 ? (
                 <div className="space-y-4">
                   {activePersons.map((person) => (
-                    <Card
+                    <TrustedPersonStatusCard
                       key={person.id}
-                      data-testid={`trusted-person-card-${person.id}`}
-                      className={`border-l-4 ${
-                      userTier.id === 'premium' ? 'border-l-green-500' :
-                      userTier.id === 'basic' ? 'border-l-blue-500' : 'border-l-warmgray-300'
-                    }`}
-                    >
-                      <CardContent className="pt-6">
-                        <div className="flex items-start justify-between">
-                          <div className="flex gap-4">
-                            <div className="w-12 h-12 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
-                              <Users className="w-6 h-6 text-sage-600" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="font-semibold text-warmgray-900">{person.name}</h3>
-                                <InfoBadge type={userTier.id} variant="compact" />
-                              </div>
-                              <p className="text-sm text-warmgray-600">{person.relationship}</p>
-
-                              <div className="flex items-center gap-4 mt-2 text-sm text-warmgray-500">
-                                <span className="flex items-center gap-1">
-                                  <Mail className="w-4 h-4" />
-                                  {person.email}
-                                </span>
-                                {person.phone && (
-                                  <span className="flex items-center gap-1">
-                                    <Phone className="w-4 h-4" />
-                                    {person.phone}
-                                  </span>
-                                )}
-                              </div>
-
-                              {person.notes && (
-                                <p className="text-sm text-warmgray-500 mt-2 italic">
-                                  {person.notes}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            {getInviteRowState(person) === 'inviteable' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleSendInvite(person.id)}
-                                title="Einladung senden"
-                                className="text-sage-600 hover:text-sage-700"
-                                data-testid={`trusted-person-invite-${person.id}`}
-                              >
-                                <Send className="w-4 h-4 mr-1" />
-                                Einladen
-                              </Button>
-                            )}
-                            {getInviteRowState(person) === 'sending' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled
-                                title="Einladung wird gesendet"
-                                className="text-sage-600"
-                                data-testid={`trusted-person-invite-${person.id}`}
-                              >
-                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                Wird gesendet
-                              </Button>
-                            )}
-                            {getInviteRowState(person) === 'sent' && (
-                              <span
-                                className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded"
-                                data-testid={`trusted-person-status-${person.id}`}
-                              >
-                                Einladung gesendet
-                              </span>
-                            )}
-                            {getInviteRowState(person) === 'connected' && (
-                              <span
-                                className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded flex items-center gap-1"
-                                data-testid={`trusted-person-status-${person.id}`}
-                              >
-                                <CheckCircle2 className="w-3 h-3" />
-                                Verbunden
-                              </span>
-                            )}
-                            {getInviteRowState(person) === 'awaiting_link' && (
-                              <span
-                                className="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded"
-                                data-testid={`trusted-person-status-${person.id}`}
-                              >
-                                Wartet auf Kontoverknüpfung
-                              </span>
-                            )}
-                            {getInviteRowState(person) === 'connected' && (
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleGenerateRelationshipKey(person)}
-                                  disabled={isGeneratingRk === person.id}
-                                  className="text-sage-600 hover:text-sage-700"
-                                >
-                                  {isGeneratingRk === person.id ? (
-                                    <>
-                                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                      Sicherer Link
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Key className="w-4 h-4 mr-1" />
-                                      Sicherer Link
-                                    </>
-                                  )}
-                                </Button>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="cursor-help">
-                                      <Info className="w-4 h-4 text-warmgray-400" aria-hidden="true" />
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-xs text-xs">
-                                    <p className="font-medium mb-1">Zwei separate Schritte:</p>
-                                    <p>1. Dokumente freigeben (bereits erledigt)</p>
-                                    <p>2. Sicheren Zugriffslink manuell senden — die App sendet ihn nicht automatisch.</p>
-                                    <p className="mt-1 text-warmgray-400">Er ist 15 Minuten gueltig und funktioniert nur einmal.</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleOpenDialog(person)}
-                              title="Bearbeiten"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleToggleActive(person)}
-                              title="Deaktivieren"
-                            >
-                              <XCircle className="w-4 h-4 text-warmgray-400" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(person.id)}
-                              title="Löschen"
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                      person={person}
+                      isGeneratingSetupLink={isGeneratingRk === person.id}
+                      isSendingInvite={invitePendingById[person.id] ?? false}
+                      onCreateSetupLink={handleCreateSetupLink}
+                      onSendInvite={handleSendInvite}
+                      onEdit={handleOpenDialog}
+                      onDelete={handleDelete}
+                      onToggleActive={handleToggleActive}
+                    />
                   ))}
                 </div>
               ) : (
@@ -1307,6 +1160,15 @@ export default function ZugriffPage() {
                     </p>
                   </CardContent>
                 </Card>
+              )}
+              {setupLinkPanel && (
+                <SetupLinkPanel
+                  recipientName={setupLinkPanel.name}
+                  recipientEmail={setupLinkPanel.email}
+                  setupUrl={setupLinkPanel.url}
+                  expiresAt={setupLinkPanel.expiresAt}
+                  onDismiss={() => setSetupLinkPanel(null)}
+                />
               )}
             </TabsContent>
 
@@ -1979,134 +1841,6 @@ export default function ZugriffPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {rkDialogOpen && rkShareUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border border-warmgray-100 max-h-[90vh] overflow-y-auto">
-            <div className="p-6 space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-sage-100 flex items-center justify-center flex-shrink-0">
-                  <Key className="w-5 h-5 text-sage-700" aria-hidden="true" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-warmgray-900">Sicherer Zugriffslink erstellt</h3>
-                  <p className="text-sm text-warmgray-600">
-                    Der Link wurde erstellt und ist bereit zum sofortigen Versenden.
-                  </p>
-                </div>
-              </div>
-
-              {/* Manual delivery explainer — always visible */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
-                  <div className="text-sm text-blue-800 space-y-1">
-                    <p className="font-semibold">Dieser Link wird nicht automatisch verschickt.</p>
-                    <p>Sie müssen ihn selbst per Messenger, E-Mail oder SMS weiterleiten.</p>
-                    <p>Er verfällt nach 15 Minuten und kann nur einmal verwendet werden.</p>
-                    <p>Wenn sich die Vertrauensperson mit dem falschen Konto anmeldet, müssen Sie einen neuen Link erzeugen.</p>
-                    {seniorMode && (
-                      <ol className="mt-2 space-y-1 list-decimal list-inside text-blue-700">
-                        <li>Dokumente sind bereits freigegeben.</li>
-                        <li>Kopieren Sie jetzt den sicheren Link.</li>
-                        <li>Senden Sie ihn sofort per WhatsApp, E-Mail oder SMS.</li>
-                        <li>Die Person meldet sich mit der eingeladenen E-Mail-Adresse an.</li>
-                        <li>Danach bestaetigt sie den Code aus ihrer E-Mail.</li>
-                      </ol>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-warmgray-50 border border-warmgray-100 rounded-lg p-3 font-mono text-xs sm:text-sm text-warmgray-700 break-all select-all">
-                {rkShareUrl}
-              </div>
-
-              {/* Post-copy send-now CTA */}
-              {rkPostCopyStep && (
-                <div className="bg-green-50 border border-green-300 rounded-lg p-4">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
-                    <div className="text-sm text-green-800 space-y-1">
-                      <p className="font-semibold">Link kopiert!</p>
-                      <p className={seniorMode ? 'text-base font-medium' : ''}>
-                        Jetzt an Ihre Vertrauensperson senden — per WhatsApp, E-Mail oder SMS.
-                      </p>
-                      {seniorMode && (
-                        <p className="text-green-700 mt-1">
-                          Die Person muss den Link sofort oeffnen, sich anmelden und den Code aus ihrer E-Mail eingeben.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-xs sm:text-sm">
-                <span className="font-medium">Wichtig:</span> Senden Sie den Link direkt nach dem Kopieren, weil er nur 15 Minuten gueltig ist.
-              </div>
-
-              {rkShareExpiresAt && (
-                <div className="text-xs text-warmgray-500">
-                  Gueltig bis: {new Date(rkShareExpiresAt).toLocaleDateString('de-DE')}{' '}
-                  {new Date(rkShareExpiresAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
-                </div>
-              )}
-
-              <div className="flex flex-col sm:flex-row gap-2">
-                {!rkPostCopyStep ? (
-                  <Button
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(rkShareUrl)
-                      setRkLinkCopied(true)
-                      setRkPostCopyStep(true)
-                    }}
-                    className="flex-1 justify-center"
-                  >
-                    <Copy className="w-4 h-4 mr-2" />
-                    Link kopieren
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(rkShareUrl)
-                      setRkLinkCopied(true)
-                      setTimeout(() => setRkLinkCopied(false), 2000)
-                    }}
-                    variant="outline"
-                    className="flex-1 justify-center"
-                  >
-                    {rkLinkCopied ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />
-                        Nochmals kopiert
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4 mr-2" />
-                        Nochmals kopieren
-                      </>
-                    )}
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setRkDialogOpen(false)
-                    setRkShareUrl(null)
-                    setRkShareExpiresAt(null)
-                    setRkLinkCopied(false)
-                    setRkPostCopyStep(false)
-                  }}
-                  className="flex-1 justify-center"
-                >
-                  Schließen
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <BulkShareDialog
         key={isBulkShareOpen ? 'open' : 'closed'}
