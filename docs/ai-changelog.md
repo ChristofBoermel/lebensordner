@@ -3081,3 +3081,19 @@ Verification:
 
 Rollback:
 - Revert `tests/e2e/smoke/document-security.test.ts` and this changelog entry to restore the previous badge-text assertion.
+## 2026-03-14T15:33:00Z - Codex - uncommitted
+Summary:
+- Made trusted-access setup-link creation fail open if non-essential trusted-access event logging breaks, and downgraded the email retry queue trusted-person cleanup race to structured informational logging instead of noisy foreign-key warnings.
+
+Risk / Regression Notes:
+- Setup-link creation now succeeds even when `trusted_access_events` is unavailable, so operational event history can be incomplete until that downstream issue is repaired.
+- Retry queue inserts still warn for unexpected database failures; only the known deleted-trusted-person cleanup race is suppressed.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/api/trusted-access-invitations.test.ts tests/api/email-invitation.test.ts`
+
+Rollback:
+- Revert `src/app/api/trusted-access/invitations/route.ts`, `src/lib/email/resend-service.ts`, `tests/api/trusted-access-invitations.test.ts`, and this changelog entry to restore the previous strict event-write behavior and retry-queue logging.

@@ -153,8 +153,12 @@ export async function POST(request: Request) {
         error_type: 'api',
         error_message: `[Trusted Access Invitations API] Failed to record trusted-access event: ${eventError?.message ?? String(eventError)}`,
         endpoint: '/api/trusted-access/invitations',
+        metadata: {
+          ownerId: user.id,
+          trustedPersonId,
+          invitationId: invitation.id,
+        },
       })
-      return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
 
     const origin = resolvePublicOrigin(request)

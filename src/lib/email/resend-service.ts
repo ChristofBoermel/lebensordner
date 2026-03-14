@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
+import { emitStructuredInfo, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
 const getResend = () => new Resend(process.env.RESEND_API_KEY)
 
@@ -170,18 +171,46 @@ export async function addToRetryQueue(
   })
 
   if (insertError) {
-    console.error('Failed to add to retry queue:', insertError)
-  } else {
-    console.log(
-      JSON.stringify({
-        event: 'email_queued_for_retry',
-        trusted_person_id: trustedPersonId,
-        retry_count: currentRetryCount,
-        next_retry_at: nextRetryAt,
-        error: error,
-        timestamp: new Date().toISOString(),
+    const foreignKeyMissingTrustedPerson =
+      insertError.code === '23503' &&
+      String(insertError.message ?? '').includes('email_retry_queue_trusted_person_id_fkey')
+
+    if (foreignKeyMissingTrustedPerson) {
+      emitStructuredInfo({
+        event_type: 'email_retry_skipped_deleted_trusted_person',
+        event_message: 'Skipped retry queue insert because the trusted person no longer exists',
+        queue: 'email_retry_queue',
+        metadata: {
+          trustedPersonId,
+          retryCount: currentRetryCount,
+        },
       })
-    )
+      return
+    }
+
+    emitStructuredWarn({
+      event_type: 'email_retry_queue_insert_failed',
+      event_message: `Failed to add to retry queue: ${insertError.message}`,
+      queue: 'email_retry_queue',
+      metadata: {
+        trustedPersonId,
+        retryCount: currentRetryCount,
+        errorCode: insertError.code ?? null,
+        details: insertError.details ?? null,
+      },
+    })
+  } else {
+    emitStructuredInfo({
+      event_type: 'email_queued_for_retry',
+      event_message: 'Queued failed email for retry',
+      queue: 'email_retry_queue',
+      metadata: {
+        trustedPersonId,
+        retryCount: currentRetryCount,
+        nextRetryAt,
+        error,
+      },
+    })
   }
 }
 
