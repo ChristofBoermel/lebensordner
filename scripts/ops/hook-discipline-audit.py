@@ -30,12 +30,12 @@ PATTERNS: dict[str, re.Pattern[str]] = {
 }
 
 
-# Baseline captured on 2026-03-03 after React Compiler rollout.
+# Baseline refreshed on 2026-03-14 after trusted-access lifecycle hardening.
 BASELINE_COUNTS: dict[str, int] = {
     "useMemo(": 11,
-    "useCallback(": 58,
-    "useEffect(": 102,
-    "useRef(": 23,
+    "useCallback(": 61,
+    "useEffect(": 105,
+    "useRef(": 24,
     "React.memo(": 0,
     "React.useMemo(": 0,
     "React.useCallback(": 0,
@@ -89,4 +89,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
