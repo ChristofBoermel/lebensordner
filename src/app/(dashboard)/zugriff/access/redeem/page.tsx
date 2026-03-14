@@ -75,7 +75,7 @@ function RedeemPageInner() {
     setMessage(null)
 
     try {
-      const response = await fetch('/api/trusted-access/invitations/otp/send', {
+      const response = await fetch('/api/trusted-access/setup/otp/send', {
         method: 'POST',
       })
       const data = await response.json()
@@ -96,7 +96,7 @@ function RedeemPageInner() {
     setMessage(null)
 
     try {
-      const response = await fetch('/api/trusted-access/invitations/otp/verify', {
+      const response = await fetch('/api/trusted-access/setup/otp/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ otp }),
@@ -120,7 +120,7 @@ function RedeemPageInner() {
     setMessage(null)
 
     try {
-      const response = await fetch('/api/trusted-access/invitations/complete', {
+      const response = await fetch('/api/trusted-access/setup/complete', {
         method: 'POST',
       })
       const data = await response.json()
@@ -131,7 +131,7 @@ function RedeemPageInner() {
       window.localStorage.setItem(`rk_${data.ownerId}`, data.relationshipKey)
       setMessage('Dieses Geraet ist jetzt eingerichtet. Sie werden weitergeleitet.')
       window.setTimeout(() => {
-        router.push(data.redirectTo || `/vp-dashboard/view/${data.ownerId}`)
+        router.push('/zugriff?tab=mein-zugriff')
       }, 1200)
     } catch (completeError: any) {
       setError(completeError?.message || 'Geraet konnte nicht eingerichtet werden.')
