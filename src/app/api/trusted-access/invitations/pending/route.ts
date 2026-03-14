@@ -160,7 +160,11 @@ export async function GET(request: Request) {
       ? await loadInvitationBy('token_hash', tokenHash)
       : { data: null, error: null }
 
-    if (cookieResult.error || tokenResult.error) {
+    const cookieInvitation = cookieResult.data as PendingInvitationRecord | null
+    const tokenInvitation = tokenResult.data as PendingInvitationRecord | null
+    const tokenHasUsableFallback = Boolean(tokenHash) && isUsablePendingInvitation(tokenInvitation)
+
+    if ((cookieResult.error && !tokenHasUsableFallback) || (tokenResult.error && !cookieInvitation)) {
       emitStructuredError({
         error_type: 'api',
         error_message: `[Trusted Access Pending API] Failed to load pending invitation: ${cookieResult.error?.message ?? tokenResult.error?.message ?? 'unknown error'}`,
@@ -170,13 +174,11 @@ export async function GET(request: Request) {
           hasToken: Boolean(token),
           cookieError: cookieResult.error?.message ?? null,
           tokenError: tokenResult.error?.message ?? null,
+          tokenHasUsableFallback,
         },
       })
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
-
-    const cookieInvitation = cookieResult.data as PendingInvitationRecord | null
-    const tokenInvitation = tokenResult.data as PendingInvitationRecord | null
 
     const invitation = isUsablePendingInvitation(cookieInvitation)
       ? cookieInvitation

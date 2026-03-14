@@ -3132,3 +3132,19 @@ Verification:
 
 Rollback:
 - Revert `.github/workflows/deploy.yml`, `scripts/ops/verify-deploy.sh`, `src/components/trusted-access/SetupLinkPanel.tsx`, `src/app/api/trusted-access/invitations/route.ts`, `src/app/api/trusted-access/invitations/pending/route.ts`, the updated trusted-access tests, and this changelog entry to restore the previous inline setup-link panel, stricter pending lookup, and deploy behavior.
+
+## 2026-03-14T17:39:11Z - Codex - uncommitted
+Summary:
+- Hardened the trusted-access pending handoff so a stale or malformed pending cookie no longer turns a valid redeem token into a `500 Database error`; token-backed recovery now wins and re-seeds the cookie.
+
+Risk / Regression Notes:
+- The pending API still returns `500` for true database failures with no valid fallback, but cookie-side lookup errors are now ignored when the token lookup succeeds.
+- This change is intentionally narrow to the redeem handoff path and does not alter OTP or completion semantics.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/api/trusted-access-pending.test.ts`
+
+Rollback:
+- Revert `src/app/api/trusted-access/invitations/pending/route.ts`, `tests/api/trusted-access-pending.test.ts`, and this changelog entry to restore the previous strict error handling.
