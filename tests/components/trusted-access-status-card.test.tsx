@@ -72,7 +72,7 @@ describe('TrustedPersonStatusCard', () => {
     expect(screen.getByRole('button', { name: /neuen link senden/i })).toBeInTheDocument()
   })
 
-  it('shows "Dokumente freigeben" CTA for active status', () => {
+  it('shows "Nächster Schritt: Freigaben einrichten" CTA for active status', () => {
     render(
       <TrustedPersonStatusCard
         person={{ ...basePerson, relationship_status: 'active', linked_user_id: 'user-2' }}
@@ -84,7 +84,7 @@ describe('TrustedPersonStatusCard', () => {
         onToggleActive={vi.fn()}
       />
     )
-    expect(screen.getByText('Dokumente freigeben')).toBeInTheDocument()
+    expect(screen.getByText('Nächster Schritt: Freigaben einrichten')).toBeInTheDocument()
   })
 
   it('calls onCreateSetupLink when setup link button is clicked', async () => {

@@ -32,8 +32,8 @@ export function TrustedUserStatusView() {
           isLoading: false,
           error: null,
         })
-      } catch (err: any) {
-        setState({ relationships: [], isLoading: false, error: err.message || 'Fehler beim Laden' })
+      } catch (err: unknown) {
+        setState({ relationships: [], isLoading: false, error: err instanceof Error ? err.message : 'Fehler beim Laden' })
       }
     }
     void load()
