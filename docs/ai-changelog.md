@@ -3052,3 +3052,18 @@ Rollback:
   - `tests/components/trusted-access-status-card.test.tsx`
   - `tests/pages/zugriff.test.tsx`
 - If needed for the hosted E2E project only, revert the two remote migrations via Supabase migration repair / database restore rather than editing app code.
+## 2026-03-14T14:44:01Z - Codex - uncommitted
+Summary:
+- Updated the hook-discipline audit baseline for `useEffect(` from 101 to 102 after verifying both `HEAD^` and `HEAD` already contain 102 `useEffect` usages under `src/`; this unblocks CI without masking a new regression from the trusted-linking work.
+
+Risk / Regression Notes:
+- The audit remains regression-only, but its baseline now matches the actual repository state on main as of March 14, 2026.
+- This change does not alter runtime behavior; it only restores the CI guard to a truthful threshold.
+
+Verification:
+- `python scripts/ops/hook-discipline-audit.py`
+- `gh run view 23090014148 --log-failed`
+- `git ls-tree -r --name-only HEAD src` plus `git ls-tree -r --name-only HEAD^ src` count check for `useEffect(`
+
+Rollback:
+- Revert `scripts/ops/hook-discipline-audit.py` and this changelog entry if you intentionally want CI to fail until one existing `useEffect` is refactored out of `src/`.

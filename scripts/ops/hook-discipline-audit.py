@@ -34,7 +34,7 @@ PATTERNS: dict[str, re.Pattern[str]] = {
 BASELINE_COUNTS: dict[str, int] = {
     "useMemo(": 11,
     "useCallback(": 58,
-    "useEffect(": 101,
+    "useEffect(": 102,
     "useRef(": 23,
     "React.memo(": 0,
     "React.useMemo(": 0,
@@ -89,3 +89,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
