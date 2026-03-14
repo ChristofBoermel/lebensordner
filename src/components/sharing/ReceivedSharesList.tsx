@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2, AlertTriangle, Info } from 'lucide-react'
+import { Loader2, AlertTriangle, Info, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { importRawHexKey, unwrapKey, decryptFile } from '@/lib/security/document-e2ee'
+import type { RelationshipEntry } from '@/types/trusted-access-frontend'
 
 interface AccessLinkReadiness {
   accessLinkStatus: 'ready' | 'setup_required' | 'expired_invitation' | 'wrong_account' | 'revoked'
@@ -50,6 +51,7 @@ interface ReceivedShare {
 
 export function ReceivedSharesList() {
   const [shares, setShares] = useState<ReceivedShare[]>([])
+  const [relationships, setRelationships] = useState<RelationshipEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [viewingShareId, setViewingShareId] = useState<string | null>(null)
@@ -68,6 +70,7 @@ export function ReceivedSharesList() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Fehler beim Laden')
       setShares(data.shares ?? [])
+      setRelationships(data.relationships ?? [])
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fehler beim Laden')
     } finally {
@@ -233,6 +236,38 @@ export function ReceivedSharesList() {
   }
 
   if (shares.length === 0) {
+    // Check if we have relationships explaining the empty state
+    const waitingForShare = relationships.filter(r => r.status === 'waiting_for_share')
+    const notLinkedYet = relationships.filter(r => r.status === 'not_linked_yet')
+
+    if (waitingForShare.length > 0) {
+      return (
+        <div className="flex items-start gap-2 rounded-md bg-sage-50 border border-sage-200 px-3 py-3 text-sm text-sage-800">
+          <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 text-sage-600" />
+          <div>
+            <p className="font-medium">Verbindung hergestellt</p>
+            <p className="text-sage-700 text-xs mt-0.5">
+              Dokumente erscheinen hier, sobald der Besitzer sie freigibt.
+            </p>
+          </div>
+        </div>
+      )
+    }
+
+    if (notLinkedYet.length > 0) {
+      return (
+        <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-3 text-sm text-amber-800">
+          <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-medium">Sicherer Zugriff noch nicht eingerichtet</p>
+            <p className="text-amber-700 text-xs mt-0.5">
+              Sobald der sichere Zugriff abgeschlossen ist, erscheinen freigegebene Dokumente hier.
+            </p>
+          </div>
+        </div>
+      )
+    }
+
     return <p className="text-warmgray-500 text-sm">Keine geteilten Dokumente vorhanden</p>
   }
 
