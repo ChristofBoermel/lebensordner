@@ -28,6 +28,7 @@ test.describe('@smoke trusted person invite', () => {
       })
 
       await scenario.authenticatePage(page, owner)
+      await scenario.resetTrustedPersonInviteRateLimitState(owner.id)
 
       let inviteRequests = 0
       await page.route('**/api/trusted-person/invite', async (route) => {

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useEffectEvent, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { useVault } from '@/lib/vault/VaultContext'
@@ -8,6 +8,7 @@ import { BulkShareDialog } from '@/components/sharing/BulkShareDialog'
 import { ActiveSharesList } from '@/components/sharing/ActiveSharesList'
 import { ReceivedSharesList } from '@/components/sharing/ReceivedSharesList'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -55,7 +56,9 @@ import {
 } from '@/lib/trusted-persons/share-eligible'
 import { TrustedPersonStatusCard } from '@/components/trusted-access/TrustedPersonStatusCard'
 import { SetupLinkPanel } from '@/components/trusted-access/SetupLinkPanel'
+import { TrustedUserAccessProvider } from '@/components/trusted-access/TrustedUserAccessProvider'
 import { TrustedUserStatusView } from '@/components/trusted-access/TrustedUserStatusView'
+import { buildOwnerConnectionSnapshot, diffConnectionSnapshots } from '@/lib/security/trusted-access-live-status'
 
 // Lazy load DocumentViewer for performance
 const DocumentViewer = dynamic(
@@ -149,6 +152,8 @@ export default function ZugriffPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [invitePendingById, setInvitePendingById] = useState<Record<string, boolean>>({})
   const [inviteSettledById, setInviteSettledById] = useState<Record<string, boolean>>({})
+  const ownerConnectionSnapshotRef = useRef<ReturnType<typeof buildOwnerConnectionSnapshot> | null>(null)
+  const lifecycleRefreshInFlightRef = useRef(false)
 
   const supabase = createClient()
 
@@ -280,6 +285,7 @@ export default function ZugriffPage() {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
+      ownerConnectionSnapshotRef.current = null
       setTrustedPersons([])
       setShareTrustedPersons([])
       if (showLoader) {
@@ -298,7 +304,28 @@ export default function ZugriffPage() {
     ])
 
     if (!trustedPersonsResult.error && trustedPersonsResult.data) {
-      setTrustedPersons(trustedPersonsResult.data)
+      const nextTrustedPersons = trustedPersonsResult.data
+      const previousSnapshot = ownerConnectionSnapshotRef.current
+      const nextSnapshot = buildOwnerConnectionSnapshot(nextTrustedPersons)
+      ownerConnectionSnapshotRef.current = nextSnapshot
+      setTrustedPersons(nextTrustedPersons)
+
+      if (previousSnapshot) {
+        const events = diffConnectionSnapshots(previousSnapshot, nextSnapshot)
+        for (const event of events) {
+          if (event.transition === 'connected') {
+            toast({
+              title: 'Verbindung aktiv',
+              description: `${event.label} ist jetzt sicher mit Ihnen verbunden.`,
+            })
+          } else {
+            toast({
+              title: 'Verbindung entfernt',
+              description: `${event.label} ist nicht mehr mit Ihnen verbunden.`,
+            })
+          }
+        }
+      }
     }
     setShareTrustedPersons(shareRecipients)
     if (showLoader) {
@@ -338,6 +365,96 @@ export default function ZugriffPage() {
     }
   }, [])
 
+  // allowed: subscription - receive owner-side trusted-person lifecycle changes over Supabase Realtime
+  useEffect(() => {
+    let isCancelled = false
+    let relationshipChannel:
+      | ReturnType<typeof supabase.channel>
+      | null = null
+
+    async function subscribeTrustedPersonChanges() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user || isCancelled) {
+        return
+      }
+
+      relationshipChannel = supabase
+        .channel(`owner-trusted-persons-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'trusted_persons',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            void fetchTrustedPersons(false)
+            if (activeMainTab === 'familie') {
+              void fetchFamilyMembers()
+            }
+          },
+        )
+        .subscribe()
+    }
+
+    void subscribeTrustedPersonChanges()
+
+    return () => {
+      isCancelled = true
+      if (relationshipChannel) {
+        void supabase.removeChannel(relationshipChannel)
+      }
+    }
+  }, [activeMainTab, fetchFamilyMembers, fetchTrustedPersons, supabase])
+
+  // allowed: subscription - coordinate owner-side refetch across polling and focus events
+  useEffect(() => {
+    async function refreshTrustedAccessState() {
+      if (lifecycleRefreshInFlightRef.current) {
+        return
+      }
+
+      lifecycleRefreshInFlightRef.current = true
+      try {
+        await fetchTrustedPersons(false)
+        if (activeMainTab === 'familie') {
+          await fetchFamilyMembers()
+        }
+      } finally {
+        lifecycleRefreshInFlightRef.current = false
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshTrustedAccessState()
+      }
+    }, 15000)
+
+    function handleWindowFocus() {
+      void refreshTrustedAccessState()
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        void refreshTrustedAccessState()
+      }
+    }
+
+    window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [activeMainTab, fetchFamilyMembers, fetchTrustedPersons])
+
   // Load family members when Familie tab becomes active
   useEffect(() => {
     if (activeMainTab !== 'familie') {
@@ -375,23 +492,6 @@ export default function ZugriffPage() {
     }
     fetchUserAndDocs()
   }, [activeMainTab, supabase])
-
-  // Prefetch family members API for faster tab switch
-  useEffect(() => {
-    const pendingSetupLinkPerson = pendingSetupLinkPersonRef.current
-    if (pendingSetupLinkPerson) {
-      if (vaultContext.isUnlocked && vaultContext.masterKey) {
-        pendingSetupLinkPersonRef.current = null
-        void resumePendingSetupLink(pendingSetupLinkPerson)
-      } else if (!vaultContext.isUnlockRequested && !vaultContext.isUnlocked) {
-        pendingSetupLinkPersonRef.current = null
-      }
-    }
-
-    if (userTier.limits.familyDashboard) {
-      fetch('/api/family/members', { method: 'HEAD' }).catch(() => {})
-    }
-  }, [userTier, vaultContext.isUnlockRequested, vaultContext.isUnlocked, vaultContext.masterKey])
 
   // Prefetch view API for accessible members when Familie tab is active
   useEffect(() => {
@@ -667,10 +767,7 @@ export default function ZugriffPage() {
     }
   }
 
-  const resumePendingSetupLink = useEffectEvent(async (person: TrustedPerson) => {
-    await createSetupLink(person)
-  })
-  async function createSetupLink(person: TrustedPerson) {
+  const createSetupLink = useCallback(async (person: TrustedPerson) => {
     const status = person.relationship_status
     if (status !== 'accepted_pending_setup' && status !== 'setup_link_sent') {
       setError('Sicherer Link kann erst nach Annahme der Einladung erstellt werden.')
@@ -723,7 +820,24 @@ export default function ZugriffPage() {
     } finally {
       setIsGeneratingRk(null)
     }
-  }
+  }, [fetchTrustedPersons, supabase, vaultContext.masterKey])
+
+  // allowed: subscription - resume the pending secure-link action after vault unlock
+  useEffect(() => {
+    const pendingSetupLinkPerson = pendingSetupLinkPersonRef.current
+    if (pendingSetupLinkPerson) {
+      if (vaultContext.isUnlocked && vaultContext.masterKey) {
+        pendingSetupLinkPersonRef.current = null
+        void createSetupLink(pendingSetupLinkPerson)
+      } else if (!vaultContext.isUnlockRequested && !vaultContext.isUnlocked) {
+        pendingSetupLinkPersonRef.current = null
+      }
+    }
+
+    if (userTier.limits.familyDashboard) {
+      fetch('/api/family/members', { method: 'HEAD' }).catch(() => {})
+    }
+  }, [createSetupLink, userTier, vaultContext.isUnlockRequested, vaultContext.isUnlocked, vaultContext.masterKey])
 
   const handleCreateSetupLink = async (person: TrustedPerson) => {
     const status = person.relationship_status
@@ -965,6 +1079,7 @@ export default function ZugriffPage() {
       {/* Tier Status Card */}
       <TierStatusCard tier={userTier.id} />
 
+      <TrustedUserAccessProvider>
       {/* Main Tabs: Vertrauenspersonen and Familie */}
       <Tabs
         value={activeMainTab}
@@ -1663,6 +1778,7 @@ export default function ZugriffPage() {
           <TrustedUserStatusView />
         </TabsContent>
       </Tabs>
+      </TrustedUserAccessProvider>
 
       {/* Download Link Dialog */}
       <Dialog open={isDownloadLinkDialogOpen} onOpenChange={setIsDownloadLinkDialogOpen}>

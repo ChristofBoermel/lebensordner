@@ -50,7 +50,49 @@ describe('TrustedUserStatusView', () => {
     })
   })
 
-  it('shows empty state when there are no relationships', async () => {
+  it('shows connected documents state when shares exist even if relationships are empty', async () => {
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        shares: [
+          {
+            id: 'share-1',
+            owner_id: 'owner-1',
+            trusted_person_id: 'tp-1',
+            profiles: {
+              full_name: 'Max Mustermann',
+              first_name: 'Max',
+              last_name: 'Mustermann',
+            },
+          },
+          {
+            id: 'share-2',
+            owner_id: 'owner-1',
+            trusted_person_id: 'tp-1',
+            profiles: {
+              full_name: 'Max Mustermann',
+              first_name: 'Max',
+              last_name: 'Mustermann',
+            },
+          },
+        ],
+        relationships: [],
+      }),
+    })) as any
+
+    render(<TrustedUserStatusView />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/verbindung hergestellt/i)).toBeInTheDocument()
+      expect(screen.getByText(/2 dokumente verfügbar/i)).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /geteilte dokumente ansehen/i })).toHaveAttribute(
+        'href',
+        '/zugriff#familie'
+      )
+    })
+  })
+
+  it('shows empty state when there are no relationships or shares', async () => {
     global.fetch = vi.fn(() => Promise.resolve({
       ok: true,
       json: () => Promise.resolve({ shares: [], relationships: [] }),
@@ -59,7 +101,7 @@ describe('TrustedUserStatusView', () => {
     render(<TrustedUserStatusView />)
 
     await waitFor(() => {
-      expect(screen.getByText(/keine einladungen/i)).toBeInTheDocument()
+      expect(screen.getByText(/keine verbindungen/i)).toBeInTheDocument()
     })
   })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Loader2, AlertTriangle, Info, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { importRawHexKey, unwrapKey, decryptFile } from '@/lib/security/document-e2ee'
 import type { RelationshipEntry } from '@/types/trusted-access-frontend'
+import { useTrustedUserAccess } from '@/components/trusted-access/TrustedUserAccessProvider'
 
 interface AccessLinkReadiness {
   accessLinkStatus: 'ready' | 'setup_required' | 'expired_invitation' | 'wrong_account' | 'revoked'
@@ -50,10 +51,11 @@ interface ReceivedShare {
 }
 
 export function ReceivedSharesList() {
-  const [shares, setShares] = useState<ReceivedShare[]>([])
-  const [relationships, setRelationships] = useState<RelationshipEntry[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { state } = useTrustedUserAccess()
+  const shares = state.shares as ReceivedShare[]
+  const relationships = state.relationships as RelationshipEntry[]
+  const isLoading = state.isLoading
+  const error = state.error
   const [viewingShareId, setViewingShareId] = useState<string | null>(null)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [blobType, setBlobType] = useState<string>('')
@@ -61,26 +63,6 @@ export function ReceivedSharesList() {
   const [isDecrypting, setIsDecrypting] = useState(false)
   const [decryptError, setDecryptError] = useState<string | null>(null)
   const [errorShareId, setErrorShareId] = useState<string | null>(null)
-
-  async function fetchShares() {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/documents/share-token/received')
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Fehler beim Laden')
-      setShares(data.shares ?? [])
-      setRelationships(data.relationships ?? [])
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Laden')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchShares()
-  }, [])
 
   const getSharerName = (share: ReceivedShare): string => {
     const p = share.profiles

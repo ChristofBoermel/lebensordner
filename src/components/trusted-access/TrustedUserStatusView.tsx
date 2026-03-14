@@ -1,43 +1,84 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { CheckCircle2, Clock, Link2, Loader2, Shield } from 'lucide-react'
+import { CheckCircle2, Clock, FileText, Link2, Loader2, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import Link from 'next/link'
-import type { RelationshipEntry } from '@/types/trusted-access-frontend'
+import { useTrustedUserAccess } from '@/components/trusted-access/TrustedUserAccessProvider'
+import type { RelationshipEntry, TrustedAccessReceivedShareEntry } from '@/types/trusted-access-frontend'
 
-interface TrustedAccessState {
-  relationships: RelationshipEntry[]
-  isLoading: boolean
-  error: string | null
+type TrustedUserStatusCardEntry =
+  | {
+      key: string
+      kind: 'connection'
+      ownerName: string
+      documentCount: number
+    }
+  | {
+      key: string
+      kind: 'relationship'
+      relationship: RelationshipEntry
+    }
+
+function getOwnerNameFromShare(share: TrustedAccessReceivedShareEntry): string {
+  const profile = share.profiles
+  if (!profile) return 'Lebensordner'
+  if (profile.full_name) return profile.full_name
+  const combinedName = [profile.first_name, profile.last_name].filter(Boolean).join(' ')
+  return combinedName || 'Lebensordner'
+}
+
+function buildStatusCards(
+  relationships: RelationshipEntry[],
+  shares: TrustedAccessReceivedShareEntry[]
+): TrustedUserStatusCardEntry[] {
+  const cards: TrustedUserStatusCardEntry[] = []
+  const renderedPairKeys = new Set<string>()
+
+  for (const relationship of relationships) {
+    const pairKey = `${relationship.ownerId}:${relationship.trustedPersonId}`
+    renderedPairKeys.add(pairKey)
+    cards.push({
+      key: pairKey,
+      kind: 'relationship',
+      relationship,
+    })
+  }
+
+  const shareGroups = new Map<string, { ownerName: string; documentCount: number }>()
+  for (const share of shares) {
+    const pairKey = `${share.owner_id}:${share.trusted_person_id}`
+    if (renderedPairKeys.has(pairKey)) {
+      continue
+    }
+
+    const existing = shareGroups.get(pairKey)
+    if (existing) {
+      existing.documentCount += 1
+      continue
+    }
+
+    shareGroups.set(pairKey, {
+      ownerName: getOwnerNameFromShare(share),
+      documentCount: 1,
+    })
+  }
+
+  for (const [pairKey, shareGroup] of shareGroups.entries()) {
+    cards.push({
+      key: pairKey,
+      kind: 'connection',
+      ownerName: shareGroup.ownerName,
+      documentCount: shareGroup.documentCount,
+    })
+  }
+
+  return cards
 }
 
 export function TrustedUserStatusView() {
-  const [state, setState] = useState<TrustedAccessState>({
-    relationships: [],
-    isLoading: true,
-    error: null,
-  })
-
-  // allowed: I/O - fetch received shares and relationship state
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch('/api/documents/share-token/received')
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || 'Fehler beim Laden')
-        setState({
-          relationships: data.relationships ?? [],
-          isLoading: false,
-          error: null,
-        })
-      } catch (err: unknown) {
-        setState({ relationships: [], isLoading: false, error: err instanceof Error ? err.message : 'Fehler beim Laden' })
-      }
-    }
-    void load()
-  }, [])
+  const { state } = useTrustedUserAccess()
+  const statusCards = buildStatusCards(state.relationships, state.shares)
 
   if (state.isLoading) {
     return (
@@ -52,14 +93,14 @@ export function TrustedUserStatusView() {
     return <p className="text-sm text-red-600">{state.error}</p>
   }
 
-  if (state.relationships.length === 0) {
+  if (statusCards.length === 0) {
     return (
       <Card>
         <CardContent className="py-10 text-center">
           <Shield className="w-10 h-10 text-warmgray-300 mx-auto mb-3" />
-          <p className="text-warmgray-600 text-sm">Keine Einladungen vorhanden.</p>
+          <p className="text-warmgray-600 text-sm">Keine Verbindungen vorhanden.</p>
           <p className="text-warmgray-400 text-xs mt-1">
-            Wenn Sie als Vertrauensperson eingeladen wurden, erscheint der Status hier nach der Annahme.
+            Dieser Bereich zeigt Ihren Status nur dann an, wenn Sie als Vertrauensperson hinzugefügt wurden.
           </p>
         </CardContent>
       </Card>
@@ -68,14 +109,43 @@ export function TrustedUserStatusView() {
 
   return (
     <div className="space-y-3">
-      {state.relationships.map((rel) => (
-        <RelationshipStatusCard key={rel.trustedPersonId} rel={rel} />
+      {statusCards.map((entry) => (
+        <RelationshipStatusCard key={entry.key} entry={entry} />
       ))}
     </div>
   )
 }
 
-function RelationshipStatusCard({ rel }: { rel: RelationshipEntry }) {
+function RelationshipStatusCard({ entry }: { entry: TrustedUserStatusCardEntry }) {
+  if (entry.kind === 'connection') {
+    const documentsLabel = `${entry.documentCount} ${entry.documentCount === 1 ? 'Dokument verfügbar' : 'Dokumente verfügbar'}`
+    return (
+      <Card className="border-l-4 border-l-sage-500">
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="w-5 h-5 text-sage-600" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-sage-900 text-sm">Verbindung hergestellt</p>
+              <p className="text-warmgray-600 text-sm mt-0.5">
+                Ihr sicherer Zugriff ist aktiv. {entry.ownerName} hat bereits Dokumente mit Ihnen geteilt.
+              </p>
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-sage-700">
+                <FileText className="w-3 h-3" />
+                {documentsLabel}
+              </div>
+              <Button size="sm" variant="outline" className="mt-3" asChild>
+                <Link href="/zugriff#familie">Geteilte Dokumente ansehen</Link>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const rel = entry.relationship
   if (rel.status === 'waiting_for_share') {
     return (
       <Card className="border-l-4 border-l-sage-400">

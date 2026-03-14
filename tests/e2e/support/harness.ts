@@ -15,6 +15,7 @@ import {
   wrapKey,
 } from '../../../src/lib/security/document-e2ee'
 import type { DocumentCategory } from '../../../src/types/database'
+import { hashTrustedAccessOtp } from '../../../src/lib/security/trusted-access'
 import { getBaseUrl, requireE2EEnv } from './env'
 
 const baseUrl = getBaseUrl()
@@ -82,6 +83,22 @@ export interface SeededDocument {
   id: string
   title: string
   subcategoryId: string | null
+}
+
+interface TrustedPersonRow {
+  id: string
+  email: string
+  invitation_token: string | null
+  relationship_status: string | null
+  invitation_status: string | null
+}
+
+interface TrustedAccessInvitationRow {
+  id: string
+  owner_id: string
+  trusted_person_id: string
+  status: string
+  expires_at: string
 }
 
 type SharePermission = 'view' | 'download'
@@ -220,6 +237,26 @@ async function resetLoginSecurityState(email: string) {
   }
 }
 
+async function resetTrustedPersonInviteRateLimitState(userId: string) {
+  const redis = getRedis()
+
+  try {
+    await redis.connect()
+    const keyPattern = 'rate:/api/trusted-person/invite:*'
+    let cursor = '0'
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', keyPattern, 'COUNT', 100)
+      cursor = nextCursor
+      if (keys.length > 0) {
+        await redis.del(...keys)
+      }
+    } while (cursor !== '0')
+
+    await redis.del(`rate:/api/trusted-person/invite:invite:${userId}`)
+  } finally {
+    redis.disconnect()
+  }
+}
 async function seedProfile(user: SeededUser) {
   const supabaseAdmin = getSupabaseAdmin()
   const stripePriceId =
@@ -537,6 +574,67 @@ export function createScenario(scope: string) {
       if (error) throw error
     },
 
+    async getTrustedPersonByEmail(options: {
+      ownerId: string
+      trustedEmail: string
+    }): Promise<TrustedPersonRow | null> {
+      const { data, error } = await supabaseAdmin
+        .from('trusted_persons')
+        .select('id, email, invitation_token, relationship_status, invitation_status')
+        .eq('user_id', options.ownerId)
+        .ilike('email', options.trustedEmail.trim().toLowerCase())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) throw error
+      return data
+    },
+
+    async getLatestTrustedAccessInvitation(options: {
+      trustedPersonId: string
+    }): Promise<TrustedAccessInvitationRow | null> {
+      const { data, error } = await supabaseAdmin
+        .from('trusted_access_invitations')
+        .select('id, owner_id, trusted_person_id, status, expires_at')
+        .eq('trusted_person_id', options.trustedPersonId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) throw error
+      return data
+    },
+
+    async setLatestTrustedAccessOtp(options: {
+      invitationId: string
+      otp: string
+    }) {
+      const { data: challenge, error: challengeError } = await supabaseAdmin
+        .from('trusted_access_otp_challenges')
+        .select('id')
+        .eq('invitation_id', options.invitationId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (challengeError) throw challengeError
+      if (!challenge) {
+        throw new Error(`No OTP challenge found for invitation ${options.invitationId}`)
+      }
+
+      const { error: updateError } = await supabaseAdmin
+        .from('trusted_access_otp_challenges')
+        .update({
+          code_hash: hashTrustedAccessOtp(options.otp),
+          attempt_count: 0,
+          consumed_at: null,
+        })
+        .eq('id', challenge.id)
+
+      if (updateError) throw updateError
+    },
+
     async authenticatePage(
       page: Page,
       user: SeededUser,
@@ -588,6 +686,10 @@ export function createScenario(scope: string) {
         await page.getByTestId('policy-update-accept').click()
         await page.waitForURL('**/dashboard')
       }
+    },
+
+    async resetTrustedPersonInviteRateLimitState(userId: string) {
+      await resetTrustedPersonInviteRateLimitState(userId)
     },
 
     async cleanup() {
@@ -653,3 +755,4 @@ export function createScenario(scope: string) {
     },
   }
 }
+

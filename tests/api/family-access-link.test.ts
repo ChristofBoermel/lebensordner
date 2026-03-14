@@ -152,6 +152,57 @@ describe('Family access-link readiness APIs', () => {
     expect(data.encryptedDocumentCount).toBe(1)
   })
 
+  it('fails closed on /api/family/view when the relationship was removed even if a device cookie remains', async () => {
+    vi.resetModules()
+    const { guardTrustedPersonAccess } = await import('@/lib/security/trusted-person-guard')
+    vi.mocked(guardTrustedPersonAccess).mockResolvedValueOnce({
+      allowed: false,
+      trustedPerson: null,
+      errorCode: 'NO_RELATIONSHIP',
+      details: 'Sie wurden nicht als Vertrauensperson fuer diesen Benutzer hinzugefuegt.',
+    })
+
+    const { GET } = await import('@/app/api/family/view/route')
+
+    const response = await GET(
+      new Request('http://localhost/api/family/view?ownerId=owner-1', {
+        headers: {
+          cookie: 'trusted_access_device=stale-cookie',
+        },
+      })
+    )
+    const data = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(data.errorCode).toBe('NO_RELATIONSHIP')
+    expect(data.details).toContain('Vertrauensperson')
+  })
+
+  it('fails closed on /api/family/download when the relationship was removed even if a device cookie remains', async () => {
+    vi.resetModules()
+    const { guardTrustedPersonAccess } = await import('@/lib/security/trusted-person-guard')
+    vi.mocked(guardTrustedPersonAccess).mockResolvedValueOnce({
+      allowed: false,
+      trustedPerson: null,
+      errorCode: 'NO_RELATIONSHIP',
+      details: 'Sie wurden nicht als Vertrauensperson fuer diesen Benutzer hinzugefuegt.',
+    })
+
+    const { GET } = await import('@/app/api/family/download/route')
+
+    const response = await GET(
+      new Request('http://localhost/api/family/download?ownerId=owner-1', {
+        headers: {
+          cookie: 'trusted_access_device=stale-cookie',
+        },
+      })
+    )
+    const data = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(data.error).toContain('Vertrauensperson')
+  })
+
   it('returns setup-required readiness from /api/family/download when no device enrollment exists', async () => {
     adminMaybeSingle.mockResolvedValueOnce({
       data: null,

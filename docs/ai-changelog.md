@@ -3166,3 +3166,77 @@ Verification:
 
 Rollback:
 - Revert `src/app/api/trusted-access/invitations/pending/route.ts`, `src/app/api/trusted-access/invitations/otp/send/route.ts`, `src/app/api/trusted-access/invitations/complete/route.ts`, `src/lib/security/trusted-access-server.ts`, `scripts/ops/verify-deploy.sh`, the trusted-access API tests, and this changelog entry to restore the previous embed-based owner lookup behavior.
+## 2026-03-14T18:57:27Z - Codex - uncommitted
+Summary:
+- Fixed the trusted-user `Mein Zugriff` tab so it no longer renders empty once shared documents exist: the status surface now synthesizes a persistent "Verbindung hergestellt" card from the existing received-shares payload even when the backend returns no separate `relationships` entries.
+- Updated the trusted-access frontend types and added regressions covering the active-shares/no-relationships case plus the revised empty state copy.
+
+Risk / Regression Notes:
+- This change is intentionally UI-only and does not alter the working trusted-linking backend, security gating, OTP flow, or share-access rules.
+- The new CTA points users to `/zugriff#familie`, which relies on the existing hash-based tab handoff already present on the Zugriff page.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/components/trusted-user-status-view.test.tsx`
+
+Rollback:
+- Revert `src/components/trusted-access/TrustedUserStatusView.tsx`, `src/types/trusted-access-frontend.ts`, `tests/components/trusted-user-status-view.test.tsx`, and this changelog entry to restore the previous relationships-only `Mein Zugriff` rendering.
+## 2026-03-14T20:25:30Z - Codex - uncommitted
+Summary:
+- Added explicit proof coverage for the core trusted-user hard-reset lifecycle: remove trusted user -> access disappears on both sides -> re-invite same email -> accept -> secure setup link -> OTP/device enrollment -> no documents before fresh share -> access returns after fresh share.
+- Added two API regressions confirming stale trusted-access device cookies do not bypass family view/download access after the relationship is removed.
+- Extended the E2E harness with trusted-person / trusted-access lookup helpers so the lifecycle can be verified deterministically without depending on an external inbox.
+
+Risk / Regression Notes:
+- This pass intentionally does not change the working trusted-linking backend or introduce realtime UI sync; it proves the existing delete-and-relink semantics as a hard reset.
+- The new lifecycle E2E uses an admin-side OTP test helper to make the emailed code deterministic; it still exercises the real redeem, OTP send, OTP verify, device enrollment, and share access routes.
+
+Verification:
+- `python scripts/ops/logging-audit.py`
+- `npm run type-check`
+- `npm run lint`
+- `npm test -- --run tests/api/family-access-link.test.ts tests/api/share-token.test.ts tests/api/trusted-access-invitations.test.ts tests/api/trusted-access-pending.test.ts tests/api/trusted-access-redeem.test.ts tests/api/trusted-access-otp-send.test.ts tests/api/trusted-access-complete.test.ts tests/components/trusted-user-status-view.test.tsx`
+- `npm run test:e2e:smoke`
+
+Rollback:
+- Revert `tests/e2e/support/harness.ts`, `tests/e2e/smoke/trusted-person-relink.test.ts`, `tests/api/family-access-link.test.ts`, and this changelog entry to remove the new lifecycle proof and helper coverage.
+
+## 2026-03-14T20:58:00Z - Codex - uncommitted
+Summary:
+- Added provider-based trusted-user access refresh on the Zugriff page so `Mein Zugriff` and received shares refetch on focus, visibility changes, and polling, with connection/disconnection toasts driven by shared snapshot diffing.
+- Stabilized the trusted-person invite and relink smoke flows by clearing invite rate-limit state in the E2E harness and waiting for the real invite request before continuing the relink lifecycle.
+
+Risk / Regression Notes:
+- The new trusted-user live refresh is intentionally polling-based rather than realtime-subscription based; state now updates automatically, but only on focus/visibility changes and the refresh interval.
+- The E2E harness now clears all `/api/trusted-person/invite` rate-limit keys before invite-dependent smoke flows so repeated local smoke runs remain deterministic.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/lib/trusted-access-live-status.test.ts tests/components/trusted-user-access-provider.test.tsx tests/components/trusted-user-status-view.test.tsx tests/components/sharing.test.tsx tests/pages/zugriff.test.tsx`
+- `npm run test:e2e:smoke`
+
+Rollback:
+- Revert `src/app/(dashboard)/zugriff/page.tsx`, `src/components/sharing/ReceivedSharesList.tsx`, `src/components/trusted-access/TrustedUserAccessProvider.tsx`, `src/lib/security/trusted-access-live-status.ts`, the updated trusted-user component tests, the updated invite/relink E2E harness/tests, and this changelog entry to restore the previous manual-refresh behavior and prior smoke setup.
+
+## 2026-03-14T21:22:00Z - Codex - uncommitted
+Summary:
+- Added Supabase Realtime subscriptions for owner-side trusted-person lifecycle changes and trusted-user relationship/share changes so both sides refresh automatically without waiting for focus or polling.
+- Added a trusted-access realtime migration covering linked-user select access on `trusted_persons` and publication setup for `trusted_persons` and `document_share_tokens`.
+
+Risk / Regression Notes:
+- Realtime now depends on the Supabase publication and the new `trusted_persons` select policy for linked trusted users; environments missing the migration will fall back to the existing focus/poll refresh behavior only where subscriptions do not establish.
+- The trusted-user fallback hook path intentionally keeps realtime disabled outside the provider to avoid duplicate subscriptions in tests and ad hoc component renders.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/lib/trusted-access-live-status.test.ts tests/components/trusted-user-access-provider.test.tsx tests/components/trusted-user-status-view.test.tsx tests/components/sharing.test.tsx tests/pages/zugriff.test.tsx`
+- `npm run test:e2e:smoke`
+- `npm run qa:strict`
+
+Rollback:
+- Revert `src/app/(dashboard)/zugriff/page.tsx`, `src/components/trusted-access/TrustedUserAccessProvider.tsx`, `tests/mocks/supabase-client.ts`, `tests/components/trusted-user-access-provider.test.tsx`, `supabase/migrations/20260314211000_trusted_access_realtime.sql`, and this changelog entry to restore the prior polling/focus-only auto-refresh behavior.

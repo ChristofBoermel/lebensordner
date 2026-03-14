@@ -32,6 +32,15 @@ export function createSupabaseMock(overrides: SupabaseMockOverrides = {}) {
     ) => Promise.resolve(thenDefault).then(onFulfilled, onRejected)
   )
 
+  const channelSubscription = {
+    unsubscribe: vi.fn(),
+  }
+
+  const channelBuilder = {
+    on: vi.fn(() => channelBuilder),
+    subscribe: vi.fn(() => channelSubscription),
+  }
+
   const builder: Record<string, unknown> = {}
 
   // Use vi.fn(() => builder) instead of vi.fn().mockReturnThis():
@@ -59,8 +68,21 @@ export function createSupabaseMock(overrides: SupabaseMockOverrides = {}) {
       signInWithPassword,
     },
     from: vi.fn(() => builder),
+    channel: vi.fn(() => channelBuilder),
+    removeChannel: vi.fn().mockResolvedValue('ok'),
     rpc,
   }
 
-  return { client, builder, single, maybeSingle, getUser, signInWithPassword, rpc, thenFn }
+  return {
+    client,
+    builder,
+    single,
+    maybeSingle,
+    getUser,
+    signInWithPassword,
+    rpc,
+    thenFn,
+    channelBuilder,
+    channelSubscription,
+  }
 }
