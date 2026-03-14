@@ -12,8 +12,9 @@ const { resolveAuthenticatedUserMock } = vi.hoisted(() => ({
   resolveAuthenticatedUserMock: vi.fn(() => Promise.resolve({ id: 'owner-1' })),
 }))
 
-const { emitStructuredErrorMock } = vi.hoisted(() => ({
+const { emitStructuredErrorMock, emitStructuredWarnMock } = vi.hoisted(() => ({
   emitStructuredErrorMock: vi.fn(),
+  emitStructuredWarnMock: vi.fn(),
 }))
 
 const {
@@ -44,6 +45,7 @@ vi.mock('@/lib/auth/resolve-authenticated-user', () => ({
 
 vi.mock('@/lib/errors/structured-logger', () => ({
   emitStructuredError: emitStructuredErrorMock,
+  emitStructuredWarn: emitStructuredWarnMock,
 }))
 
 vi.mock('@/lib/security/trusted-access', () => ({
@@ -54,6 +56,108 @@ vi.mock('@/lib/security/trusted-access', () => ({
   hashTrustedAccessToken: hashTrustedAccessTokenMock,
   TRUSTED_ACCESS_SETUP_LINK_TTL_HOURS: 24,
 }))
+
+type TrustedPersonRecord = {
+  id: string
+  email: string
+  linked_user_id: string | null
+  invitation_status: string
+  relationship_status: string
+  is_active: boolean
+}
+
+function createTrustedPersonSelectChain(record: TrustedPersonRecord) {
+  const trustedPersonSelectChain = {
+    select: vi.fn(() => trustedPersonSelectChain),
+    eq: vi.fn(() => trustedPersonSelectChain),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: record,
+      error: null,
+    }),
+  }
+
+  return trustedPersonSelectChain
+}
+
+function createTrustedPersonUpdateChain(result: { error: any }) {
+  const relationshipUpdateChain = {
+    update: vi.fn(() => relationshipUpdateChain),
+    eq: vi.fn(() => relationshipUpdateChain),
+  }
+  relationshipUpdateChain.eq
+    .mockImplementationOnce(() => relationshipUpdateChain)
+    .mockImplementationOnce(() => Promise.resolve(result))
+
+  return relationshipUpdateChain
+}
+
+function createInvitationReplaceChain(result: { error: any }) {
+  const replaceChain = {
+    update: vi.fn(() => replaceChain),
+    eq: vi.fn(() => replaceChain),
+  }
+  replaceChain.eq
+    .mockImplementationOnce(() => replaceChain)
+    .mockImplementationOnce(() => replaceChain)
+    .mockImplementationOnce(() => Promise.resolve(result))
+
+  return replaceChain
+}
+
+function createInsertChain() {
+  const insertChain = {
+    insert: vi.fn(() => insertChain),
+    select: vi.fn(() => insertChain),
+    single: vi.fn().mockResolvedValue({
+      data: {
+        id: 'inv-1',
+        expires_at: '2026-03-14T12:15:00.000Z',
+      },
+      error: null,
+    }),
+  }
+
+  return insertChain
+}
+
+function createAdminClient(options?: {
+  trustedPerson?: TrustedPersonRecord
+  replaceResults?: Array<{ error: any }>
+  relationshipResult?: { error: any }
+}) {
+  const trustedPersonSelectChain = createTrustedPersonSelectChain(
+    options?.trustedPerson ?? {
+      id: 'tp-1',
+      email: 'trusted@example.com',
+      linked_user_id: 'linked-user-1',
+      invitation_status: 'accepted',
+      relationship_status: 'accepted_pending_setup',
+      is_active: true,
+    }
+  )
+  const replaceChains = (options?.replaceResults ?? [{ error: null }]).map(createInvitationReplaceChain)
+  const insertChain = createInsertChain()
+  const relationshipUpdateChain = createTrustedPersonUpdateChain(
+    options?.relationshipResult ?? { error: null }
+  )
+
+  let trustedPersonCallCount = 0
+  let invitationTableCallCount = 0
+  return {
+    from: vi.fn((table: string) => {
+      if (table === 'trusted_persons') {
+        trustedPersonCallCount += 1
+        return trustedPersonCallCount === 1 ? trustedPersonSelectChain : relationshipUpdateChain
+      }
+      if (table === 'trusted_access_invitations') {
+        const replaceChain = replaceChains[invitationTableCallCount]
+        invitationTableCallCount += 1
+        return replaceChain ?? insertChain
+      }
+      throw new Error(`Unexpected table ${table}`)
+    }),
+  }
+}
 
 describe('Trusted access invitations API', () => {
   beforeEach(() => {
@@ -67,66 +171,7 @@ describe('Trusted access invitations API', () => {
   })
 
   it('creates a secure setup link using the redeem API entrypoint', async () => {
-    const trustedPersonSelectChain = {
-      select: vi.fn(() => trustedPersonSelectChain),
-      eq: vi.fn(() => trustedPersonSelectChain),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: 'tp-1',
-          email: 'trusted@example.com',
-          linked_user_id: 'linked-user-1',
-          invitation_status: 'accepted',
-          relationship_status: 'accepted_pending_setup',
-          is_active: true,
-        },
-        error: null,
-      }),
-    }
-
-    const replaceChain = {
-      update: vi.fn(() => replaceChain),
-      eq: vi.fn(() => replaceChain),
-    }
-    replaceChain.eq
-      .mockImplementationOnce(() => replaceChain)
-      .mockImplementationOnce(() => replaceChain)
-      .mockImplementationOnce(() => Promise.resolve({ error: null }))
-
-    const insertChain = {
-      insert: vi.fn(() => insertChain),
-      select: vi.fn(() => insertChain),
-      single: vi.fn().mockResolvedValue({
-        data: {
-          id: 'inv-1',
-          expires_at: '2026-03-14T12:15:00.000Z',
-        },
-        error: null,
-      }),
-    }
-
-    const relationshipUpdateChain = {
-      update: vi.fn(() => relationshipUpdateChain),
-      eq: vi.fn(() => relationshipUpdateChain),
-    }
-    relationshipUpdateChain.eq
-      .mockImplementationOnce(() => relationshipUpdateChain)
-      .mockImplementationOnce(() => Promise.resolve({ error: null }))
-
-    let trustedPersonCallCount = 0
-    const adminClient = {
-      from: vi.fn((table: string) => {
-        if (table === 'trusted_persons') {
-          trustedPersonCallCount += 1
-          return trustedPersonCallCount === 1 ? trustedPersonSelectChain : relationshipUpdateChain
-        }
-        if (table === 'trusted_access_invitations') {
-          if (replaceChain.update.mock.calls.length === 0) return replaceChain
-          return insertChain
-        }
-        throw new Error(`Unexpected table ${table}`)
-      }),
-    }
-
+    const adminClient = createAdminClient()
     createServiceRoleSupabaseClientMock.mockReturnValue(adminClient)
 
     const { POST } = await import('@/app/api/trusted-access/invitations/route')
@@ -164,68 +209,8 @@ describe('Trusted access invitations API', () => {
     )
   })
 
-
   it('still returns the secure setup link when trusted-access event logging fails', async () => {
-    const trustedPersonSelectChain = {
-      select: vi.fn(() => trustedPersonSelectChain),
-      eq: vi.fn(() => trustedPersonSelectChain),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: 'tp-1',
-          email: 'trusted@example.com',
-          linked_user_id: 'linked-user-1',
-          invitation_status: 'accepted',
-          relationship_status: 'accepted_pending_setup',
-          is_active: true,
-        },
-        error: null,
-      }),
-    }
-
-    const replaceChain = {
-      update: vi.fn(() => replaceChain),
-      eq: vi.fn(() => replaceChain),
-    }
-    replaceChain.eq
-      .mockImplementationOnce(() => replaceChain)
-      .mockImplementationOnce(() => replaceChain)
-      .mockImplementationOnce(() => Promise.resolve({ error: null }))
-
-    const insertChain = {
-      insert: vi.fn(() => insertChain),
-      select: vi.fn(() => insertChain),
-      single: vi.fn().mockResolvedValue({
-        data: {
-          id: 'inv-1',
-          expires_at: '2026-03-14T12:15:00.000Z',
-        },
-        error: null,
-      }),
-    }
-
-    const relationshipUpdateChain = {
-      update: vi.fn(() => relationshipUpdateChain),
-      eq: vi.fn(() => relationshipUpdateChain),
-    }
-    relationshipUpdateChain.eq
-      .mockImplementationOnce(() => relationshipUpdateChain)
-      .mockImplementationOnce(() => Promise.resolve({ error: null }))
-
-    let trustedPersonCallCount = 0
-    const adminClient = {
-      from: vi.fn((table: string) => {
-        if (table === 'trusted_persons') {
-          trustedPersonCallCount += 1
-          return trustedPersonCallCount === 1 ? trustedPersonSelectChain : relationshipUpdateChain
-        }
-        if (table === 'trusted_access_invitations') {
-          if (replaceChain.update.mock.calls.length === 0) return replaceChain
-          return insertChain
-        }
-        throw new Error(`Unexpected table ${table}`)
-      }),
-    }
-
+    const adminClient = createAdminClient()
     createServiceRoleSupabaseClientMock.mockReturnValue(adminClient)
     emitTrustedAccessEventMock.mockRejectedValueOnce(new Error('relation "trusted_access_events" does not exist'))
 
@@ -257,6 +242,80 @@ describe('Trusted access invitations API', () => {
         metadata: expect.objectContaining({
           trustedPersonId: 'tp-1',
           invitationId: 'inv-1',
+        }),
+      })
+    )
+  })
+
+  it('retries replacing prior invitations without revoked_at for legacy schemas', async () => {
+    const adminClient = createAdminClient({
+      replaceResults: [
+        {
+          error: {
+            code: '42703',
+            message: 'column "revoked_at" of relation "trusted_access_invitations" does not exist',
+          },
+        },
+        { error: null },
+      ],
+    })
+    createServiceRoleSupabaseClientMock.mockReturnValue(adminClient)
+
+    const { POST } = await import('@/app/api/trusted-access/invitations/route')
+    const response = await POST(
+      new Request('http://localhost/api/trusted-access/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trustedPersonId: 'tp-1',
+          bootstrapRelationshipKey: 'a'.repeat(64),
+        }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(emitStructuredWarnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: '/api/trusted-access/invitations',
+        metadata: expect.objectContaining({
+          operation: 'replace_prior_pending_invitation_legacy_retry',
+          errorCode: '42703',
+        }),
+      })
+    )
+  })
+
+  it('skips the setup_link_sent transition when legacy relationship constraints reject it', async () => {
+    const adminClient = createAdminClient({
+      relationshipResult: {
+        error: {
+          code: '23514',
+          message: 'new row for relation "trusted_persons" violates check constraint "trusted_persons_relationship_status_check"',
+          details: 'Failing row contains setup_link_sent.',
+        },
+      },
+    })
+    createServiceRoleSupabaseClientMock.mockReturnValue(adminClient)
+
+    const { POST } = await import('@/app/api/trusted-access/invitations/route')
+    const response = await POST(
+      new Request('http://localhost/api/trusted-access/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trustedPersonId: 'tp-1',
+          bootstrapRelationshipKey: 'a'.repeat(64),
+        }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(emitStructuredWarnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: '/api/trusted-access/invitations',
+        metadata: expect.objectContaining({
+          operation: 'advance_relationship_status_legacy_constraint',
+          errorCode: '23514',
         }),
       })
     )

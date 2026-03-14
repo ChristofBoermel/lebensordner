@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useEffectEvent, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { useVault } from '@/lib/vault/VaultContext'
@@ -112,6 +112,7 @@ export default function ZugriffPage() {
   const [linkCopied, setLinkCopied] = useState(false)
   const vaultContext = useVault()
   const [isGeneratingRk, setIsGeneratingRk] = useState<string | null>(null)
+  const pendingSetupLinkPersonRef = useRef<TrustedPerson | null>(null)
   const [setupLinkPanel, setSetupLinkPanel] = useState<{
     personId: string
     url: string
@@ -377,10 +378,20 @@ export default function ZugriffPage() {
 
   // Prefetch family members API for faster tab switch
   useEffect(() => {
+    const pendingSetupLinkPerson = pendingSetupLinkPersonRef.current
+    if (pendingSetupLinkPerson) {
+      if (vaultContext.isUnlocked && vaultContext.masterKey) {
+        pendingSetupLinkPersonRef.current = null
+        void resumePendingSetupLink(pendingSetupLinkPerson)
+      } else if (!vaultContext.isUnlockRequested && !vaultContext.isUnlocked) {
+        pendingSetupLinkPersonRef.current = null
+      }
+    }
+
     if (userTier.limits.familyDashboard) {
       fetch('/api/family/members', { method: 'HEAD' }).catch(() => {})
     }
-  }, [userTier])
+  }, [userTier, vaultContext.isUnlockRequested, vaultContext.isUnlocked, vaultContext.masterKey])
 
   // Prefetch view API for accessible members when Familie tab is active
   useEffect(() => {
@@ -656,19 +667,23 @@ export default function ZugriffPage() {
     }
   }
 
-  const handleCreateSetupLink = async (person: TrustedPerson) => {
+  const resumePendingSetupLink = useEffectEvent(async (person: TrustedPerson) => {
+    await createSetupLink(person)
+  })
+  async function createSetupLink(person: TrustedPerson) {
     const status = person.relationship_status
     if (status !== 'accepted_pending_setup' && status !== 'setup_link_sent') {
       setError('Sicherer Link kann erst nach Annahme der Einladung erstellt werden.')
       return
     }
 
-    if (!vaultContext.isUnlocked || !vaultContext.masterKey) {
-      vaultContext.requestUnlock()
+    if (!vaultContext.masterKey) {
+      setError('Tresor muss entsperrt sein, um einen sicheren Zugriffslink zu erstellen.')
       return
     }
 
     setIsGeneratingRk(person.id)
+    setError(null)
 
     try {
       const { loadOrCreateRelationshipKeyMaterial } = await import('@/lib/security/relationship-key')
@@ -708,6 +723,22 @@ export default function ZugriffPage() {
     } finally {
       setIsGeneratingRk(null)
     }
+  }
+
+  const handleCreateSetupLink = async (person: TrustedPerson) => {
+    const status = person.relationship_status
+    if (status !== 'accepted_pending_setup' && status !== 'setup_link_sent') {
+      setError('Sicherer Link kann erst nach Annahme der Einladung erstellt werden.')
+      return
+    }
+
+    if (!vaultContext.isUnlocked || !vaultContext.masterKey) {
+      pendingSetupLinkPersonRef.current = person
+      vaultContext.requestUnlock()
+      return
+    }
+
+    await createSetupLink(person)
   }
 
   const copyLinkToClipboard = async () => {
@@ -1149,7 +1180,9 @@ export default function ZugriffPage() {
                     <TrustedPersonStatusCard
                       key={person.id}
                       person={person}
-                      isGeneratingSetupLink={isGeneratingRk === person.id}
+                      isGeneratingSetupLink={
+                        isGeneratingRk === person.id
+                      }
                       isSendingInvite={invitePendingById[person.id] ?? false}
                       onCreateSetupLink={handleCreateSetupLink}
                       onSendInvite={handleSendInvite}
@@ -1874,3 +1907,13 @@ export default function ZugriffPage() {
     </TooltipProvider>
   )
 }
+
+
+
+
+
+
+
+
+
+

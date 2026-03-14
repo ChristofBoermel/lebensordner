@@ -3097,3 +3097,19 @@ Verification:
 
 Rollback:
 - Revert `src/app/api/trusted-access/invitations/route.ts`, `src/lib/email/resend-service.ts`, `tests/api/trusted-access-invitations.test.ts`, and this changelog entry to restore the previous strict event-write behavior and retry-queue logging.
+## 2026-03-14T16:18:00Z - Codex - uncommitted
+Summary:
+- Fixed trusted-access setup-link creation to resume automatically after vault unlock from the Zugriff page, and hardened the setup-link API against legacy trusted-linking schema drift while adding operation-specific database error metadata.
+
+Risk / Regression Notes:
+- The route now tolerates two known legacy-schema failure modes (`revoked_at` missing on invitation replacement, and older `relationship_status` constraints that reject `setup_link_sent`), but still fails closed for other database errors.
+- Zugriff now persists one pending setup-link action across the unlock modal; dismissal clears the pending action and no setup-link POST is sent.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-invitations.test.ts tests/pages/zugriff.test.tsx`
+
+Rollback:
+- Revert `src/app/(dashboard)/zugriff/page.tsx`, `src/app/api/trusted-access/invitations/route.ts`, `tests/api/trusted-access-invitations.test.ts`, `tests/pages/zugriff.test.tsx`, and this changelog entry to restore the previous two-click setup-link UX and strict database handling.

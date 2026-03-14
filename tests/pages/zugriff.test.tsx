@@ -74,21 +74,72 @@ vi.mock('@/lib/supabase/client', () => ({
   createClient: () => mockSupabaseClient,
 }))
 
-vi.mock('@/lib/vault/VaultContext', () => ({
-  useVault: () => ({
+const { mockVaultState, resetMockVaultState, loadOrCreateRelationshipKeyMaterialMock } = vi.hoisted(() => {
+  const state = {
     isSetUp: false,
     isUnlocked: false,
-    masterKey: null,
-    requestUnlock: vi.fn(),
+    isUnlockRequested: false,
+    masterKey: null as CryptoKey | null,
+    lastUnlockTimestamp: 0,
+    hasBiometricSetup: false,
+    isBiometricSupported: false,
+    isSetupRequested: false,
+    requestUnlock: vi.fn(() => {
+      state.isUnlockRequested = true
+    }),
     requestSetup: vi.fn(),
     closeSetup: vi.fn(),
-    isSetupRequested: false,
+    refreshBiometricStatus: vi.fn(async () => {}),
     setup: vi.fn(),
     unlock: vi.fn(),
     unlockWithRecovery: vi.fn(),
+    resetPassphraseWithRecovery: vi.fn(),
+    setupBiometric: vi.fn(),
+    unlockWithBiometric: vi.fn(),
     lock: vi.fn(),
-  }),
+  }
+
+  return {
+    mockVaultState: state,
+    resetMockVaultState: () => {
+      state.isSetUp = false
+      state.isUnlocked = false
+      state.isUnlockRequested = false
+      state.masterKey = null
+      state.lastUnlockTimestamp = 0
+      state.hasBiometricSetup = false
+      state.isBiometricSupported = false
+      state.isSetupRequested = false
+      state.requestUnlock.mockClear()
+      state.requestSetup.mockClear()
+      state.closeSetup.mockClear()
+      state.refreshBiometricStatus.mockClear()
+      state.setup.mockClear()
+      state.unlock.mockClear()
+      state.unlockWithRecovery.mockClear()
+      state.resetPassphraseWithRecovery.mockClear()
+      state.setupBiometric.mockClear()
+      state.unlockWithBiometric.mockClear()
+      state.lock.mockClear()
+    },
+    loadOrCreateRelationshipKeyMaterialMock: vi.fn(async () => ({
+      hex: 'a'.repeat(64),
+    })),
+  }
+})
+
+vi.mock('@/lib/vault/VaultContext', () => ({
+  useVault: () => mockVaultState,
 }))
+
+vi.mock('@/lib/security/relationship-key', () => ({
+  loadOrCreateRelationshipKeyMaterial: loadOrCreateRelationshipKeyMaterialMock,
+}))
+
+beforeEach(() => {
+  resetMockVaultState()
+  loadOrCreateRelationshipKeyMaterialMock.mockClear()
+})
 
 // Test component that simulates the Zugriff page's tier-fetching logic
 // This component uses the same data flow as the actual page:
@@ -2478,4 +2529,148 @@ describe('ZugriffPage trusted person invite row states', () => {
     expect(inviteButtons).toHaveLength(2)
     expect(screen.queryByRole('button', { name: /^einladen$/i })).not.toBeInTheDocument()
   }, TEST_TIMEOUT)
+
+  it('continues setup link creation automatically after vault unlock without a second click', async () => {
+    const trustedPersonsState = createTrustedPersonsBuilder([
+      {
+        id: 'tp-setup',
+        user_id: 'test-user-id',
+        name: 'Lisa Weber',
+        email: 'lisa@example.com',
+        relationship: 'Tochter',
+        notes: null,
+        phone: null,
+        invitation_status: 'accepted',
+        relationship_status: 'accepted_pending_setup',
+        email_status: 'sent',
+        linked_user_id: 'linked-user-1',
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+    ], 'trusted_persons')
+
+    ;(mockSupabaseClient as Record<string, unknown>).from = (tableName: string) => {
+      if (tableName === 'trusted_persons') {
+        return trustedPersonsState.builder
+      }
+      return createZugriffBuilder(tableName)
+    }
+
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/api/stripe/prices')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(stripePrices) })
+      }
+      if (url.includes('/api/trusted-access/setup-links')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            invitationUrl: 'https://lebensordner.org/api/trusted-access/invitations/redeem?token=token-123',
+            expiresAt: '2026-03-14T12:15:00.000Z',
+          }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+    global.fetch = mockFetch
+
+    const { rerender } = render(<ZugriffPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Lisa Weber')).toBeInTheDocument()
+    }, { timeout: TEST_TIMEOUT })
+
+    const createButton = screen.getByRole('button', { name: /sicheren link erstellen/i })
+    await userEvent.click(createButton)
+
+    rerender(<ZugriffPage />)
+
+    expect(mockVaultState.requestUnlock).toHaveBeenCalledTimes(1)
+    expect(
+      mockFetch.mock.calls.filter(([url]) => String(url).includes('/api/trusted-access/setup-links'))
+    ).toHaveLength(0)
+
+    mockVaultState.isUnlocked = true
+    mockVaultState.isUnlockRequested = false
+    mockVaultState.masterKey = {} as CryptoKey
+    rerender(<ZugriffPage />)
+
+    await waitFor(() => {
+      expect(
+        mockFetch.mock.calls.filter(([url]) => String(url).includes('/api/trusted-access/setup-links'))
+      ).toHaveLength(1)
+    }, { timeout: TEST_TIMEOUT })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Sicherer Zugriffslink erstellt/i)).toBeInTheDocument()
+    }, { timeout: TEST_TIMEOUT })
+    expect(loadOrCreateRelationshipKeyMaterialMock).toHaveBeenCalledTimes(1)
+  }, TEST_TIMEOUT)
+
+  it('cancels the pending setup link action when the vault unlock dialog is dismissed', async () => {
+    const trustedPersonsState = createTrustedPersonsBuilder([
+      {
+        id: 'tp-setup',
+        user_id: 'test-user-id',
+        name: 'Lisa Weber',
+        email: 'lisa@example.com',
+        relationship: 'Tochter',
+        notes: null,
+        phone: null,
+        invitation_status: 'accepted',
+        relationship_status: 'accepted_pending_setup',
+        email_status: 'sent',
+        linked_user_id: 'linked-user-1',
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+    ], 'trusted_persons')
+
+    ;(mockSupabaseClient as Record<string, unknown>).from = (tableName: string) => {
+      if (tableName === 'trusted_persons') {
+        return trustedPersonsState.builder
+      }
+      return createZugriffBuilder(tableName)
+    }
+
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/api/stripe/prices')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(stripePrices) })
+      }
+      if (url.includes('/api/trusted-access/setup-links')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+    global.fetch = mockFetch
+
+    const { rerender } = render(<ZugriffPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Lisa Weber')).toBeInTheDocument()
+    }, { timeout: TEST_TIMEOUT })
+
+    const createButton = screen.getByRole('button', { name: /sicheren link erstellen/i })
+    await userEvent.click(createButton)
+
+    rerender(<ZugriffPage />)
+
+    expect(mockVaultState.requestUnlock).toHaveBeenCalledTimes(1)
+
+    mockVaultState.isUnlockRequested = false
+    rerender(<ZugriffPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /sicheren link erstellen/i })).not.toBeDisabled()
+    }, { timeout: TEST_TIMEOUT })
+    expect(
+      mockFetch.mock.calls.filter(([url]) => String(url).includes('/api/trusted-access/setup-links'))
+    ).toHaveLength(0)
+  }, TEST_TIMEOUT)
 })
+
+
+
+
+
+
+

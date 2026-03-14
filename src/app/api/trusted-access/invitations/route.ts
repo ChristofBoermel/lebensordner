@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
-import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 import {
   buildTrustedAccessSetupLinkExpiry,
   emitTrustedAccessEvent,
@@ -12,6 +12,51 @@ import {
 import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { resolvePublicOrigin } from '@/lib/url/public-origin'
+
+function buildDatabaseErrorMetadata(
+  operation: string,
+  trustedPersonId: string,
+  ownerId: string,
+  error: {
+    code?: string | null
+    details?: string | null
+    hint?: string | null
+    message?: string | null
+  },
+  relationshipStatus?: string | null
+) {
+  return {
+    operation,
+    ownerId,
+    trustedPersonId,
+    relationshipStatus: relationshipStatus ?? null,
+    errorCode: error.code ?? null,
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+  }
+}
+
+function isMissingColumnError(error: { code?: string | null; message?: string | null }, column: string) {
+  return (
+    error.code === '42703' ||
+    String(error.message ?? '').toLowerCase().includes(`column "${column.toLowerCase()}"`)
+  )
+}
+
+function isLegacyRelationshipStatusConstraintError(error: {
+  code?: string | null
+  message?: string | null
+  details?: string | null
+  hint?: string | null
+}) {
+  const normalized = `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`.toLowerCase()
+  return (
+    error.code === '23514' &&
+    (normalized.includes('trusted_persons_relationship_status_check') ||
+      normalized.includes('setup_link_sent') ||
+      normalized.includes('relationship_status'))
+  )
+}
 
 export async function POST(request: Request) {
   try {
@@ -49,6 +94,12 @@ export async function POST(request: Request) {
         error_type: 'api',
         error_message: `[Trusted Access Invitations API] Failed to load trusted person: ${trustedPersonError.message}`,
         endpoint: '/api/trusted-access/invitations',
+        metadata: buildDatabaseErrorMetadata(
+          'load_trusted_person',
+          trustedPersonId,
+          user.id,
+          trustedPersonError
+        ),
       })
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
@@ -67,22 +118,49 @@ export async function POST(request: Request) {
     const nowIso = new Date().toISOString()
     const expiresAt = buildTrustedAccessSetupLinkExpiry()
 
-    const { error: replaceInvitationError } = await adminClient
+    let { error: replaceInvitationError } = await adminClient
       .from('trusted_access_invitations')
       .update({ status: 'replaced', revoked_at: nowIso })
       .eq('owner_id', user.id)
       .eq('trusted_person_id', trustedPersonId)
       .eq('status', 'pending')
 
+    if (replaceInvitationError && isMissingColumnError(replaceInvitationError, 'revoked_at')) {
+      emitStructuredWarn({
+        event_type: 'api',
+        event_message: '[Trusted Access Invitations API] Retrying invitation replacement without revoked_at due to legacy schema drift',
+        endpoint: '/api/trusted-access/invitations',
+        metadata: buildDatabaseErrorMetadata(
+          'replace_prior_pending_invitation_legacy_retry',
+          trustedPersonId,
+          user.id,
+          replaceInvitationError,
+          trustedPerson.relationship_status
+        ),
+      })
+
+      const fallbackResult = await adminClient
+        .from('trusted_access_invitations')
+        .update({ status: 'replaced' })
+        .eq('owner_id', user.id)
+        .eq('trusted_person_id', trustedPersonId)
+        .eq('status', 'pending')
+
+      replaceInvitationError = fallbackResult.error
+    }
+
     if (replaceInvitationError) {
       emitStructuredError({
         error_type: 'api',
         error_message: `[Trusted Access Invitations API] Failed to replace prior invitation: ${replaceInvitationError.message}`,
         endpoint: '/api/trusted-access/invitations',
-        metadata: {
-          ownerId: user.id,
+        metadata: buildDatabaseErrorMetadata(
+          'replace_prior_pending_invitation',
           trustedPersonId,
-        },
+          user.id,
+          replaceInvitationError,
+          trustedPerson.relationship_status
+        ),
       })
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
@@ -112,6 +190,13 @@ export async function POST(request: Request) {
         error_type: 'api',
         error_message: `[Trusted Access Invitations API] Failed to create invitation: ${invitationError?.message ?? 'unknown error'}`,
         endpoint: '/api/trusted-access/invitations',
+        metadata: buildDatabaseErrorMetadata(
+          'insert_trusted_access_invitation',
+          trustedPersonId,
+          user.id,
+          invitationError ?? {},
+          trustedPerson.relationship_status
+        ),
       })
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
@@ -126,16 +211,34 @@ export async function POST(request: Request) {
       .eq('user_id', user.id)
 
     if (relationshipError) {
-      emitStructuredError({
-        error_type: 'api',
-        error_message: `[Trusted Access Invitations API] Failed to advance relationship status: ${relationshipError.message}`,
-        endpoint: '/api/trusted-access/invitations',
-        metadata: {
-          ownerId: user.id,
-          trustedPersonId,
-        },
-      })
-      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+      if (isLegacyRelationshipStatusConstraintError(relationshipError)) {
+        emitStructuredWarn({
+          event_type: 'api',
+          event_message: '[Trusted Access Invitations API] Skipped relationship_status transition to setup_link_sent due to legacy constraint drift',
+          endpoint: '/api/trusted-access/invitations',
+          metadata: buildDatabaseErrorMetadata(
+            'advance_relationship_status_legacy_constraint',
+            trustedPersonId,
+            user.id,
+            relationshipError,
+            trustedPerson.relationship_status
+          ),
+        })
+      } else {
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `[Trusted Access Invitations API] Failed to advance relationship status: ${relationshipError.message}`,
+          endpoint: '/api/trusted-access/invitations',
+          metadata: buildDatabaseErrorMetadata(
+            'advance_relationship_status',
+            trustedPersonId,
+            user.id,
+            relationshipError,
+            trustedPerson.relationship_status
+          ),
+        })
+        return NextResponse.json({ error: 'Database error' }, { status: 500 })
+      }
     }
 
     try {
