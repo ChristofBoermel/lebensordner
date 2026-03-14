@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 import { createHash } from 'crypto'
+import { emitTrustedAccessEvent } from '@/lib/security/trusted-access'
 
 // Use service role to bypass RLS for public invitation pages
 const getSupabaseAdmin = () => {
@@ -115,7 +116,7 @@ export async function POST(request: Request) {
     const supabase = getSupabaseAdmin()
     const { data: invitation, error: fetchError } = await supabase
       .from('trusted_persons')
-      .select('id, user_id, email, invitation_status')
+.select('id, user_id, email, invitation_status, invitation_expires_at')
       .eq('invitation_token', token)
       .single()
 
@@ -202,7 +203,14 @@ export async function POST(request: Request) {
         )
       }
 
-      updateData.invitation_accepted_at = new Date().toISOString()
+      const acceptedAt = new Date().toISOString()
+      const expiresAtMs = invitation.invitation_expires_at ? new Date(invitation.invitation_expires_at).getTime() : NaN
+      if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+        return NextResponse.json({ error: 'Diese Einladung ist abgelaufen' }, { status: 410 })
+      }
+
+      updateData.invitation_accepted_at = acceptedAt
+      updateData.relationship_status = 'accepted_pending_setup'
 
       const linkedUserId = await resolveLinkedUserIdByEmail(supabase, normalizedEmail)
       if (linkedUserId) {
@@ -243,6 +251,18 @@ export async function POST(request: Request) {
       )
     }
 
+    if (action === 'accept') {
+      try {
+        await emitTrustedAccessEvent(supabase, {
+          relationshipId: invitation.id,
+          actorUserId: updateData.linked_user_id ?? null,
+          eventType: 'accepted',
+        })
+      } catch {
+        // best effort event emission
+      }
+    }
+
     return NextResponse.json({ success: true })
   } catch (error: any) {
     emitStructuredError({
@@ -254,3 +274,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Serverfehler' }, { status: 500 })
   }
 }
+
+

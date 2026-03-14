@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
 import {
   createTrustedAccessPendingCookie,
   hashTrustedAccessToken,
@@ -12,12 +10,8 @@ import {
   TRUSTED_ACCESS_OTP_COOKIE,
   TRUSTED_ACCESS_PENDING_COOKIE,
 } from '@/lib/security/trusted-access'
-
-const getSupabaseAdmin = () =>
-  createClient(
-    process.env['SUPABASE_URL']!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 function setPendingInvitationCookie(
   response: NextResponse,
@@ -40,7 +34,7 @@ function setPendingInvitationCookie(
     sameSite: 'lax',
     secure: true,
     path: '/',
-    maxAge: 15 * 60,
+    maxAge: 24 * 60 * 60,
   })
 }
 
@@ -69,7 +63,7 @@ export async function GET(request: Request) {
       '/api/trusted-access/invitations/pending'
     )
 
-    const adminClient = getSupabaseAdmin()
+    const adminClient = createServiceRoleSupabaseClient()
     let invitationQuery = adminClient
       .from('trusted_access_invitations')
       .select(`
@@ -78,11 +72,13 @@ export async function GET(request: Request) {
         trusted_person_id,
         status,
         expires_at,
+        otp_verified_at,
         trusted_persons:trusted_person_id (
           id,
           email,
           linked_user_id,
           invitation_status,
+          relationship_status,
           is_active
         ),
         profiles:owner_id (
@@ -120,13 +116,14 @@ export async function GET(request: Request) {
       invitationExpired ||
       !trustedPerson ||
       trustedPerson.invitation_status !== 'accepted' ||
-      !trustedPerson.is_active
+      !trustedPerson.is_active ||
+      trustedPerson.relationship_status === 'revoked'
     ) {
       return NextResponse.json(
         {
-          status: invitation.status === 'revoked' ? 'revoked' : 'expired_invitation',
+          status: invitation.status === 'revoked' || trustedPerson?.relationship_status === 'revoked' ? 'revoked' : 'expired_invitation',
           userMessageKey:
-            invitation.status === 'revoked'
+            invitation.status === 'revoked' || trustedPerson?.relationship_status === 'revoked'
               ? 'secure_access_revoked'
               : 'secure_access_invitation_expired',
         },
@@ -147,10 +144,14 @@ export async function GET(request: Request) {
 
     const response = NextResponse.json({
       status: wrongAccount ? 'wrong_account' : 'setup_required',
+      relationshipStatus: trustedPerson.relationship_status,
       expectedEmail: trustedPerson.email,
       ownerName: ownerProfile?.full_name || ownerProfile?.email || 'Lebensordner',
       invitationExpiresAt: invitation.expires_at,
-      otpVerified: Boolean(otpCookie && otpCookie.invitationId === invitation.id && otpCookie.userId === user?.id),
+      otpVerified: Boolean(
+        invitation.otp_verified_at ||
+        (otpCookie && otpCookie.invitationId === invitation.id && otpCookie.userId === user?.id)
+      ),
       userMessageKey: wrongAccount ? 'secure_access_wrong_account' : 'secure_access_setup_required',
     })
 

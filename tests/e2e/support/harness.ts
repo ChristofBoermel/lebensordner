@@ -26,7 +26,10 @@ const globalRunId = `${runIdPrefix}-${Date.now().toString(36)}-${Math.random()
 
 let sequence = 0
 
-const BASIC_FALLBACK_PRICE_ID = null
+const BASIC_FALLBACK_PRICE_ID =
+  process.env.STRIPE_PRICE_BASIC_MONTHLY ??
+  process.env.STRIPE_PRICE_BASIC_YEARLY ??
+  'price_basic_monthly_test'
 const PREMIUM_FALLBACK_PRICE_ID =
   process.env.STRIPE_PRICE_PREMIUM_MONTHLY ??
   process.env.STRIPE_PRICE_ID ??
@@ -61,6 +64,12 @@ export interface TrustedRelationshipOptions {
   accessLevel?: 'immediate' | 'emergency' | 'after_confirmation'
   invitationStatus?: 'pending' | 'sent' | 'accepted'
   emailStatus?: 'pending' | 'sending' | 'sent' | 'failed' | null
+  relationshipStatus?:
+    | 'invited'
+    | 'accepted_pending_setup'
+    | 'setup_link_sent'
+    | 'active'
+    | 'revoked'
   linked?: boolean
 }
 
@@ -346,11 +355,23 @@ export function createScenario(scope: string) {
       const invitationStatus = options.invitationStatus ?? 'accepted'
       const now = new Date().toISOString()
       const invitationSentAt =
-        invitationStatus === 'pending' ? null : now
+        invitationStatus === 'accepted' ? now : null
       const invitationAcceptedAt =
         invitationStatus === 'accepted' ? now : null
+      const invitationExpiresAt =
+        invitationStatus === 'accepted'
+          ? null
+          : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       const emailStatus =
         options.emailStatus === undefined ? 'sent' : options.emailStatus
+      const linkedUserId = options.linked === false ? null : options.trustedUserId
+      const relationshipStatus =
+        options.relationshipStatus ??
+        (invitationStatus === 'accepted'
+          ? linkedUserId
+            ? 'active'
+            : 'accepted_pending_setup'
+          : 'invited')
 
       const insertResult = await supabaseAdmin
         .from('trusted_persons')
@@ -362,9 +383,11 @@ export function createScenario(scope: string) {
           access_level: accessLevel,
           invitation_status: invitationStatus,
           invitation_sent_at: invitationSentAt,
+          invitation_expires_at: invitationExpiresAt,
           invitation_accepted_at: invitationAcceptedAt,
-          linked_user_id: options.linked === false ? null : options.trustedUserId,
+          linked_user_id: linkedUserId,
           email_status: emailStatus,
+          relationship_status: relationshipStatus,
           is_active: true,
         })
         .select('id')

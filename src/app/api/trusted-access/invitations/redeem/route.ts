@@ -1,20 +1,15 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
-import { emitStructuredWarn, emitStructuredError } from '@/lib/errors/structured-logger'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { resolvePublicOrigin } from '@/lib/url/public-origin'
+import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 import {
   createTrustedAccessPendingCookie,
+  emitTrustedAccessEvent,
   hashTrustedAccessToken,
   TRUSTED_ACCESS_PENDING_COOKIE,
 } from '@/lib/security/trusted-access'
-
-const getSupabaseAdmin = () =>
-  createClient(
-    process.env['SUPABASE_URL']!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { resolvePublicOrigin } from '@/lib/url/public-origin'
 
 function setPendingInvitationCookie(
   response: NextResponse,
@@ -23,7 +18,8 @@ function setPendingInvitationCookie(
     owner_id: string
     trusted_person_id: string
   },
-  expectedEmail: string
+  expectedEmail: string,
+  maxAgeSeconds = 24 * 60 * 60
 ) {
   response.cookies.set({
     name: TRUSTED_ACCESS_PENDING_COOKIE,
@@ -37,7 +33,7 @@ function setPendingInvitationCookie(
     sameSite: 'lax',
     secure: true,
     path: '/',
-    maxAge: 15 * 60,
+    maxAge: maxAgeSeconds,
   })
 }
 
@@ -57,7 +53,7 @@ export async function GET(request: Request) {
       request,
       '/api/trusted-access/invitations/redeem'
     )
-    const adminClient = getSupabaseAdmin()
+    const adminClient = createServiceRoleSupabaseClient()
 
     const tokenHash = hashTrustedAccessToken(token)
     const { data: invitation, error: invitationError } = await adminClient
@@ -68,11 +64,13 @@ export async function GET(request: Request) {
         trusted_person_id,
         status,
         expires_at,
+        claimed_at,
         trusted_persons:trusted_person_id (
           id,
           email,
           linked_user_id,
           invitation_status,
+          relationship_status,
           is_active
         )
       `)
@@ -98,7 +96,10 @@ export async function GET(request: Request) {
       !invitation ||
       !trustedPerson ||
       trustedPerson.invitation_status !== 'accepted' ||
-      !trustedPerson.is_active
+      !trustedPerson.is_active ||
+      (trustedPerson.relationship_status !== 'accepted_pending_setup' &&
+        trustedPerson.relationship_status !== 'setup_link_sent' &&
+        trustedPerson.relationship_status !== 'active')
 
     if (invalidInvitation || invitation.status !== 'pending' || isExpired) {
       const nextStatus =
@@ -151,6 +152,38 @@ export async function GET(request: Request) {
       )
       setPendingInvitationCookie(wrongAccountRedirectResponse, invitation, trustedPerson.email)
       return wrongAccountRedirectResponse
+    }
+
+    if (!invitation.claimed_at) {
+      const nowIso = new Date().toISOString()
+      await adminClient
+        .from('trusted_access_invitations')
+        .update({ claimed_at: nowIso })
+        .eq('id', invitation.id)
+
+      if (trustedPerson.relationship_status === 'accepted_pending_setup') {
+        await adminClient
+          .from('trusted_persons')
+          .update({ relationship_status: 'setup_link_sent', updated_at: nowIso })
+          .eq('id', invitation.trusted_person_id)
+      }
+
+      try {
+        await emitTrustedAccessEvent(adminClient, {
+          relationshipId: invitation.trusted_person_id,
+          actorUserId: user.id,
+          eventType: 'setup_started',
+          metadata: {
+            invitationId: invitation.id,
+          },
+        })
+      } catch (eventError: any) {
+        emitStructuredError({
+          error_type: 'api',
+          error_message: `[Trusted Access Redeem API] Failed to record setup_started event: ${eventError?.message ?? String(eventError)}`,
+          endpoint: '/api/trusted-access/invitations/redeem',
+        })
+      }
     }
 
     const response = NextResponse.redirect(new URL('/zugriff/access/redeem', publicOrigin))

@@ -2,11 +2,20 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto'
 import { decrypt, encrypt, getEncryptionKey, type EncryptedData } from '@/lib/security/encryption'
 
 export const TRUSTED_ACCESS_INVITATION_TTL_MINUTES = 15
+export const TRUSTED_PERSON_INVITATION_TTL_DAYS = 7
+export const TRUSTED_ACCESS_SETUP_LINK_TTL_HOURS = 24
 export const TRUSTED_ACCESS_OTP_TTL_MINUTES = 10
 export const TRUSTED_ACCESS_OTP_MAX_ATTEMPTS = 5
 export const TRUSTED_ACCESS_PENDING_COOKIE = 'trusted_access_pending'
 export const TRUSTED_ACCESS_OTP_COOKIE = 'trusted_access_otp'
 export const TRUSTED_ACCESS_DEVICE_COOKIE = 'trusted_access_device'
+
+export type TrustedAccessRelationshipStatus =
+  | 'invited'
+  | 'accepted_pending_setup'
+  | 'setup_link_sent'
+  | 'active'
+  | 'revoked'
 
 export type TrustedAccessLinkStatus =
   | 'ready'
@@ -14,6 +23,7 @@ export type TrustedAccessLinkStatus =
   | 'expired_invitation'
   | 'wrong_account'
   | 'revoked'
+  | 'not_linked_yet'
 
 export type TrustedAccessDeviceEnrollmentStatus = 'enrolled' | 'missing' | 'revoked'
 
@@ -23,12 +33,16 @@ export type TrustedAccessUserMessageKey =
   | 'secure_access_invitation_expired'
   | 'secure_access_wrong_account'
   | 'secure_access_revoked'
+  | 'trusted_relationship_not_linked'
+  | 'trusted_relationship_waiting_for_share'
+  | 'trusted_relationship_invitation_pending'
 
 export interface TrustedAccessReadiness {
   accessLinkStatus: TrustedAccessLinkStatus
   requiresAccessLinkSetup: boolean
   deviceEnrollmentStatus: TrustedAccessDeviceEnrollmentStatus
   userMessageKey: TrustedAccessUserMessageKey
+  relationshipStatus: TrustedAccessRelationshipStatus
 }
 
 export interface OwnerTrustedAccessStatus {
@@ -39,6 +53,7 @@ export interface OwnerTrustedAccessStatus {
     | 'invitation_pending'
     | 'expired_invitation'
     | 'revoked'
+    | 'active'
   hasPendingInvitation: boolean
   invitationExpiresAt: string | null
   hasDeviceEnrollment: boolean
@@ -47,6 +62,25 @@ export interface OwnerTrustedAccessStatus {
     | 'secure_access_generate_link'
     | 'secure_access_send_link'
     | 'secure_access_invitation_expired'
+  relationshipStatus: TrustedAccessRelationshipStatus
+}
+
+export interface TrustedAccessRelationshipStatusResponse {
+  trustedPersonId: string
+  ownerId: string
+  relationshipStatus: TrustedAccessRelationshipStatus
+  accessLinkStatus: TrustedAccessLinkStatus
+  invitationStatus: string | null
+  invitationExpiresAt: string | null
+  hasDeviceEnrollment: boolean
+  hasExplicitShares: boolean
+  nextAction:
+    | 'await_acceptance'
+    | 'send_setup_link'
+    | 'complete_setup'
+    | 'wait_for_share'
+    | 'ready'
+    | 'revoked'
 }
 
 type SignedCookieEnvelope = {
@@ -86,6 +120,14 @@ export function generateTrustedAccessToken(): string {
 
 export function buildTrustedAccessInvitationExpiry(now = Date.now()): string {
   return new Date(now + TRUSTED_ACCESS_INVITATION_TTL_MINUTES * 60_000).toISOString()
+}
+
+export function buildTrustedPersonInvitationExpiry(now = Date.now()): string {
+  return new Date(now + TRUSTED_PERSON_INVITATION_TTL_DAYS * 24 * 60 * 60_000).toISOString()
+}
+
+export function buildTrustedAccessSetupLinkExpiry(now = Date.now()): string {
+  return new Date(now + TRUSTED_ACCESS_SETUP_LINK_TTL_HOURS * 60 * 60_000).toISOString()
 }
 
 export function generateTrustedAccessOtp(): string {
@@ -148,7 +190,7 @@ export function createTrustedAccessPendingCookie(payload: Omit<TrustedAccessPend
   return encodeCookieValue<TrustedAccessPendingCookie>({
     ...payload,
     expectedEmail: payload.expectedEmail.toLowerCase().trim(),
-    exp: Date.now() + TRUSTED_ACCESS_INVITATION_TTL_MINUTES * 60_000,
+    exp: Date.now() + TRUSTED_ACCESS_SETUP_LINK_TTL_HOURS * 60 * 60_000,
   })
 }
 
@@ -243,31 +285,65 @@ export function buildTrustedAccessReadiness(params: {
   hasDeviceEnrollment: boolean
   deviceRevoked?: boolean
   latestInvitationStatus?: string | null
+  relationshipStatus?: TrustedAccessRelationshipStatus | null
 }): TrustedAccessReadiness {
+  const relationshipStatus = params.relationshipStatus ?? 'accepted_pending_setup'
+
+  if (relationshipStatus === 'revoked') {
+    return {
+      accessLinkStatus: 'revoked',
+      requiresAccessLinkSetup: true,
+      deviceEnrollmentStatus: 'revoked',
+      userMessageKey: 'secure_access_revoked',
+      relationshipStatus,
+    }
+  }
+
+  if (relationshipStatus === 'invited') {
+    return {
+      accessLinkStatus: 'not_linked_yet',
+      requiresAccessLinkSetup: false,
+      deviceEnrollmentStatus: 'missing',
+      userMessageKey: 'trusted_relationship_invitation_pending',
+      relationshipStatus,
+    }
+  }
+
   if (params.deviceRevoked) {
     return {
       accessLinkStatus: 'revoked',
       requiresAccessLinkSetup: true,
       deviceEnrollmentStatus: 'revoked',
       userMessageKey: 'secure_access_revoked',
+      relationshipStatus,
     }
   }
 
   if (!params.hasExplicitShares) {
     return {
-      accessLinkStatus: params.hasDeviceEnrollment ? 'ready' : 'setup_required',
-      requiresAccessLinkSetup: false,
+      accessLinkStatus:
+        relationshipStatus === 'active'
+          ? 'ready'
+          : relationshipStatus === 'setup_link_sent'
+            ? 'setup_required'
+            : 'not_linked_yet',
+      requiresAccessLinkSetup: relationshipStatus === 'setup_link_sent',
       deviceEnrollmentStatus: params.hasDeviceEnrollment ? 'enrolled' : 'missing',
-      userMessageKey: 'access_ready',
+      userMessageKey:
+        relationshipStatus === 'active'
+          ? 'trusted_relationship_waiting_for_share'
+          : 'trusted_relationship_not_linked',
+      relationshipStatus,
     }
   }
 
-  if (params.hasDeviceEnrollment) {
+  if (relationshipStatus === 'active' && params.hasDeviceEnrollment) {
     return {
       accessLinkStatus: 'ready',
       requiresAccessLinkSetup: false,
       deviceEnrollmentStatus: 'enrolled',
       userMessageKey: 'access_ready',
+      relationshipStatus,
     }
   }
 
@@ -277,6 +353,7 @@ export function buildTrustedAccessReadiness(params: {
       requiresAccessLinkSetup: true,
       deviceEnrollmentStatus: 'missing',
       userMessageKey: 'secure_access_invitation_expired',
+      relationshipStatus,
     }
   }
 
@@ -285,6 +362,7 @@ export function buildTrustedAccessReadiness(params: {
     requiresAccessLinkSetup: true,
     deviceEnrollmentStatus: 'missing',
     userMessageKey: 'secure_access_setup_required',
+    relationshipStatus,
   }
 }
 
@@ -293,19 +371,47 @@ export function buildOwnerTrustedAccessStatus(params: {
   hasPendingInvitation: boolean
   invitationExpiresAt: string | null
   hasDeviceEnrollment: boolean
+  relationshipStatus?: TrustedAccessRelationshipStatus | null
 }): OwnerTrustedAccessStatus {
-  if (!params.hasExplicitShares) {
+  const relationshipStatus = params.relationshipStatus ?? 'accepted_pending_setup'
+
+  if (relationshipStatus === 'revoked') {
     return {
       requiresAccessLinkSetup: false,
-      accessLinkStatus: params.hasDeviceEnrollment ? 'ready' : 'setup_required',
+      accessLinkStatus: 'revoked',
       hasPendingInvitation: false,
       invitationExpiresAt: null,
-      hasDeviceEnrollment: params.hasDeviceEnrollment,
-      userMessageKey: params.hasDeviceEnrollment ? 'secure_access_ready' : 'secure_access_generate_link',
+      hasDeviceEnrollment: false,
+      userMessageKey: 'secure_access_invitation_expired',
+      relationshipStatus,
     }
   }
 
-  if (params.hasDeviceEnrollment) {
+  if (relationshipStatus === 'invited') {
+    return {
+      requiresAccessLinkSetup: false,
+      accessLinkStatus: 'setup_required',
+      hasPendingInvitation: false,
+      invitationExpiresAt: params.invitationExpiresAt,
+      hasDeviceEnrollment: false,
+      userMessageKey: 'secure_access_generate_link',
+      relationshipStatus,
+    }
+  }
+
+  if (!params.hasExplicitShares && relationshipStatus === 'active') {
+    return {
+      requiresAccessLinkSetup: false,
+      accessLinkStatus: 'active',
+      hasPendingInvitation: false,
+      invitationExpiresAt: null,
+      hasDeviceEnrollment: params.hasDeviceEnrollment,
+      userMessageKey: 'secure_access_ready',
+      relationshipStatus,
+    }
+  }
+
+  if (relationshipStatus === 'active' && params.hasDeviceEnrollment) {
     return {
       requiresAccessLinkSetup: false,
       accessLinkStatus: 'ready',
@@ -313,10 +419,11 @@ export function buildOwnerTrustedAccessStatus(params: {
       invitationExpiresAt: params.invitationExpiresAt,
       hasDeviceEnrollment: true,
       userMessageKey: 'secure_access_ready',
+      relationshipStatus,
     }
   }
 
-  if (params.hasPendingInvitation) {
+  if (relationshipStatus === 'setup_link_sent' && params.hasPendingInvitation) {
     return {
       requiresAccessLinkSetup: true,
       accessLinkStatus: 'invitation_pending',
@@ -324,6 +431,7 @@ export function buildOwnerTrustedAccessStatus(params: {
       invitationExpiresAt: params.invitationExpiresAt,
       hasDeviceEnrollment: false,
       userMessageKey: 'secure_access_send_link',
+      relationshipStatus,
     }
   }
 
@@ -334,7 +442,31 @@ export function buildOwnerTrustedAccessStatus(params: {
     invitationExpiresAt: params.invitationExpiresAt,
     hasDeviceEnrollment: false,
     userMessageKey: params.invitationExpiresAt ? 'secure_access_invitation_expired' : 'secure_access_generate_link',
+    relationshipStatus,
   }
+}
+
+export function resolveTrustedAccessNextAction(params: {
+  relationshipStatus: TrustedAccessRelationshipStatus
+  hasDeviceEnrollment: boolean
+  hasExplicitShares: boolean
+}): TrustedAccessRelationshipStatusResponse['nextAction'] {
+  if (params.relationshipStatus === 'revoked') {
+    return 'revoked'
+  }
+  if (params.relationshipStatus === 'invited') {
+    return 'await_acceptance'
+  }
+  if (params.relationshipStatus === 'accepted_pending_setup') {
+    return 'send_setup_link'
+  }
+  if (params.relationshipStatus === 'setup_link_sent' || !params.hasDeviceEnrollment) {
+    return 'complete_setup'
+  }
+  if (!params.hasExplicitShares) {
+    return 'wait_for_share'
+  }
+  return 'ready'
 }
 
 export async function fetchTrustedAccessDevicePairSet(
@@ -437,3 +569,67 @@ export async function fetchLatestTrustedAccessInvitationMap(
     ])
   )
 }
+
+export async function fetchTrustedRelationshipMap(
+  adminClient: { from: (table: string) => any },
+  pairs: Array<{ ownerId: string; trustedPersonId: string }>
+): Promise<Map<string, { relationshipStatus: TrustedAccessRelationshipStatus; linkedUserId: string | null }>> {
+  const filteredPairs = pairs.filter((pair) => pair.ownerId && pair.trustedPersonId)
+  if (filteredPairs.length === 0) {
+    return new Map()
+  }
+
+  const ownerIds = [...new Set(filteredPairs.map((pair) => pair.ownerId))]
+  const trustedPersonIds = [...new Set(filteredPairs.map((pair) => pair.trustedPersonId))]
+
+  const { data, error } = await adminClient
+    .from('trusted_persons')
+    .select('id, user_id, relationship_status, linked_user_id')
+    .in('user_id', ownerIds)
+    .in('id', trustedPersonIds)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return new Map(
+    (data ?? []).map((row: any) => [
+      `${row.user_id}:${row.id}`,
+      {
+        relationshipStatus: row.relationship_status as TrustedAccessRelationshipStatus,
+        linkedUserId: row.linked_user_id ?? null,
+      },
+    ])
+  )
+}
+
+export async function emitTrustedAccessEvent(
+  adminClient: { from: (table: string) => any },
+  params: {
+    relationshipId: string
+    actorUserId?: string | null
+    eventType:
+      | 'invited'
+      | 'accepted'
+      | 'setup_link_sent'
+      | 'setup_started'
+      | 'otp_verified'
+      | 'device_enrolled'
+      | 'revoked'
+    metadata?: Record<string, unknown>
+  }
+): Promise<void> {
+  const { error } = await adminClient
+    .from('trusted_access_events')
+    .insert({
+      relationship_id: params.relationshipId,
+      actor_user_id: params.actorUserId ?? null,
+      event_type: params.eventType,
+      metadata: params.metadata ?? {},
+    })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+

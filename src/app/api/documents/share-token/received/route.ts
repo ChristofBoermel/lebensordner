@@ -138,7 +138,7 @@ export async function GET(request: Request) {
 
   const { data: trustedPersons, error: trustedPersonsError } = await adminClient
     .from('trusted_persons')
-    .select('id')
+    .select('id, user_id, relationship_status')
     .eq('linked_user_id', user.id)
     .eq('invitation_status', 'accepted')
     .eq('is_active', true)
@@ -157,9 +157,12 @@ export async function GET(request: Request) {
   }
 
   const trustedPersonIds = (trustedPersons ?? []).map((tp) => tp.id)
+  const relationshipStatusByTrustedPersonId = new Map(
+    (trustedPersons ?? []).map((relationship) => [relationship.id, relationship.relationship_status ?? null])
+  )
 
   if (trustedPersonIds.length === 0) {
-    return NextResponse.json({ shares: [] })
+    return NextResponse.json({ shares: [], relationships: [] })
   }
 
   const { data, error } = await fetchReceivedShareRows(adminClient, trustedPersonIds)
@@ -182,7 +185,15 @@ export async function GET(request: Request) {
     .filter((share) => isActiveShareToken(share))
 
   if (activeShares.length === 0) {
-    return NextResponse.json({ shares: [] })
+    return NextResponse.json({
+      shares: [],
+      relationships: (trustedPersons ?? []).map((relationship) => ({
+        ownerId: relationship.user_id,
+        trustedPersonId: relationship.id,
+        status: relationship.relationship_status === 'active' ? 'waiting_for_share' : 'not_linked_yet',
+        relationshipStatus: relationship.relationship_status,
+      })),
+    })
   }
 
   const documentIds = [...new Set(activeShares.map((share) => share.document_id))]
@@ -294,8 +305,11 @@ export async function GET(request: Request) {
         deviceEnrollmentMap.get(`${share.owner_id}:${share.trusted_person_id}`)?.revoked ?? false,
       latestInvitationStatus:
         latestInvitationMap.get(`${share.owner_id}:${share.trusted_person_id}`)?.status ?? null,
+      relationshipStatus: relationshipStatusByTrustedPersonId.get(share.trusted_person_id) ?? null,
     }),
   }))
 
-  return NextResponse.json({ shares })
+  return NextResponse.json({ shares, relationships: [] })
 }
+
+

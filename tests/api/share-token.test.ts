@@ -75,7 +75,7 @@ describe('Share Token API', () => {
       // First maybeSingle: document ownership check
       maybeSingle.mockResolvedValueOnce({ data: { id: 'doc-1' }, error: null })
       // Second maybeSingle: trusted person check
-      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: 'tp-user' }, error: null })
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: 'tp-user', relationship_status: 'active' }, error: null })
       // upsert result
       thenFn.mockImplementationOnce((onFulfilled: any) =>
         Promise.resolve({ data: null, error: null }).then(onFulfilled)
@@ -111,7 +111,7 @@ describe('Share Token API', () => {
 
     it('creates share without expiry and defaults permission to view', async () => {
       maybeSingle.mockResolvedValueOnce({ data: { id: 'doc-1' }, error: null })
-      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: 'tp-user' }, error: null })
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: 'tp-user', relationship_status: 'active' }, error: null })
       thenFn.mockImplementationOnce((onFulfilled: any) =>
         Promise.resolve({ data: null, error: null }).then(onFulfilled)
       )
@@ -141,7 +141,7 @@ describe('Share Token API', () => {
 
     it('reactivates a previously revoked share by writing revoked_at as null', async () => {
       maybeSingle.mockResolvedValueOnce({ data: { id: 'doc-1' }, error: null })
-      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: 'tp-user' }, error: null })
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: 'tp-user', relationship_status: 'active' }, error: null })
       thenFn.mockImplementationOnce((onFulfilled: any) =>
         Promise.resolve({ data: null, error: null }).then(onFulfilled)
       )
@@ -174,7 +174,7 @@ describe('Share Token API', () => {
 
     it('returns 403 when trusted person has no linked_user_id', async () => {
       maybeSingle.mockResolvedValueOnce({ data: { id: 'doc-1' }, error: null })
-      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: null }, error: null })
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: null, relationship_status: 'active' }, error: null })
 
       vi.resetModules()
       const { POST } = await import('@/app/api/documents/share-token/route')
@@ -194,6 +194,33 @@ describe('Share Token API', () => {
 
       expect(response.status).toBe(403)
       expect(data.error).toContain('accepted')
+    })
+
+    it('returns 403 when trusted person secure setup is incomplete', async () => {
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'doc-1' }, error: null })
+      maybeSingle.mockResolvedValueOnce({
+        data: { id: 'tp-1', linked_user_id: 'tp-user', relationship_status: 'setup_link_sent' },
+        error: null,
+      })
+
+      vi.resetModules()
+      const { POST } = await import('@/app/api/documents/share-token/route')
+
+      const response = await POST(
+        new Request('http://localhost/api/documents/share-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            documentId: 'doc-1',
+            trustedPersonId: 'tp-1',
+            wrapped_dek_for_tp: 'wrapped-key',
+          }),
+        })
+      )
+      const data = await response.json()
+
+      expect(response.status).toBe(403)
+      expect(data.error).toContain('secure setup')
     })
 
     it('returns 403 when trusted person not found', async () => {
@@ -220,7 +247,7 @@ describe('Share Token API', () => {
 
     it('falls back to legacy schema when optional share-token columns are missing', async () => {
       maybeSingle.mockResolvedValueOnce({ data: { id: 'doc-1' }, error: null })
-      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: 'tp-user' }, error: null })
+      maybeSingle.mockResolvedValueOnce({ data: { id: 'tp-1', linked_user_id: 'tp-user', relationship_status: 'active' }, error: null })
       thenFn
         .mockImplementationOnce((onFulfilled: any) =>
           Promise.resolve({
@@ -976,3 +1003,4 @@ describe('Share Token API', () => {
     })
   })
 })
+

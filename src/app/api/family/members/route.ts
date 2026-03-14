@@ -298,6 +298,7 @@ export async function GET(request: Request) {
         linked_user_id,
         name,
         email,
+        relationship_status,
         relationship,
         access_level,
         invitation_accepted_at
@@ -407,6 +408,7 @@ export async function GET(request: Request) {
           hasPendingInvitation: invitationStatus?.status === 'pending',
           invitationExpiresAt: invitationStatus?.expiresAt ?? null,
           hasDeviceEnrollment: outgoingDeviceEnrollmentPairs.has(`${user.id}:${link.id}:*`),
+          relationshipStatus: link.relationship_status ?? null,
         }),
       };
     });
@@ -445,3 +447,5 @@ export async function GET(request: Request) {
     );
   }
 }
+
+

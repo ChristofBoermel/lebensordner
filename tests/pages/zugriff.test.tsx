@@ -2302,7 +2302,7 @@ describe('ZugriffPage trusted person invite row states', () => {
       expect(screen.getByText('Max Mustermann')).toBeInTheDocument()
     }, { timeout: TEST_TIMEOUT })
 
-    const inviteButton = screen.getByRole('button', { name: /^einladung erneut senden$/i })
+    const inviteButton = screen.getByRole('button', { name: /^einladen$/i })
     await userEvent.click(inviteButton)
 
     await waitFor(() => {
@@ -2390,10 +2390,26 @@ describe('ZugriffPage trusted person invite row states', () => {
       expect(screen.getByText('Max Mustermann')).toBeInTheDocument()
     }, { timeout: TEST_TIMEOUT })
 
-    await userEvent.click(screen.getByRole('button', { name: /^einladung erneut senden$/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^einladen$/i }))
 
     releaseInvite?.()
     inviteCompleted = true
+    trustedPersonsState.setRows([
+      {
+        id: 'tp-1',
+        user_id: 'test-user-id',
+        name: 'Max Mustermann',
+        email: 'max@example.com',
+        relationship: 'Sohn',
+        notes: null,
+        phone: null,
+        invitation_status: 'pending',
+        invitation_sent_at: new Date().toISOString(),
+        email_status: 'sending',
+        linked_user_id: null,
+        is_active: true,
+      },
+    ])
 
     await act(async () => {
       await pendingInvite

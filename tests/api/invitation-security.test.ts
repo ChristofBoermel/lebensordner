@@ -23,6 +23,8 @@ vi.mock('@supabase/supabase-js', () => ({
 }))
 
 describe('/api/invitation security hardening', () => {
+  const futureExpiry = '2099-03-14T00:00:00.000Z'
+
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -34,6 +36,7 @@ describe('/api/invitation security hardening', () => {
         user_id: 'owner-1',
         email: 'invitee@example.com',
         invitation_status: 'pending',
+        invitation_expires_at: futureExpiry,
       },
       error: null,
     })
@@ -62,6 +65,7 @@ describe('/api/invitation security hardening', () => {
         user_id: 'owner-1',
         email: 'invitee@example.com',
         invitation_status: 'pending',
+        invitation_expires_at: futureExpiry,
       },
       error: null,
     })
@@ -99,6 +103,7 @@ describe('/api/invitation security hardening', () => {
         user_id: 'owner-1',
         email: 'invitee@example.com',
         invitation_status: 'accepted',
+        invitation_expires_at: futureExpiry,
       },
       error: null,
     })
@@ -127,6 +132,7 @@ describe('/api/invitation security hardening', () => {
         user_id: 'owner-1',
         email: 'invitee@example.com',
         invitation_status: 'sent',
+        invitation_expires_at: futureExpiry,
       },
       error: null,
     })
@@ -158,6 +164,7 @@ describe('/api/invitation security hardening', () => {
         user_id: 'owner-1',
         email: 'invitee@example.com',
         invitation_status: 'failed',
+        invitation_expires_at: futureExpiry,
       },
       error: null,
     })
@@ -189,6 +196,7 @@ describe('/api/invitation security hardening', () => {
         user_id: 'owner-1',
         email: 'invitee@example.com',
         invitation_status: 'pending',
+        invitation_expires_at: futureExpiry,
       },
       error: null,
     })

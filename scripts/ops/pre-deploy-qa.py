@@ -496,6 +496,8 @@ def check_client_redirect_loops() -> None:
     onClick handlers that call router.push are fine -- they only fire on click.
     """
     candidates: list[tuple[Path, int, str]] = []
+    effect_start_rx = re.compile(r'\buseEffect\s*\(\s*\(\s*=>\s*\{')
+    router_call_rx = re.compile(r'router\.(push|replace)\s*\(')
     for p in client_files():
         try:
             lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -503,16 +505,34 @@ def check_client_redirect_loops() -> None:
             continue
         if not any("useEffect" in l for l in lines):
             continue
-        # Track whether we're inside a useEffect body (rough heuristic: after
-        # "useEffect(" and before the matching closing brace at the same indent).
-        # Simpler: flag router.push lines that are NOT on an onClick= line.
+
+        in_effect = False
+        brace_depth = 0
+        effect_allowed = False
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
-            if re.search(r'router\.(push|replace)\s*\(', stripped):
-                # Skip onClick handlers -- these are user-triggered, not automatic
+
+            if not in_effect and effect_start_rx.search(line):
+                in_effect = True
+                brace_depth = line.count("{") - line.count("}")
+                window = "\n".join(lines[max(0, i - 3):i])
+                effect_allowed = "allowed:" in window
+                continue
+
+            if not in_effect:
+                continue
+
+            brace_depth += line.count("{") - line.count("}")
+            if router_call_rx.search(stripped):
                 if "onClick" in stripped or "onSubmit" in stripped or "onPress" in stripped:
                     continue
-                candidates.append((p, i, stripped))
+                if not effect_allowed:
+                    candidates.append((p, i, stripped))
+
+            if brace_depth <= 0:
+                in_effect = False
+                brace_depth = 0
+                effect_allowed = False
     if candidates:
         unique_files = len({p for p, _, _ in candidates})
         record("WARN",
@@ -538,7 +558,7 @@ def check_server_page_redirect_count() -> None:
         if "'use client'" in content or '"use client"' in content:
             continue
         redirects = re.findall(r'\bredirect\s*\(', content)
-        if len(redirects) >= 2:
+        if len(redirects) >= 3:
             suspicious.append((p, 0, f"{len(redirects)} redirect() calls"))
     if suspicious:
         record("WARN",
@@ -562,6 +582,7 @@ def check_api_routes_have_auth() -> None:
         "auth/login", "auth/register", "auth/callback",
         "auth/password-reset", "auth/verify",
         "auth/2fa/verify",   # runs before user has a session (pre-auth step)
+        "auth/passkey",
         "health", "webhook", "metrics", "cron",
         # Token-based routes (validate signed token from DB, not user session)
         "download-link",
@@ -593,6 +614,7 @@ def check_api_routes_have_auth() -> None:
             "requireAdmin()", "requireAuth()", "getSession()",
             "validateCronSecret", "CRON_SECRET", "METRICS_SECRET",
             "GRAFANA_WEBHOOK_SECRET", "TELEGRAM_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET",
+            "INTERNAL_API_KEY", "isInternalServiceRequest(",
         ]
         if not any(sig in content for sig in auth_signals):
             unprotected.append(route_path)

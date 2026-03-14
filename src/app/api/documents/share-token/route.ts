@@ -10,6 +10,7 @@ import {
   buildOwnerTrustedAccessStatus,
   fetchLatestTrustedAccessInvitationMap,
   fetchTrustedAccessDevicePairSet,
+  type TrustedAccessRelationshipStatus,
 } from '@/lib/security/trusted-access'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 
@@ -42,6 +43,7 @@ type OwnerTrustedPersonRow = {
   id: string
   name: string
   email: string
+  relationship_status?: TrustedAccessRelationshipStatus | null
 }
 
 type OwnerShareTokenRow = OwnerShareTokenBaseRow & {
@@ -122,7 +124,7 @@ export async function POST(request: Request) {
 
   const { data: trustedPerson } = await supabase
     .from('trusted_persons')
-    .select('id, linked_user_id')
+    .select('id, linked_user_id, relationship_status')
     .eq('id', trustedPersonId)
     .eq('user_id', user.id)
     .eq('invitation_status', 'accepted')
@@ -135,6 +137,10 @@ export async function POST(request: Request) {
 
   if (trustedPerson.linked_user_id === null) {
     return NextResponse.json({ error: 'Trusted person has not accepted the invitation' }, { status: 403 })
+  }
+
+  if (trustedPerson.relationship_status !== 'active') {
+    return NextResponse.json({ error: 'Trusted person secure setup is not complete' }, { status: 403 })
   }
 
   const fullPayload = {
@@ -265,7 +271,7 @@ export async function GET(request: Request) {
   if (trustedPersonIds.length > 0) {
     const { data: trustedPersons, error: trustedPersonsError } = await supabase
       .from('trusted_persons')
-      .select('id, name, email')
+      .select('id, name, email, relationship_status')
       .in('id', trustedPersonIds)
       .eq('user_id', ownerId)
 
@@ -330,6 +336,7 @@ export async function GET(request: Request) {
       invitationExpiresAt:
         latestInvitationMap.get(`${ownerId}:${token.trusted_person_id}`)?.expiresAt ?? null,
       hasDeviceEnrollment: deviceEnrollmentPairs.has(`${ownerId}:${token.trusted_person_id}:*`),
+      relationshipStatus: trustedPersonsById.get(token.trusted_person_id)?.relationship_status ?? null,
     }),
   }))
 
@@ -399,3 +406,5 @@ export async function DELETE(request: Request) {
 
   return NextResponse.json({ success: true })
 }
+
+

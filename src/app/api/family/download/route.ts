@@ -150,6 +150,7 @@ export async function GET(request: Request) {
       deviceRevoked: deviceEnrollment.revoked,
       latestInvitationStatus:
         latestInvitationMap.get(`${ownerId}:${trustedPerson.id}`)?.status ?? null,
+      relationshipStatus: trustedPerson.relationship_status,
     })
 
     if (documents && documents.some((doc) => doc.is_encrypted)) {
@@ -296,3 +297,4 @@ export async function GET(request: Request) {
     )
   }
 }
+

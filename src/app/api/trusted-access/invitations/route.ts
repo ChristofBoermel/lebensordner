@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
-import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { resolvePublicOrigin } from '@/lib/url/public-origin'
 import {
-  buildTrustedAccessInvitationExpiry,
+  buildTrustedAccessSetupLinkExpiry,
+  emitTrustedAccessEvent,
   encryptTrustedAccessBootstrap,
   generateTrustedAccessToken,
   hashTrustedAccessToken,
-  TRUSTED_ACCESS_INVITATION_TTL_MINUTES,
+  TRUSTED_ACCESS_SETUP_LINK_TTL_HOURS,
 } from '@/lib/security/trusted-access'
+import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { resolvePublicOrigin } from '@/lib/url/public-origin'
 
 export async function POST(request: Request) {
   try {
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
 
     const { data: trustedPerson, error: trustedPersonError } = await adminClient
       .from('trusted_persons')
-      .select('id, email, linked_user_id, invitation_status, is_active')
+      .select('id, email, linked_user_id, invitation_status, relationship_status, is_active')
       .eq('id', trustedPersonId)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -56,13 +57,15 @@ export async function POST(request: Request) {
       !trustedPerson ||
       trustedPerson.invitation_status !== 'accepted' ||
       !trustedPerson.is_active ||
-      !trustedPerson.linked_user_id
+      !trustedPerson.linked_user_id ||
+      (trustedPerson.relationship_status !== 'accepted_pending_setup' &&
+        trustedPerson.relationship_status !== 'setup_link_sent')
     ) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const nowIso = new Date().toISOString()
-    const expiresAt = buildTrustedAccessInvitationExpiry()
+    const expiresAt = buildTrustedAccessSetupLinkExpiry()
 
     const { error: replaceInvitationError } = await adminClient
       .from('trusted_access_invitations')
@@ -113,6 +116,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
 
+    const { error: relationshipError } = await adminClient
+      .from('trusted_persons')
+      .update({
+        relationship_status: 'setup_link_sent',
+        updated_at: nowIso,
+      })
+      .eq('id', trustedPersonId)
+      .eq('user_id', user.id)
+
+    if (relationshipError) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `[Trusted Access Invitations API] Failed to advance relationship status: ${relationshipError.message}`,
+        endpoint: '/api/trusted-access/invitations',
+        metadata: {
+          ownerId: user.id,
+          trustedPersonId,
+        },
+      })
+      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    }
+
+    try {
+      await emitTrustedAccessEvent(adminClient, {
+        relationshipId: trustedPersonId,
+        actorUserId: user.id,
+        eventType: 'setup_link_sent',
+        metadata: {
+          invitationId: invitation.id,
+          expiresAt: invitation.expires_at,
+        },
+      })
+    } catch (eventError: any) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `[Trusted Access Invitations API] Failed to record trusted-access event: ${eventError?.message ?? String(eventError)}`,
+        endpoint: '/api/trusted-access/invitations',
+      })
+      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    }
+
     const origin = resolvePublicOrigin(request)
     const invitationUrl = `${origin}/api/trusted-access/invitations/redeem?token=${encodeURIComponent(token)}`
 
@@ -122,7 +166,7 @@ export async function POST(request: Request) {
       status: 'pending',
       deliveryMode: 'manual',
       singleUse: true,
-      expiresInMinutes: TRUSTED_ACCESS_INVITATION_TTL_MINUTES,
+      expiresInHours: TRUSTED_ACCESS_SETUP_LINK_TTL_HOURS,
     })
   } catch (error: any) {
     const errorMessage = error?.message ?? String(error)

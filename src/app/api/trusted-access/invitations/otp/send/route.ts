@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
 import { sendEmailWithTimeout } from '@/lib/email/resend-service'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
 import {
   buildTrustedAccessOtpExpiry,
   generateTrustedAccessOtp,
@@ -13,12 +11,8 @@ import {
   TRUSTED_ACCESS_OTP_MAX_ATTEMPTS,
   TRUSTED_ACCESS_PENDING_COOKIE,
 } from '@/lib/security/trusted-access'
-
-const getSupabaseAdmin = () =>
-  createClient(
-    process.env['SUPABASE_URL']!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 function buildOtpEmail(input: { ownerName: string; otp: string }): string {
   return `
@@ -53,7 +47,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const adminClient = getSupabaseAdmin()
+    const adminClient = createServiceRoleSupabaseClient()
     const { data: invitation, error: invitationError } = await adminClient
       .from('trusted_access_invitations')
       .select(`
@@ -66,6 +60,7 @@ export async function POST(request: Request) {
           email,
           linked_user_id,
           invitation_status,
+          relationship_status,
           is_active
         ),
         profiles:owner_id (
@@ -92,6 +87,13 @@ export async function POST(request: Request) {
       trustedPerson.linked_user_id !== user.id ||
       trustedPerson.email.toLowerCase().trim() !== (user.email?.toLowerCase().trim() ?? '')
 
+    const expired = new Date(invitation.expires_at).getTime() <= Date.now()
+    const invalidRelationship =
+      !trustedPerson ||
+      trustedPerson.invitation_status !== 'accepted' ||
+      !trustedPerson.is_active ||
+      trustedPerson.relationship_status === 'revoked'
+
     if (wrongAccount) {
       emitStructuredWarn({
         event_type: 'security',
@@ -103,6 +105,10 @@ export async function POST(request: Request) {
         },
       })
       return NextResponse.json({ error: 'Wrong account' }, { status: 403 })
+    }
+
+    if (invitation.status !== 'pending' || expired || invalidRelationship) {
+      return NextResponse.json({ error: 'Link expired' }, { status: 410 })
     }
 
     await adminClient

@@ -162,6 +162,7 @@ export async function GET(request: Request) {
         deviceRevoked: deviceEnrollment.revoked,
         latestInvitationStatus:
           latestInvitationMap.get(`${ownerId}:${trustedPerson.id}`)?.status ?? null,
+        relationshipStatus: trustedPerson.relationship_status,
       })
       return NextResponse.json({
         ownerName,
@@ -189,6 +190,7 @@ export async function GET(request: Request) {
       deviceRevoked: deviceEnrollment.revoked,
       latestInvitationStatus:
         latestInvitationMap.get(`${ownerId}:${trustedPerson.id}`)?.status ?? null,
+      relationshipStatus: trustedPerson.relationship_status,
     })
 
     if (docsError) {
@@ -291,3 +293,4 @@ export async function GET(request: Request) {
     )
   }
 }
+

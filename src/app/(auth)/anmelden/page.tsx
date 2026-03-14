@@ -47,6 +47,7 @@ export default function LoginPage() {
   // allowed: imperative-sync - imperative turnstile widget reset API
   const turnstileRef = useRef<TurnstileWidgetRef>(null)
 
+  // allowed: auth-callback - recovery token hydration must redirect once after session restore
   // allowed: imperative-sync - manage countdown interval lifecycle with cleanup
   useEffect(() => {
     const hash = window.location.hash

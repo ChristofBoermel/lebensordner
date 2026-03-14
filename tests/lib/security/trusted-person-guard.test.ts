@@ -24,7 +24,14 @@ describe('guardTrustedPersonAccess', () => {
 
   it('denies insufficient access level for download', async () => {
     const result = await guardTrustedPersonAccess(
-      createAdminClient({ id: 'tp1', invitation_status: 'accepted', is_active: true, name: 'TP', access_level: 'emergency' }),
+      createAdminClient({
+        id: 'tp1',
+        invitation_status: 'accepted',
+        relationship_status: 'active',
+        is_active: true,
+        name: 'TP',
+        access_level: 'emergency',
+      }),
       'owner',
       'viewer',
       'download'
@@ -35,7 +42,14 @@ describe('guardTrustedPersonAccess', () => {
 
   it('allows immediate download', async () => {
     const result = await guardTrustedPersonAccess(
-      createAdminClient({ id: 'tp1', invitation_status: 'accepted', is_active: true, name: 'TP', access_level: 'immediate' }),
+      createAdminClient({
+        id: 'tp1',
+        invitation_status: 'accepted',
+        relationship_status: 'active',
+        is_active: true,
+        name: 'TP',
+        access_level: 'immediate',
+      }),
       'owner',
       'viewer',
       'download'

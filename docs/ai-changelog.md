@@ -2958,3 +2958,97 @@ Rollback:
   - `src/app/(dashboard)/zugriff/access/redeem/page.tsx`
   - `tests/api/trusted-access-pending.test.ts`
   - `docs/ai-changelog.md`
+
+## 2026-03-13 22:11 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Implemented the trusted-user linking backend phase split: trusted-person relationships now track `invited`, `accepted_pending_setup`, `setup_link_sent`, `active`, and `revoked`, with a new `trusted_access_events` audit table plus setup-link `claimed_at` and `otp_verified_at` state.
+- Promoted the existing trusted-access flow into explicit setup-link semantics, added the new tech-plan route surface (`/api/trusted-person/invitations/[id]/accept`, `/api/trusted-access/setup-links`, `/api/trusted-access/setup/*`, `/api/trusted-access/relationship-status`), and kept the legacy `/api/trusted-access/invitations/*` routes as compatibility aliases.
+- Enforced fail-closed document sharing and trusted-person access on relationship activation, updated received-share responses to surface `not_linked_yet` relationship state explicitly, and refreshed the focused API tests to the new contract.
+
+Risk / Regression Watch:
+- Existing frontend surfaces still call the legacy trusted-access routes and have not yet been migrated to consume `/api/trusted-access/relationship-status`; backend compatibility is preserved, but UI follow-up is still required for the full redesign.
+- The legacy `/api/invitation` acceptance endpoint now advances relationship state and checks invitation expiry; any stale rows missing `invitation_expires_at` before the migration runs will reject acceptance until the migration is applied.
+- Vitest remains blocked in this sandbox by `vite/esbuild` `spawn EPERM`, so the focused API tests need to run in CI or on a normal local shell.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/trusted-access-invitations.test.ts tests/api/trusted-access-redeem.test.ts tests/api/trusted-access-pending.test.ts tests/api/share-token.test.ts` (sandbox blocked: `spawn EPERM`)
+
+Rollback:
+- Revert:
+  - `supabase/migrations/20260313083000_trusted_user_linking_backend.sql`
+  - `src/lib/security/trusted-access.ts`
+  - `src/lib/security/trusted-person-guard.ts`
+  - `src/app/api/trusted-access/**`
+  - `src/app/api/trusted-person/invitations/[id]/accept/route.ts`
+  - `src/app/api/trusted-person/invite/route.ts`
+  - `src/app/api/invitation/route.ts`
+  - `src/app/api/documents/share-token/route.ts`
+  - `src/app/api/documents/share-token/received/route.ts`
+  - `src/app/api/family/view/route.ts`
+  - `src/app/api/family/download/route.ts`
+  - `src/app/api/family/members/route.ts`
+  - `tests/api/trusted-access-invitations.test.ts`
+  - `tests/api/trusted-access-redeem.test.ts`
+  - `tests/api/trusted-access-pending.test.ts`
+  - `tests/api/share-token.test.ts`
+  - `docs/ai-changelog.md`
+## 2026-03-14 13:44 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Fixed the trusted-user linking deploy blockers: owner invites now stamp `invitation_expires_at` and reset the relationship to `invited`, share creation now rejects any trusted-person relationship that is not `active`, and the legacy owner/trusted-person compatibility APIs now pass canonical `relationship_status` into readiness/status helpers instead of relying on the `accepted_pending_setup` default.
+- Extended the focused share-token API coverage to lock in the new fail-closed rule for incomplete secure setup.
+
+Risk / Regression Watch:
+- Existing pre-activation share rows created before this fix will now surface as incomplete-link states instead of looking setup-ready in compatibility APIs; that is intentional but may change owner/trusted-user messaging until the frontend migration finishes.
+- Vitest execution remains blocked in this sandbox by `vite/esbuild` `spawn EPERM`, so the focused API tests still need to run in CI or on a normal local shell.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm test -- --run tests/api/share-token.test.ts tests/api/trusted-access-invitations.test.ts tests/api/trusted-access-redeem.test.ts tests/api/trusted-access-pending.test.ts tests/api/email-invitation.test.ts` (sandbox blocked: `spawn EPERM`)
+
+Rollback:
+- Revert:
+  - `src/app/api/trusted-person/invite/route.ts`
+  - `src/app/api/documents/share-token/route.ts`
+  - `src/app/api/documents/share-token/received/route.ts`
+  - `src/app/api/family/members/route.ts`
+  - `src/app/api/family/view/route.ts`
+  - `src/app/api/family/download/route.ts`
+  - `src/lib/security/trusted-person-guard.ts`
+  - `tests/api/share-token.test.ts`
+  - `docs/ai-changelog.md`
+
+## 2026-03-14 14:30 UTC | Agent: Codex | Commit: uncommitted
+
+Change:
+- Aligned the trusted-linking Playwright harness and owner invite UI with the new relationship lifecycle: accepted seeded relationships now default to `active`, pending invites seed expiry metadata, the invite row distinguishes first-send vs resend states, and stable `data-testid` hooks were added for smoke coverage.
+- Linked the repo to the hosted E2E Supabase project and applied the missing trusted-access migrations (`20260312090000_trusted_access_invitations.sql`, `20260313083000_trusted_user_linking_backend.sql`) so the smoke environment matches the current backend schema.
+- Updated stale frontend tests to match the new invite row behavior and normalized the touched test files back to UTF-8-safe assertions.
+
+Risk / Regression Watch:
+- The hosted `lebensordner-e2e` Supabase project now depends on the two trusted-access migrations above; any other staging clone that has not applied them will still fail trusted-linking flows until migrated.
+- Full Vitest still emits pre-existing warning noise from unrelated tests (Radix dialog accessibility warnings, act warnings, mocked error-path logging), but the suite is green.
+
+Verification:
+- `npm run type-check`
+- `npm run lint`
+- `python scripts/ops/logging-audit.py`
+- `npm run qa:strict`
+- `npm test -- --run`
+- `npm run test:e2e:smoke`
+- `supabase db push --dry-run`
+- `supabase db push`
+
+Rollback:
+- Revert:
+  - `tests/e2e/support/harness.ts`
+  - `src/components/trusted-access/TrustedPersonStatusCard.tsx`
+  - `tests/components/trusted-access-status-card.test.tsx`
+  - `tests/pages/zugriff.test.tsx`
+- If needed for the hosted E2E project only, revert the two remote migrations via Supabase migration repair / database restore rather than editing app code.

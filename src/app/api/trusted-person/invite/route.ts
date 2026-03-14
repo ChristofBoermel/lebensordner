@@ -9,6 +9,8 @@ import {
 } from '@/lib/email/resend-service'
 import { checkRateLimit, incrementRateLimit, RATE_LIMIT_INVITE } from '@/lib/security/rate-limit'
 import { emitStructuredError } from '@/lib/errors/structured-logger'
+import { buildTrustedPersonInvitationExpiry, emitTrustedAccessEvent } from '@/lib/security/trusted-access'
+import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
 
 export async function POST(request: Request) {
   try {
@@ -163,20 +165,34 @@ export async function POST(request: Request) {
 
     const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.lebensordner.org'}/einladung/${invitationToken}`
     const ownerName = profile?.full_name || 'Jemand'
+    const invitationSentAt = new Date().toISOString()
+    const invitationExpiresAt = buildTrustedPersonInvitationExpiry()
 
     // Update trusted person with invitation details and set email_status to 'sending'
     const { error: updateError } = await supabase
       .from('trusted_persons')
       .update({
         invitation_token: invitationToken,
-        invitation_sent_at: new Date().toISOString(),
+        invitation_sent_at: invitationSentAt,
+        invitation_expires_at: invitationExpiresAt,
         invitation_status: 'pending',
+        relationship_status: 'invited',
         email_status: 'sending',
       })
       .eq('id', trustedPersonId)
 
     if (updateError) {
       throw updateError
+    }
+
+    try {
+      await emitTrustedAccessEvent(createServiceRoleSupabaseClient(), {
+        relationshipId: trustedPersonId,
+        actorUserId: user.id,
+        eventType: 'invited',
+      })
+    } catch {
+      // best effort event emission; do not block invitation delivery
     }
 
     // Send invitation email with timeout handling
@@ -469,3 +485,4 @@ function generateInvitationEmail(data: InvitationEmailData): string {
 </html>
   `
 }
+

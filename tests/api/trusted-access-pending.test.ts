@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const { createServiceRoleSupabaseClientMock } = vi.hoisted(() => ({
+  createServiceRoleSupabaseClientMock: vi.fn(),
+}))
+
 const { createServerSupabaseClientMock } = vi.hoisted(() => ({
   createServerSupabaseClientMock: vi.fn(() => Promise.resolve({})),
 }))
@@ -29,10 +33,8 @@ const {
   readTrustedAccessPendingCookieMock: vi.fn(() => null),
 }))
 
-const createClientMock = vi.fn()
-
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: createClientMock,
+vi.mock('@/lib/supabase/admin', () => ({
+  createServiceRoleSupabaseClient: createServiceRoleSupabaseClientMock,
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -60,8 +62,6 @@ vi.mock('@/lib/security/trusted-access', () => ({
 describe('Trusted access pending API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    process.env.SUPABASE_URL = 'http://kong:8000'
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key'
   })
 
   afterEach(() => {
@@ -75,11 +75,13 @@ describe('Trusted access pending API', () => {
       trusted_person_id: 'tp-1',
       status: 'pending',
       expires_at: '2099-03-13T12:15:00.000Z',
+      otp_verified_at: null,
       trusted_persons: {
         id: 'tp-1',
         email: 'trusted@example.com',
         linked_user_id: 'trusted-user-1',
         invitation_status: 'accepted',
+        relationship_status: 'setup_link_sent',
         is_active: true,
       },
       profiles: {
@@ -97,7 +99,7 @@ describe('Trusted access pending API', () => {
       }),
     }
 
-    createClientMock.mockReturnValue({
+    createServiceRoleSupabaseClientMock.mockReturnValue({
       from: vi.fn(() => invitationChain),
     })
 
@@ -111,6 +113,7 @@ describe('Trusted access pending API', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
       status: 'setup_required',
+      relationshipStatus: 'setup_link_sent',
       expectedEmail: 'trusted@example.com',
       ownerName: 'Owner Example',
       otpVerified: false,

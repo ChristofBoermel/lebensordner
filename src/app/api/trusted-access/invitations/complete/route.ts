@@ -1,12 +1,11 @@
 import { randomBytes } from 'crypto'
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
 import {
   createTrustedAccessDeviceCookie,
   decryptTrustedAccessBootstrap,
+  emitTrustedAccessEvent,
   hashTrustedAccessToken,
   readCookieValueFromHeader,
   readTrustedAccessOtpCookie,
@@ -15,12 +14,8 @@ import {
   TRUSTED_ACCESS_OTP_COOKIE,
   TRUSTED_ACCESS_PENDING_COOKIE,
 } from '@/lib/security/trusted-access'
-
-const getSupabaseAdmin = () =>
-  createClient(
-    process.env['SUPABASE_URL']!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
   try {
@@ -50,7 +45,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'OTP required' }, { status: 403 })
     }
 
-    const adminClient = getSupabaseAdmin()
+    const adminClient = createServiceRoleSupabaseClient()
     const { data: invitation, error: invitationError } = await adminClient
       .from('trusted_access_invitations')
       .select(`
@@ -65,6 +60,7 @@ export async function POST(request: Request) {
           email,
           linked_user_id,
           invitation_status,
+          relationship_status,
           is_active
         ),
         profiles:owner_id (
@@ -97,7 +93,8 @@ export async function POST(request: Request) {
       invitation.status !== 'pending' ||
       expired ||
       trustedPerson.invitation_status !== 'accepted' ||
-      !trustedPerson.is_active
+      !trustedPerson.is_active ||
+      trustedPerson.relationship_status === 'revoked'
     ) {
       emitStructuredWarn({
         event_type: 'security',
@@ -128,6 +125,7 @@ export async function POST(request: Request) {
 
     const deviceSecret = randomBytes(32).toString('hex')
     const deviceSecretHash = hashTrustedAccessToken(deviceSecret)
+    const nowIso = new Date().toISOString()
 
     const { data: device, error: deviceError } = await adminClient
       .from('trusted_access_devices')
@@ -138,7 +136,7 @@ export async function POST(request: Request) {
         device_label: request.headers.get('user-agent')?.slice(0, 120) ?? null,
         device_secret_hash: deviceSecretHash,
         created_from_invitation_id: invitation.id,
-        last_used_at: new Date().toISOString(),
+        last_used_at: nowIso,
       })
       .select('id')
       .single()
@@ -152,7 +150,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
 
-    const nowIso = new Date().toISOString()
     await adminClient
       .from('trusted_access_invitations')
       .update({
@@ -162,6 +159,32 @@ export async function POST(request: Request) {
         redeemed_device_id: device.id,
       })
       .eq('id', invitation.id)
+
+    await adminClient
+      .from('trusted_persons')
+      .update({
+        relationship_status: 'active',
+        updated_at: nowIso,
+      })
+      .eq('id', invitation.trusted_person_id)
+
+    try {
+      await emitTrustedAccessEvent(adminClient, {
+        relationshipId: invitation.trusted_person_id,
+        actorUserId: user.id,
+        eventType: 'device_enrolled',
+        metadata: {
+          invitationId: invitation.id,
+          deviceId: device.id,
+        },
+      })
+    } catch (eventError: any) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `[Trusted Access Complete API] Failed to record device_enrolled event: ${eventError?.message ?? String(eventError)}`,
+        endpoint: '/api/trusted-access/invitations/complete',
+      })
+    }
 
     const response = NextResponse.json({
       success: true,

@@ -1,22 +1,17 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { resolveAuthenticatedUser } from '@/lib/auth/resolve-authenticated-user'
 import { emitStructuredError, emitStructuredWarn } from '@/lib/errors/structured-logger'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
 import {
   createTrustedAccessOtpCookie,
+  emitTrustedAccessEvent,
   hashTrustedAccessOtp,
   readCookieValueFromHeader,
   readTrustedAccessPendingCookie,
   TRUSTED_ACCESS_OTP_COOKIE,
   TRUSTED_ACCESS_PENDING_COOKIE,
 } from '@/lib/security/trusted-access'
-
-const getSupabaseAdmin = () =>
-  createClient(
-    process.env['SUPABASE_URL']!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+import { createServiceRoleSupabaseClient } from '@/lib/supabase/admin'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
   try {
@@ -45,16 +40,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid OTP' }, { status: 400 })
     }
 
-    const adminClient = getSupabaseAdmin()
+    const adminClient = createServiceRoleSupabaseClient()
     const { data: invitation, error: invitationError } = await adminClient
       .from('trusted_access_invitations')
       .select(`
         id,
+        trusted_person_id,
         trusted_persons:trusted_person_id (
           id,
           email,
           linked_user_id,
           invitation_status,
+          relationship_status,
           is_active
         )
       `)
@@ -137,10 +134,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid OTP' }, { status: 400 })
     }
 
+    const nowIso = new Date().toISOString()
     await adminClient
       .from('trusted_access_otp_challenges')
-      .update({ consumed_at: new Date().toISOString() })
+      .update({ consumed_at: nowIso })
       .eq('id', challenge.id)
+
+    await adminClient
+      .from('trusted_access_invitations')
+      .update({ otp_verified_at: nowIso })
+      .eq('id', invitation.id)
+
+    try {
+      await emitTrustedAccessEvent(adminClient, {
+        relationshipId: invitation.trusted_person_id,
+        actorUserId: user.id,
+        eventType: 'otp_verified',
+        metadata: {
+          invitationId: invitation.id,
+        },
+      })
+    } catch (eventError: any) {
+      emitStructuredError({
+        error_type: 'api',
+        error_message: `[Trusted Access OTP Verify API] Failed to record otp_verified event: ${eventError?.message ?? String(eventError)}`,
+        endpoint: '/api/trusted-access/invitations/otp/verify',
+      })
+    }
 
     const response = NextResponse.json({ success: true })
     response.cookies.set({

@@ -5,7 +5,7 @@ import { TrustedPersonStatusCard } from '@/components/trusted-access/TrustedPers
 
 const basePerson = {
   id: 'tp-1',
-  name: 'Anna Müller',
+  name: 'Anna Mueller',
   email: 'anna@example.com',
   relationship: 'Tochter',
   relationship_status: 'invited' as const,
@@ -20,14 +20,36 @@ const basePerson = {
   updated_at: new Date().toISOString(),
   access_level: 'immediate',
   access_delay_hours: 0,
-  invitation_sent_at: null,
+  invitation_sent_at: new Date().toISOString(),
   invitation_expires_at: null,
   invitation_accepted_at: null,
   email_status: 'sent',
 }
 
 describe('TrustedPersonStatusCard', () => {
-  it('shows "Auf Annahme warten" CTA for invited status', () => {
+  it('shows "Einladen" and waiting state for invited contacts before the first send', () => {
+    render(
+      <TrustedPersonStatusCard
+        person={{
+          ...basePerson,
+          relationship_status: 'invited',
+          invitation_status: null,
+          invitation_sent_at: null,
+          email_status: null,
+        }}
+        isGeneratingSetupLink={false}
+        onCreateSetupLink={vi.fn()}
+        onSendInvite={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onToggleActive={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('button', { name: /^einladen$/i })).toBeInTheDocument()
+    expect(screen.getByText('Auf Annahme warten')).toBeInTheDocument()
+  })
+
+  it('shows "Einladung gesendet" state for invited contacts after a send attempt', () => {
     render(
       <TrustedPersonStatusCard
         person={{ ...basePerson, relationship_status: 'invited' }}
@@ -39,7 +61,8 @@ describe('TrustedPersonStatusCard', () => {
         onToggleActive={vi.fn()}
       />
     )
-    expect(screen.getByText('Auf Annahme warten')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^einladung erneut senden$/i })).toBeInTheDocument()
+    expect(screen.getByTestId('trusted-person-status-tp-1')).toHaveTextContent('Einladung gesendet')
   })
 
   it('shows "Sicheren Link erstellen" CTA for accepted_pending_setup status', () => {
@@ -72,7 +95,7 @@ describe('TrustedPersonStatusCard', () => {
     expect(screen.getByRole('button', { name: /neuen link senden/i })).toBeInTheDocument()
   })
 
-  it('shows "Nächster Schritt: Freigaben einrichten" CTA for active status', () => {
+  it('shows the next-step CTA for active status', () => {
     render(
       <TrustedPersonStatusCard
         person={{ ...basePerson, relationship_status: 'active', linked_user_id: 'user-2' }}
@@ -84,7 +107,7 @@ describe('TrustedPersonStatusCard', () => {
         onToggleActive={vi.fn()}
       />
     )
-    expect(screen.getByText('Nächster Schritt: Freigaben einrichten')).toBeInTheDocument()
+    expect(screen.getByText(/Freigaben einrichten/)).toBeInTheDocument()
   })
 
   it('calls onCreateSetupLink when setup link button is clicked', async () => {
@@ -117,7 +140,7 @@ describe('TrustedPersonStatusCard', () => {
         onToggleActive={vi.fn()}
       />
     )
-    expect(screen.getByText('Einladung gesendet')).toBeInTheDocument()
+    expect(screen.getAllByText('Einladung gesendet')).toHaveLength(2)
     expect(screen.getByText('Einladung angenommen')).toBeInTheDocument()
     expect(screen.getByText('Sicheren Zugriff einrichten')).toBeInTheDocument()
     expect(screen.getByText('Dokumente freigeben')).toBeInTheDocument()

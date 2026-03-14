@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const { createServiceRoleSupabaseClientMock } = vi.hoisted(() => ({
+  createServiceRoleSupabaseClientMock: vi.fn(),
+}))
+
 const { createServerSupabaseClientMock } = vi.hoisted(() => ({
   createServerSupabaseClientMock: vi.fn(() => Promise.resolve({})),
 }))
@@ -13,15 +17,18 @@ const { emitStructuredErrorMock, emitStructuredWarnMock } = vi.hoisted(() => ({
   emitStructuredWarnMock: vi.fn(),
 }))
 
-const { createTrustedAccessPendingCookieMock, hashTrustedAccessTokenMock } = vi.hoisted(() => ({
+const {
+  createTrustedAccessPendingCookieMock,
+  emitTrustedAccessEventMock,
+  hashTrustedAccessTokenMock,
+} = vi.hoisted(() => ({
   createTrustedAccessPendingCookieMock: vi.fn(() => 'pending-cookie-value'),
+  emitTrustedAccessEventMock: vi.fn(() => Promise.resolve()),
   hashTrustedAccessTokenMock: vi.fn(() => 'hashed-token-123'),
 }))
 
-const createClientMock = vi.fn()
-
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: createClientMock,
+vi.mock('@/lib/supabase/admin', () => ({
+  createServiceRoleSupabaseClient: createServiceRoleSupabaseClientMock,
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -39,6 +46,7 @@ vi.mock('@/lib/errors/structured-logger', () => ({
 
 vi.mock('@/lib/security/trusted-access', () => ({
   createTrustedAccessPendingCookie: createTrustedAccessPendingCookieMock,
+  emitTrustedAccessEvent: emitTrustedAccessEventMock,
   hashTrustedAccessToken: hashTrustedAccessTokenMock,
   TRUSTED_ACCESS_PENDING_COOKIE: 'trusted_access_pending',
 }))
@@ -46,8 +54,6 @@ vi.mock('@/lib/security/trusted-access', () => ({
 describe('Trusted access redeem API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    process.env.SUPABASE_URL = 'http://kong:8000'
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key'
   })
 
   afterEach(() => {
@@ -60,12 +66,14 @@ describe('Trusted access redeem API', () => {
       owner_id: 'owner-1',
       trusted_person_id: 'tp-1',
       status: 'pending',
+      claimed_at: null,
       expires_at: '2099-03-13T12:15:00.000Z',
       trusted_persons: {
         id: 'tp-1',
         email: 'trusted@example.com',
         linked_user_id: 'trusted-user-1',
         invitation_status: 'accepted',
+        relationship_status: 'setup_link_sent',
         is_active: true,
       },
     }
@@ -79,7 +87,7 @@ describe('Trusted access redeem API', () => {
       }),
     }
 
-    createClientMock.mockReturnValue({
+    createServiceRoleSupabaseClientMock.mockReturnValue({
       from: vi.fn(() => invitationChain),
     })
 

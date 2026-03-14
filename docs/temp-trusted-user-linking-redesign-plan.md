@@ -1,0 +1,160 @@
+# Trusted User Linking Redesign Plan
+
+## Summary
+- Replace the current “share documents first, then bootstrap access with a short-lived secure link” flow with a two-phase model:
+  - `Phase 1: relationship invitation and acceptance`
+  - `Phase 2: secure access setup and device enrollment`
+- Do not allow document sharing until the relationship is fully linked and the trusted user has completed secure setup on at least one device/browser.
+- Keep secure-link delivery as `manual send` after acceptance, per your preference, but make it less fragile: single-use, revocable, and long enough to survive normal real-world login behavior.
+- Do not use “toast only” as the source of truth. Use persistent status cards/banners for both users, with toasts only as short-lived confirmation.
+
+## Backend Plan For Codex
+- Introduce an explicit relationship state machine on the trusted-person relationship:
+  - `invited`
+  - `accepted_pending_setup`
+  - `setup_link_sent`
+  - `active`
+  - `revoked`
+- Add a small event/history table for cross-user status propagation and auditability:
+  - `trusted_access_events`
+  - fields: relationship id, actor user id, event type, occurred at, owner seen at, trusted user seen at, metadata
+  - event types: `invited`, `accepted`, `setup_link_sent`, `setup_started`, `otp_verified`, `device_enrolled`, `revoked`
+- Keep `trusted_access_devices` for browser/device enrollment, but make device enrollment depend on an already accepted relationship instead of combining acceptance and enrollment into one brittle token flow.
+- Replace the current secure-link contract with these backend stages:
+  - `POST /api/trusted-person/invitations/:id/accept`
+    - trusted user accepts the owner’s invitation
+    - validates exact invited email / linked user
+    - moves relationship to `accepted_pending_setup`
+  - `POST /api/trusted-access/setup-links`
+    - owner creates a setup link only for an `accepted_pending_setup` relationship
+    - revokes prior unused setup links
+    - returns `setupUrl`, `expiresAt`, `singleUse`, `deliveryMode=manual`
+  - `GET /api/trusted-access/setup/claim?token=...`
+    - validates token
+    - requires login with invited account
+    - establishes server-side pending setup state
+    - never grants document access directly
+  - `POST /api/trusted-access/setup/otp/send`
+  - `POST /api/trusted-access/setup/otp/verify`
+  - `POST /api/trusted-access/setup/complete`
+    - creates device enrollment
+    - marks relationship `active` if first successful device
+    - emits `device_enrolled`
+  - `GET /api/trusted-access/relationship-status`
+    - returns normalized state and next-action metadata for owner and trusted user UIs
+- Enforce sharing policy:
+  - all share creation APIs must reject sharing to trusted persons unless relationship state is `active`
+  - received-shares APIs must return an explicit `not_linked_yet` state instead of an empty/expired-style error
+  - trusted user should never see decrypt/download CTAs until both conditions are true:
+    - relationship state is `active`
+    - explicit document shares exist
+- Chosen defaults:
+  - invitation acceptance window: `7 days`
+  - manual secure setup link: `24 hours`, single-use, newest link wins
+  - OTP: `10 minutes`
+  - device enrollment validity: persistent until revoked or browser storage cleared
+- Failure handling:
+  - if setup link expires, owner can reissue without re-inviting
+  - if trusted user logs in with the wrong account, show `wrong_account` state, do not consume link
+  - if trusted user accepted invitation but owner shared nothing yet, show “linked, waiting for owner to share”
+  - if owner revokes relationship, all devices and future document access are invalid immediately
+- Compatibility:
+  - keep current trusted-access endpoints temporarily as compatibility wrappers/redirectors
+  - migrate owner/trusted-user dashboards to the new relationship status API before deleting old bootstrap assumptions
+
+## Frontend Plan For Claude
+- Rewrite the UX around one explicit checklist with the same status vocabulary on both sides:
+  - `1. Einladung gesendet`
+  - `2. Einladung angenommen`
+  - `3. Sicheren Zugriff einrichten`
+  - `4. Dokumente freigeben`
+  - `5. Zugriff aktiv`
+- Owner experience in `Zugriff & Familie`:
+  - each trusted person gets a status card, not just a generic action row
+  - primary CTA changes by state:
+    - `invited` -> “Auf Annahme warten”
+    - `accepted_pending_setup` -> “Sicheren Link erstellen”
+    - `setup_link_sent` -> “Neuen Link senden”
+    - `active` -> “Dokumente freigeben”
+  - document share controls stay disabled until `active`
+  - after copying the setup link, show a persistent “Nächster Schritt” panel:
+    - who to send it to
+    - that the invited email must be used
+    - when it expires
+    - what the trusted user will see next
+- Trusted user experience:
+  - add a dedicated “Einladungen & Zugriff” surface instead of dropping the user straight into an ambiguous redeem screen
+  - before secure setup is complete, show exactly one next action:
+    - accept invitation
+    - open secure setup
+    - verify email code
+    - device ready, waiting for owner shares
+  - after secure setup succeeds, show a success state with:
+    - owner name
+    - “Verbindung hergestellt”
+    - whether documents are already shared
+    - direct CTA either to “Geteilte Dokumente ansehen” or “Auf Freigaben warten”
+- Success feedback for both users:
+  - actor gets a toast immediately
+  - both users get a persistent success banner/card driven by `trusted_access_events`
+  - the owner sees “Verbindung hergestellt. Sie können jetzt Dokumente freigeben.”
+  - the trusted user sees “Verbindung hergestellt. Dokumente werden angezeigt, sobald der Besitzer sie freigibt.”
+- Empty/error states must be explicit:
+  - `accepted but not linked yet` is not an error
+  - `linked but no documents shared yet` is not an error
+  - `wrong account` must show invited email and a clear switch-account CTA
+  - `expired setup link` must tell the user to ask for a new setup link, not imply the whole relationship failed
+- Senior mode requirements:
+  - convert the flow into large step cards with one primary action per screen
+  - keep all instructions in plain, literal German
+  - do not rely on icon-only meaning
+  - repeat the current step and next step at the top of every screen
+  - avoid hidden state inside tabs/modals only
+  - use larger hit targets, stronger contrast, bigger body text, and fewer choices per step
+  - never force users to remember state from a prior screen; restate what has already happened and what happens next
+- Recommended enterprise-style UX patterns to adopt:
+  - separate “relationship accepted” from “resource access granted”
+  - use persistent status centers, not just links and transient toasts
+  - show access prerequisites before users reach an empty documents screen
+  - use role-based language consistently: `Besitzer`, `Vertrauensperson`, `Sicherer Zugriff`, `Dokumente freigegeben`
+  - make all sensitive actions revocable and visible in history/status
+- Recommended frontend alternatives:
+  - `Best`: add an invitation inbox/task center for trusted users
+  - `Fallback`: keep deep links, but always route them into the same task center after login
+  - `Later`: let trusted users add additional browsers from their own settings after first activation, instead of requiring the owner to send a new setup link each time
+
+## Test Plan
+- Relationship lifecycle:
+  - owner invites trusted user
+  - trusted user accepts
+  - owner creates setup link
+  - trusted user logs in, verifies OTP, enrolls device
+  - owner can then share documents
+  - trusted user can then view/download only explicitly shared documents
+- Negative paths:
+  - trusted user accepts invitation but owner has not shared documents yet
+  - owner tries to share before relationship is `active`
+  - wrong-account login during setup
+  - expired setup link
+  - revoked relationship after device enrollment
+  - new browser without enrollment
+- UX checks:
+  - owner and trusted user always see the same normalized status
+  - no screen shows “abgelaufen” when the real state is “accepted but not linked yet”
+  - senior mode keeps the flow understandable with one main CTA per step
+- Regression/security:
+  - no document access from link possession alone
+  - no access without accepted relationship, authenticated invited user, OTP verification, and enrolled device
+  - logs remain structured and non-sensitive
+  - device/browser revocation immediately blocks access
+
+## Assumptions And Recommended Defaults
+- Manual secure-link forwarding remains the chosen delivery model.
+- The trusted user must authenticate with the exact invited email-linked account.
+- Document sharing is intentionally blocked until the relationship is fully linked and at least one device is enrolled.
+- Persistent in-app status is required; toast-only confirmation is insufficient.
+- Recommended enterprise references behind this plan:
+  - Microsoft Entra separates `PendingAcceptance` from actual resource access and uses explicit invitation redemption/consent before access: [Add and manage B2B collaboration users](https://learn.microsoft.com/en-us/entra/external-id/add-users-administrator), [B2B invitation redemption](https://learn.microsoft.com/en-us/entra/external-id/redemption-experience)
+  - Box exposes pending invitations and lets users accept them from a notifications/pending area instead of hiding the state in a one-shot link: [Accept and Reject Invitations from Collaborators](https://support.box.com/hc/en-us/articles/360044195073-Accept-and-Reject-Invitations-from-Collaborators)
+  - Dropbox keeps sharing and direct-link access as separate concepts and requires explicit join/account context before access: [Problems accessing shared folders](https://help.dropbox.com/share/cant-access-shared), [How to share files or folders in Dropbox](https://help.dropbox.com/share/share-file-or-folder)
+  - For elderly mode, follow W3C guidance for older users and cognitive accessibility: [Older Users and Web Accessibility](https://www.w3.org/WAI/older-users/), [Making Content Usable for People with Cognitive and Learning Disabilities](https://www.w3.org/TR/coga-usable/)

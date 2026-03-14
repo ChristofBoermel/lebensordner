@@ -68,6 +68,18 @@ export function TrustedPersonStatusCard({
 }: TrustedPersonStatusCardProps) {
   const status = (person.relationship_status ?? 'invited') as TrustedAccessRelationshipStatus
   const currentStepIndex = getCurrentStepIndex(status, hasExplicitShares)
+  const inviteWasSent =
+    Boolean(person.invitation_sent_at) ||
+    person.email_status === 'sent' ||
+    person.email_status === 'sending'
+  const inviteActionLabel = isSendingInvite
+    ? 'Wird gesendet...'
+    : inviteWasSent
+      ? 'Einladung erneut senden'
+      : 'Einladen'
+  const inviteStatusLabel = inviteWasSent
+    ? 'Einladung gesendet'
+    : 'Auf Annahme warten'
 
   const borderColor =
     status === 'active' ? 'border-l-sage-500' :
@@ -166,6 +178,7 @@ export function TrustedPersonStatusCard({
         <div className="flex items-center gap-2 flex-wrap">
           {status === 'invited' && (
             <Button
+              data-testid={`trusted-person-invite-${person.id}`}
               variant="outline"
               size="sm"
               disabled={isSendingInvite}
@@ -173,12 +186,17 @@ export function TrustedPersonStatusCard({
               className="text-warmgray-600"
             >
               {isSendingInvite ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1.5" />}
-              {isSendingInvite ? 'Wird gesendet…' : 'Einladung erneut senden'}
+              {inviteActionLabel}
             </Button>
           )}
 
           {status === 'invited' && (
-            <span className="text-xs text-warmgray-400">Auf Annahme warten</span>
+            <span
+              data-testid={`trusted-person-status-${person.id}`}
+              className="text-xs text-warmgray-400"
+            >
+              {inviteStatusLabel}
+            </span>
           )}
 
           {(status === 'accepted_pending_setup' || status === 'setup_link_sent') && (
